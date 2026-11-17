@@ -438,6 +438,80 @@ def test_the_shared_us_gaap_pick_reads_only_for_companies_that_have_it(conn):
     assert gold(conn, "cet1_ratio", "2026-09-30")[0] == Decimal("0.1003")
 
 
+COST, WMT = "0000909832", "0000104169"  # Costco: conftest's row (SIC 5331)
+PRODUCT = {"srt:ProductOrServiceAxis": "us-gaap:ProductMember"}
+MEMBERSHIP = {"srt:ProductOrServiceAxis": "us-gaap:MembershipMember"}
+CONTRACT = "RevenueFromContractWithCustomerExcludingAssessedTax"
+
+
+def companyfacts(conn, cik, accession, form, filed, start, end, lines):
+    """Facts companyfacts has for the filing: (metric, tag, value)."""
+    for metric, tag, value in lines:
+        conn.execute(
+            "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+            " value, accession_no, form, filed) VALUES (%s, %s, %s, 'USD', %s, %s, %s, %s, %s,"
+            " %s)", (cik, metric, tag, start, end, value, accession, form, filed))
+
+
+def margins(conn, company, span, end):
+    return conn.execute(
+        "SELECT metric, value, inputs FROM gold.derived_financials WHERE company_id = %s"
+        " AND span = %s AND period_end = %s AND metric IN ('gross_margin', 'net_sales', 'revenue')"
+        " ORDER BY 1", (company, span, end)).fetchall()
+
+
+@db
+def test_costcos_net_sales_come_from_its_pick_and_its_gross_margin_reads_them(conn):
+    """084: Costco's FY2026 10-K files net sales only by product, beside membership fees;
+    companyfacts has the totals (values from its extract on hermes)."""
+    start, end = "2025-09-01", "2026-08-30"
+    facts = statements(start=start, end=end, revenue=303154) + [
+        fact(f"us-gaap:{CONTRACT}", 297247 * 10**6, start, end, m=PRODUCT),
+        fact(f"us-gaap:{CONTRACT}", 5907 * 10**6, start, end, m=MEMBERSHIP),
+        fact(f"us-gaap:{CONTRACT}", 303154 * 10**6, start, end),
+        fact("us-gaap:CostOfGoodsAndServicesSold", 264279 * 10**6, start, end)]
+    stored(conn, "cost-10k", COST, facts, form="10-K", filed=date(2026, 10, 7))
+    companyfacts(conn, COST, "cost-10k", "10-K", "2026-10-07", start, end, [
+        ("revenue", CONTRACT, 303154 * 10**6),
+        ("cost_of_revenue", "CostOfGoodsAndServicesSold", 264279 * 10**6)])
+    assert run(conn).filings == 1  # the pick's extras pass, no SEC request
+    assert silver(conn, "cost-10k") == [("companyfacts", 2), ("filing_extra", 1)]
+    got = {m: (v, i) for m, v, i in margins(conn, COST, "ttm", end)}
+    assert got["revenue"][0] == 303154 * 10**6  # total revenue stays revenue
+    assert got["net_sales"][0] == 297247 * 10**6
+    assert got["gross_margin"] == (Decimal("0.110911"), {"net_sales": 297247 * 10**6,
+                                                         "cost_of_revenue": 264279 * 10**6})
+
+
+@db
+def test_walmarts_net_sales_are_its_own_tag_and_other_retailers_stay_without_a_gross_margin(conn):
+    """084: Walmart's quarter to Jul 31, 2026 (companyfacts, values from hermes): net sales
+    $186,100M of total revenues $187,937M, cost of sales $138,804M: 25.4%. A variety store
+    without net sales read apart keeps 039's rule: no gross profit, no gross margin."""
+    start, end = "2026-05-01", "2026-07-31"
+    other = "0000027419"  # Target's CIK, SIC 5331
+    for cid, name in ((WMT, "Walmart Inc."), (other, "Target")):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, tracked, sic)"
+                     " VALUES (%s, %s, %s, true, '5331')", (cid, name, cid))
+        conn.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES (%s, %s)",
+                     (cid, cid))
+    companyfacts(conn, WMT, "wmt-q2", "10-Q", "2026-08-28", start, end, [
+        ("revenue", "Revenues", 187937 * 10**6), ("revenue", CONTRACT, 186100 * 10**6),
+        ("cost_of_revenue", "CostOfRevenue", 138804 * 10**6)])
+    companyfacts(conn, other, "tgt-q2", "10-Q", "2026-08-28", start, end, [
+        ("revenue", "Revenues", 25000 * 10**6), ("revenue", CONTRACT, 24500 * 10**6),
+        ("cost_of_revenue", "CostOfRevenue", 18000 * 10**6)])
+    conn.execute("SELECT gold.refresh_financials(%s)", ([WMT, other],))
+    assert gold(conn, "revenue", end, WMT)[:2] == (187937 * 10**6, "us-gaap:Revenues")
+    assert gold(conn, "net_sales", end, WMT)[:2] == (186100 * 10**6, f"us-gaap:{CONTRACT}")
+    assert gold(conn, "gross_profit", end, WMT) is None  # 039: not computed at 5331
+    assert margins(conn, WMT, "quarter", end) == [
+        ("gross_margin", Decimal("0.254143"), {"net_sales": 186100 * 10**6,
+                                               "cost_of_revenue": 138804 * 10**6})]
+    assert gold(conn, "net_sales", end, other) is None
+    assert margins(conn, other, "quarter", end) == []
+
+
 class _Spy:
     """A real connection that notes the transaction state each `transaction()` starts from."""
 

@@ -70,6 +70,14 @@ export const isBank = (row: { not_applicable?: string[] } | null | undefined): b
 
 /** Read with the table so every row has a latest quarter even if a chosen column is empty. */
 const PERIOD_COLUMN = "revenue_q";
+/** Read with the table too: each company's size for the median's floor (MEDIAN_MIN_SIZE). */
+const SIZE_COLUMN = "revenue_ttm";
+/** A peer whose TTM revenue is under this share of the target's leaves every median, high and low
+ * (Riley 26: GSI Technology, $25M of revenue and a -100.8% operating margin, moved NVIDIA's). Only
+ * where both revenues read as current figures (a blank, n/m, old or another currency's revenue is
+ * no size: such a peer stays). The Query API's peers need 2% (query_api/peers.py); a peer added by
+ * hand may be smaller and still shows, only outside the median. */
+export const MEDIAN_MIN_SIZE = 0.01;
 
 export interface CompareState {
   target?: string;
@@ -126,7 +134,7 @@ export function compareParams(s: CompareState): Record<string, string | number |
   const cols = s.cols?.length ? s.cols : [...new Set([...DEFAULT_COLUMNS, ...BANK_COLUMNS])];
   return {
     company_id: ids,
-    columns: [...cols, PERIOD_COLUMN],
+    columns: [...new Set([...cols, SIZE_COLUMN]), PERIOD_COLUMN],
     sort: "name",
     limit: Math.max(ids.length, 1),
   };
@@ -181,6 +189,10 @@ export interface CompareRow {
   fye: string | null;
   isTarget: boolean;
   readable: boolean;
+  /** TTM revenue as a size (MEDIAN_MIN_SIZE), null when it isn't one */
+  size: number | null;
+  /** a peer under MEDIAN_MIN_SIZE of the target's size: shown, left out of the median */
+  small: boolean;
   /** the latest quarter the values run to, or null without readable values */
   latest: { periodEnd: string; calendar: string; fiscal: string | null; form: string; filed: string } | null;
   cells: Record<string, CompareCell>;
@@ -227,15 +239,28 @@ function latestOf(r: ScreenerRow): CompareRow["latest"] {
   };
 }
 
+/** A row's TTM revenue as a size: only a readable, current figure (the API's reading blank or
+ * `behind`, as the screener's size bands read it). */
+function sizeOf(r: ScreenerRow): number | null {
+  if (!r.access.includes("financials")) return null;
+  const status = r.readings?.[SIZE_COLUMN]?.status;
+  return status && status !== "behind" ? null : num(r.values[SIZE_COLUMN] ?? null);
+}
+
 /** Rows in the state's order (target first), with companies the API didn't return (unknown
  * ids) left out. `bank`: the target is a bank (its default columns). */
 export function compareRows(s: CompareState, rows: ScreenerRow[], bank = false): CompareRow[] {
   const byId = new Map(rows.map((r) => [r.company_id, r]));
   const cols = columnsOf(s, bank);
+  const target = s.target ? byId.get(s.target) : undefined;
+  const targetSize = target ? sizeOf(target) : null;
   return companiesOf(s).flatMap((id) => {
     const r = byId.get(id);
     if (!r) return [];
     const readable = r.access.includes("financials");
+    const size = sizeOf(r);
+    const small = id !== s.target && targetSize !== null && targetSize > 0 && size !== null
+      && size < MEDIAN_MIN_SIZE * targetSize;
     const cells: Record<string, CompareCell> = {};
     for (const key of cols) {
       const c = BY_KEY.get(key)!;
@@ -255,7 +280,8 @@ export function compareRows(s: CompareState, rows: ScreenerRow[], bank = false):
         format: (v) => formatValue(c.kind, v),
         sourceTitle: sourceTitle(key, source),
       });
-      const leftOut = figure.status && figure.status !== "behind" ? " Left out of the peer median." : "";
+      const leftOut = figure.status && figure.status !== "behind" ? " Left out of the peer median."
+        : small ? ` Left out of the peer median: revenue under ${MEDIAN_MIN_SIZE * 100}% of the target's.` : "";
       cells[key] = { ...figure, title: figure.title + leftOut, raw: num(raw) === null ? null : String(raw), source };
     }
     return [{
@@ -268,6 +294,8 @@ export function compareRows(s: CompareState, rows: ScreenerRow[], bank = false):
       fye: fyeMonth(r.fiscal_year_end),
       isTarget: id === s.target,
       readable,
+      size,
+      small,
       latest: readable ? latestOf(r) : null,
       cells,
     }];
@@ -299,17 +327,21 @@ export interface PeerStat {
   unreported: number;
   /** peers shown with metadata only (the plan doesn't cover their financials) */
   masked: number;
+  /** readable peers under MEDIAN_MIN_SIZE of the target's revenue */
+  small: number;
 }
 
 /** Per column: the peers' median, how many of the peers it uses (n of N) and why the others are
- * left out, and the high and low (the target excluded, and any figure that reads n/a, n/m or old:
- * its value is null). */
+ * left out, and the high and low (the target excluded, any figure that reads n/a, n/m or old: its
+ * value is null, and any peer too small beside the target: MEDIAN_MIN_SIZE). */
 export function peerStats(rows: CompareRow[], cols: string[]) {
   const out: Record<string, PeerStat> = {};
   const peers = rows.filter((r) => !r.isTarget);
+  const small = peers.filter((r) => r.small).length;
   for (const key of cols) {
-    const v = peers.map((r) => r.cells[key]?.value).filter((x): x is number => x != null);
-    const readable = peers.filter((r) => r.readable);
+    const v = peers.filter((r) => !r.small).map((r) => r.cells[key]?.value)
+      .filter((x): x is number => x != null);
+    const readable = peers.filter((r) => r.readable && !r.small);
     const status = (r: CompareRow) => r.cells[key]?.status;
     const banks = readable.filter((r) => status(r) === "not_applicable").length;
     const unusable = readable.filter((r) => status(r) === "not_meaningful" || status(r) === "old").length;
@@ -318,7 +350,7 @@ export function peerStats(rows: CompareRow[], cols: string[]) {
     out[key] = {
       median: median(v), n: v.length, of: peers.length,
       high: v.length ? Math.max(...v) : null, low: v.length ? Math.min(...v) : null,
-      banks, unusable, currency, unreported, masked: peers.length - readable.length,
+      banks, unusable, currency, unreported, masked: peers.filter((r) => !r.readable).length, small,
     };
   }
   return out;
@@ -343,6 +375,7 @@ export function medianTitle(s: PeerStat): string {
     s.unusable && `${s.unusable} not meaningful (n/m) or not reported since an earlier period (— since a date)`,
     s.currency && `${s.currency} in another currency (not averaged with dollars)`,
     s.masked && `${s.masked} metadata only (your plan doesn't cover ${s.masked === 1 ? "its" : "their"} financials)`,
+    s.small && `${s.small} with revenue under ${MEDIAN_MIN_SIZE * 100}% of the target's (too small to compare)`,
   ].filter(Boolean);
   return `Median of ${s.n} of ${s.of} peers' values; the target is excluded` +
     (why.length ? `. Left out: ${why.join("; ")}.` : ".");

@@ -361,9 +361,9 @@ class Store:
     def peer_facts(self, user_id: str, company_ids: list[str],
                    granted: list[str] | None) -> dict[str, dict]:
         """company_id -> sic, sector, filer category, and TTM revenue read like Store.peers (only
-        for `granted`; None: RLS alone), and whether that revenue is in another currency (then no
-        value: its size is unknown, not small). For at most a page of candidates, never the
-        catalog."""
+        for `granted`; None: RLS alone), and whether that revenue's size is unknown: in another
+        currency (057) or not meaningful (083: gross sales); then no value, and not small. For at
+        most a page of candidates, never the catalog."""
         gate = "" if granted is None else "WHERE c.company_id = ANY(%(granted)s)"
         with self._session(user_id) as cur:
             cur.execute(
@@ -371,13 +371,14 @@ class Store:
                 SELECT c.company_id, c.sic, s.sector, s.industry AS sector_industry,
                        gold.filer_category(c.filer_categories) AS filer_category,
                        r.value AS revenue,
-                       coalesce(r.other_currency, false) AS revenue_other_currency
+                       coalesce(r.size_unknown, false) AS revenue_size_unknown
                 FROM silver.companies c
                 LEFT JOIN silver.sic_sectors s ON c.sic BETWEEN s.sic_from AND s.sic_to
                 LEFT JOIN LATERAL (
                     SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
                                 THEN x.value END AS value,
-                           x.status = 'other_currency' AS other_currency  -- 056/057
+                           -- 056/057: another currency; 083: gross sales
+                           x.status IN ('other_currency', 'not_meaningful') AS size_unknown
                     FROM gold.latest_period(c.company_id) lp
                     CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'ttm', 'revenue',
                                                            c.sic, lp.latest) x
@@ -386,6 +387,33 @@ class Store:
                 WHERE c.company_id = ANY(%(ids)s)
                 """, {"ids": company_ids, "granted": granted})
             return {r.pop("company_id"): r for r in cur.fetchall()}
+
+    def size_peers(self, user_id: str, company_id: str, sic: str, granted: list[str] | None,
+                   revenue: Decimal, floor: Decimal, limit: int) -> list[dict]:
+        """The size fallback's peers (query_api/peers.py): companies of this 4-digit SIC with no
+        business profile the caller can see, TTM revenue read as the screener reads it (stored
+        figures, gold.screen_reading: a value only when current or behind) of at least `floor`,
+        closest to `revenue` first. Values only for `granted` (None: RLS alone, the catalog
+        public); the profile under RLS at filings. One SIC's companies, never the catalog."""
+        gate = "" if granted is None else "AND c.company_id = ANY(%(granted)s)"
+        with self._session(user_id) as cur:
+            cur.execute(
+                f"""
+                SELECT c.company_id, r.value AS revenue
+                FROM silver.companies c
+                CROSS JOIN LATERAL gold.screen_company(c.company_id) s
+                CROSS JOIN LATERAL gold.screen_reading(c.company_id, 'ttm', 'revenue', c.sic,
+                                                       s.latest, s.cached, s.equity, s.currency,
+                                                       s.recent) r
+                WHERE c.sic = %(sic)s AND c.company_id <> %(company)s {gate}
+                  AND (r.status IS NULL OR r.status = 'behind') AND r.value >= %(floor)s
+                  AND NOT EXISTS (SELECT 1 FROM gold.business_profiles b
+                                  WHERE b.company_id = c.company_id)
+                ORDER BY abs(ln(r.value / %(revenue)s::numeric)), c.company_id
+                LIMIT %(limit)s
+                """, {"sic": sic, "company": company_id, "granted": granted, "floor": floor,
+                      "revenue": revenue, "limit": limit})
+            return cur.fetchall()
 
     def sectors(self, user_id: str) -> list[dict]:
         """The sector classification (migration 046): one row per SIC range, and how many

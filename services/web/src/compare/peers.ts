@@ -86,6 +86,9 @@ export function whyParts(match: PeerMatch | undefined, peer: ScreenerRow, target
     if (match.terms?.length) out.push({ text: `business: ${distinctTerms(match.terms).slice(0, 3).join(", ")}` });
     if (match.same_industry && peer.sector_industry) out.push({ text: `same industry (${peer.sector_industry})` });
     else if (match.sic_level === 4) out.push({ text: "same SIC" });
+  } else if (match.size_peer) {
+    // the size fallback (query_api/peers.py): no Business section to compare
+    out.push({ text: "same SIC, a large company with at least a quarter of the revenue; no Business section to compare" });
   } else {
     out.push({ text: SIC_LEVEL[match.sic_level] ?? "SIC" });
     if (match.same_filer_category) out.push({ text: "same filer category" });

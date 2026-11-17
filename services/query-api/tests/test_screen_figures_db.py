@@ -16,6 +16,7 @@ from .test_readings_db import (
     USER,
     conn,  # noqa: F401  (test_readings_db's fixture, by its name)
     derived,
+    gross_sales,
     reported,
     screen,
 )
@@ -40,7 +41,8 @@ SCREENS = [
 
 def more_shapes(conn):
     """A yen filer, an annual 20-F filer, a warehouse club (no gross profit computed), a filer
-    with a future-dated period (read live from that day) and one whose figures stopped."""
+    with a future-dated period (read live from that day), one whose figures stopped, and
+    test_readings_db's gross-sales venue, miner and maker (083)."""
     for cid, name, sic in ((YEN, "Yen Co", "3711"), (FOREIGN, "Foreign Co", "2834"),
                            (RETAIL, "Club Co", "5331"), (FUTURE, "Future Co", "7372"),
                            (QUIET, "Quiet Co", "3674")):
@@ -70,6 +72,7 @@ def more_shapes(conn):
         reported(conn, QUIET, "revenue", end, 400_000_000)
         reported(conn, QUIET, "net_income", end, 40_000_000)
     derived(conn, QUIET, "net_margin", date(2025, 6, 30), Decimal("0.1"), {"revenue": 1.6e9})
+    gross_sales(conn)  # 083: a venue's revenue reads the stored cost of revenue beside it
 
 
 def companies(conn) -> list[str]:

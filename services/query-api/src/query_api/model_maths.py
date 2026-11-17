@@ -70,8 +70,11 @@ one strong half forward: NVIDIA's H2 FY2027 read 75.0% (H2 FY2026's 64.2% + this
 points) against a TTM of 65.2%. The remainder's FCF margin stays those quarters' a year earlier:
 working capital is seasonal (Deckers' H1 FY2027 -1.9%, H2 FY2026 35.7%, TTM 18.9%), and the owner's
 decision named growth and margin only. Bear and bull start from the base case moved by
-SCENARIO_SPREAD (half the growth, at least 5 points; a fifth of the margin, at least 3), the other
-rates as the base case's, except the FCF margin (below).
+SCENARIO_SPREAD (half the growth, at least 5 points; a quarter of the margin, so a positive margin
+x0.75 and x1.25), the other rates as the base case's, except the FCF margin (below). The margin's
+spread is proportional (Riley, test 6, #35): a fifth with a floor of 3 points took Costco's 3.9%
+to 0.9% and 6.9%, EPS -71.4% and +102.6% in a year; it now reads 2.9% and 4.9%. A margin near
+zero barely moves: growth still separates the cases.
 
 A bear or bull year's default FCF margin follows the case's own operating margin (morgan4,
 finding 15: every case read one FCF default, so a bull case whose margin rose to 25% had less free
@@ -142,7 +145,7 @@ FADE = 0.5
 TAX_FALLBACK = 21.0  # percent: the US federal statutory rate
 TAX_RANGE = (0.0, 50.0)  # an effective rate outside this isn't a rate to carry forward
 SPLIT_CHANGE = 0.5  # a share count change over this is read as a split, not buybacks
-SCENARIO_SPREAD = {"growth": (0.5, 5.0), "margin": (0.2, 3.0)}
+SCENARIO_SPREAD = {"growth": (0.5, 5.0), "margin": (0.25, 0.0)}  # (share, at least: points)
 GROWTH_RANGE = (-100.0, 1000.0)
 MARGIN_RANGE = (-1000.0, 100.0)
 NONOP_RANGE = (-100.0, 100.0)

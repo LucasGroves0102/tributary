@@ -87,8 +87,8 @@ def test_each_cases_fcf_margin_default_follows_its_own_operating_margin():
         16.2 + (25 - base[1]["margin"]) * (1 - tax / 100), abs=0.05)
     # the preview cases move by the spread alone; a rate the case typed is the case's
     preview = run(inputs, model(VRT, base, ytd=True))["cases"]
-    assert [d["fcfMargin"] for d in preview["bear"]["defaults"]] == [28.5, 13.7, 10.0]
-    assert [d["fcfMargin"] for d in preview["bull"]["defaults"]] == [34.9, 18.7, 14.8]
+    assert [d["fcfMargin"] for d in preview["bear"]["defaults"]] == [27.7, 13.1, 9.7]
+    assert [d["fcfMargin"] for d in preview["bull"]["defaults"]] == [35.7, 19.3, 15.1]
     typed = run(inputs, model(VRT, base, ytd=True, scenarios={
         "bull": [{**y, "fcfMargin": 5} for y in bull]}))["cases"]["bull"]["years"]
     assert [y["inputs"]["fcfMargin"] for y in typed] == [5.0, 5.0, 5.0]
@@ -100,11 +100,16 @@ def test_each_cases_fcf_margin_default_follows_its_own_operating_margin():
 
 
 def test_bear_and_bull_start_from_the_base_case_by_b7s_spread():
+    """Growth by half (at least 5 points), the margin by a quarter of itself (Riley 35)."""
     base = [{"growth": 83, "margin": 60, "taxRate": 18}, {"growth": 2, "margin": 10}]
-    assert shifted(base, "bear") == [{"growth": 41.5, "margin": 48.0, "taxRate": 18},
-                                     {"growth": -3.0, "margin": 7.0}]
-    assert shifted(base, "bull") == [{"growth": 124.5, "margin": 72.0, "taxRate": 18},
-                                     {"growth": 7.0, "margin": 13.0}]
+    assert shifted(base, "bear") == [{"growth": 41.5, "margin": 45.0, "taxRate": 18},
+                                     {"growth": -3.0, "margin": 7.5}]
+    assert shifted(base, "bull") == [{"growth": 124.5, "margin": 75.0, "taxRate": 18},
+                                     {"growth": 7.0, "margin": 12.5}]
+    # Costco's 3.9%: the old floor of 3 points read 0.9% and 6.9%; a loss stays proportional
+    thin = [{"growth": 6, "margin": 3.9}, {"growth": 5, "margin": -8}, {"growth": 5, "margin": 0}]
+    assert [y["margin"] for y in shifted(thin, "bear")] == [2.9, -10.0, 0.0]
+    assert [y["margin"] for y in shifted(thin, "bull")] == [4.9, -6.0, 0.0]
 
 
 # --- current year from actuals ----------------------------------------------------------------

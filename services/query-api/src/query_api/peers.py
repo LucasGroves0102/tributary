@@ -21,7 +21,31 @@ Score = similarity x division x size + NAMED (named by the target) + NAMES (name
   counts as the floor: mostly pre-revenue companies, which a $300B company's peers shouldn't open
   on (NVIDIA's had two in its top 10) and a small company's barely notice. A candidate whose
   revenue is in another currency (056) has an unknown size, not a small one: x1, as when the
-  target's own revenue isn't in dollars (057; Tributary converts no currency).
+  target's own revenue isn't in dollars (057; Tributary converts no currency), and so does one
+  whose revenue reads not meaningful (083: a trading venue's gross sales of the assets it trades).
+
+Size floor (Riley, test 6, #27): a candidate whose size counts needs TTM revenue of at least
+SIZE_MIN_SHARE (2%) of the target's, the readable candidate with no current revenue counting as the
+$10M floor; under it, it is no peer, whatever its text (NVIDIA's list had GSI Technology, $25M,
+and Ambarella, $418M, beside a $303B company). Never applied when either size is unknown or
+unreadable (the same oracle rule). Measured on hermes' stored profiles (2026-11-17, 38 targets from
+$4M to $736B of revenue): the top 10 changes at 13 of them, all over $40B of revenue (JPMorgan,
+Exxon and five others over $40B keep theirs); NVIDIA loses GSI Technology and Ambarella and gains
+CoreWeave and Microsoft; Apple, UnitedHealth and Tesla keep 10, 13 and 13 candidates of about 60
+(still a page of 10); the 18 under $40B keep their top 10, and a target under $500M every
+candidate (2% of it is under the $10M floor).
+
+Size fallback (the owner, 2026-11-17, Riley 28: Citigroup missing from JPMorgan's peers): after the
+business-matched peers, up to SIZE_PEER_MAX large companies the text can't compare join the list:
+the same 4-digit SIC, no business profile (no usable Item 1, a 20-F filer, or a 10-K whose filings
+the caller can't read), TTM revenue read as the screener reads it and at least SIZE_PEER_SHARE
+(25%) of the target's and SIZE_PEER_MIN ($5B), closest in size first, never one already
+listed. Only for a target of at least $5B whose revenue the caller reads (a small company's
+peers are its text's). Measured on the same 38 targets: ten get one or more (JPMorgan and Bank
+of America Citigroup; Exxon BP, Phillips 66, Valero, Equinor; NextEra five utilities; AMD Intel
+and STMicro; Lilly AstraZeneca; Coca-Cola Diageo; Duke Con Edison; American Tower and Prologis
+Equinix and Weyerhaeuser); NVIDIA and every target under $5B none. Goldman Sachs files under
+6211, not JPMorgan's 6021, and has a profile: it isn't one (14th by business).
 
 No text on file for the company (no 10-K Item 1 in the last three years, or the caller can't read
 its filings): SIC and size, as before F4 (`basis` "sic"). Blank-check shells (SIC 6770) are never
@@ -51,6 +75,11 @@ NAMED = 0.05
 NAMES = 0.03
 SIZE_SLOPE = 0.3
 SIZE_FLOOR = Decimal(10_000_000)
+SIZE_MIN_SHARE = Decimal("0.02")  # a peer's revenue against the target's (docstring, Size floor)
+# the size fallback (docstring)
+SIZE_PEER_SHARE = Decimal("0.25")
+SIZE_PEER_MIN = Decimal(5_000_000_000)
+SIZE_PEER_MAX = 5
 DIVISION = {4: 1.15, 3: 1.10, 2: 1.10, 1: 1.0, 0: 0.80}
 NO_SIC = 0.90
 SHELL = "6770"
@@ -111,6 +140,21 @@ def size_factor(target: Decimal | None, peer: Decimal | None, readable: bool) ->
     return 1 / (1 + SIZE_SLOPE * abs(math.log10(ratio)))
 
 
+def too_small(target: Decimal | None, peer: Decimal | None, sized: bool) -> bool:
+    """Under the size floor (module docstring): only when the caller reads both sizes."""
+    if target is None or not sized:
+        return False
+    return max(peer or SIZE_FLOOR, SIZE_FLOOR) < SIZE_MIN_SHARE * target
+
+
+def size_peer_floor(target: Decimal | None) -> Decimal | None:
+    """The least revenue a size-fallback peer needs (module docstring), None: no fallback (the
+    target's own revenue unknown, unreadable or under SIZE_PEER_MIN)."""
+    if target is None or target < SIZE_PEER_MIN:
+        return None
+    return max(target * SIZE_PEER_SHARE, SIZE_PEER_MIN)
+
+
 @dataclass
 class Candidate:
     company_id: str
@@ -121,21 +165,25 @@ class Candidate:
     names_target: bool = False
     revenue: Decimal | None = None
     readable: bool = False  # the caller reads its financials (its revenue may count)
-    # its revenue is in another currency (057): its size is unknown, not the $10M floor
+    # its revenue is in another currency (057) or not meaningful (083): its size is unknown, not
+    # the $10M floor
     size_unknown: bool = False
     score: float = 0.0
 
 
 def rank(target_sic: str | None, target_revenue: Decimal | None,
          candidates: list[Candidate]) -> list[Candidate]:
-    """Scored, best first (ties by company id). Shells are dropped for a company that isn't one."""
+    """Scored, best first (ties by company id). Shells are dropped for a company that isn't one,
+    and candidates under the size floor."""
     out = []
     for c in candidates:
         if c.sic == SHELL and target_sic != SHELL:
             continue
+        sized = c.readable and not c.size_unknown
+        if too_small(target_revenue, c.revenue, sized):
+            continue
         match = sic_match(target_sic, c.sic)
         div = NO_SIC if match is None else DIVISION[match]
-        sized = c.readable and not c.size_unknown
         c.score = (c.similarity * div * size_factor(target_revenue, c.revenue, sized)
                    + (NAMED if c.named_by_target else 0.0) + (NAMES if c.names_target else 0.0))
         out.append(c)

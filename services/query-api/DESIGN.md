@@ -375,8 +375,21 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
 - **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
   another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
   when the caller reads both revenues; no current revenue counts as $10M; a revenue in another
-  currency is an unknown size, x1, 057) + 0.05 if this company's
+  currency or not meaningful (083: gross sales) is an unknown size, x1, 057) + 0.05 if this company's
   10-K names it + 0.03 if it names this company. Blank checks (SIC 6770) are never suggested for an operating company.
+- **Size floor** (Riley 27): where both sizes count, a candidate needs revenue of at least 2% of the
+  target's (no current revenue counts as $10M), else it is no peer. On 38 targets from hermes'
+  profiles (2026-11-17): 13 top tens change, all over $40B; NVIDIA loses GSI Technology ($25M) and
+  Ambarella ($418M) for CoreWeave and Microsoft; JPMorgan's is unchanged (Bank of America and Wells
+  Fargo in it; Goldman 14th; Citigroup has no Item 1 to compare); a target under $500M keeps every
+  candidate.
+- **Size fallback** (the owner, Riley 28): after the business-matched peers, up to 5 large companies
+  of the same 4-digit SIC with no business profile the caller can see and TTM revenue of at least 25%
+  of the target's and $5B (`Store.size_peers`, the screener's stored readings), closest in size
+  first, never one already listed; `match.size_peer`. Only for a target of $5B or more. On the 38:
+  ten get some (JPMorgan and Bank of America: Citigroup; Exxon: BP, Phillips 66, Valero, Equinor;
+  NextEra: five utilities), NVIDIA and every target under $5B none. Goldman (SIC 6211, profiled)
+  isn't one.
 - **`match`** says why: `similarity`, `terms` (the shared terms that add the most), `named_by_target` /
   `names_target` (the sentence: accession, section, offsets, to cite), `sic_level`, `same_sector`,
   `same_industry`, `same_filer_category`, `revenue_band`, `same_revenue_band`. `business` is the
@@ -590,8 +603,10 @@ year's default is now the base case's FCF margin that year (typed, else its defa
 case's operating margin minus the base case's, after tax (x (1 - the case's tax rate, held in [0,
 100%])): a point of margin is a point of revenue more operating income, and after tax that much more
 cash. That bull case reads 34.8%, 23.7%, 21.9% and $3.84B, $4.93B, $5.55B; the previewed cases
-(the spread alone) 28.5/13.7/10.0% (bear) and 34.9/18.7/14.8% (bull) around the base case's
-unchanged 31.7/16.2/12.4%. The base case's defaults don't change, so B2 and B7's cases and
+(the spread alone) 27.7/13.1/9.7% (bear) and 35.7/19.3/15.1% (bull) around the base case's
+unchanged 31.7/16.2/12.4%. The spread moves a margin by a quarter of itself (Riley 35: a fifth with
+a 3-point floor took Costco's 3.9% to 0.9% and 6.9%, EPS -71.4% and +102.6% in a year; now 2.9% and
+4.9%); growth by half, at least 5 points. The base case's defaults don't change, so B2 and B7's cases and
 `user_set` hold. Deckers' FY2027 is H1 reported plus H2, with diluted shares down 8.4% a
 year (FY2027 Q2 against FY2026 Q2) as the default share change, and a $46M one-off in Q2 FY2027
 taking the year-to-date margin from 21.8% to 19.9%; Deckers' latest net debt reading is from

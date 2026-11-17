@@ -169,3 +169,6 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`079_catchup_status_cleanups.sql`](DESIGN.md#079_catchup_status_cleanupssql): catch-up status says why a run did nothing; backlogs as anti-joins; search's old forms dropped.
 - [`080_revenue_industry_tags.sql`](DESIGN.md#080_revenue_industry_tagssql): revenue under industry totals (goods, services, real estate) where no other tag gives it; total assets from liabilities and equity.
 - [`081_coverage_notes.sql`](DESIGN.md#081_coverage_notessql): the coverage sweep's notes after 080: revenue tagged only yearly, commodity trusts, partners' capital.
+- [`082_sector_hvac_controls.sql`](DESIGN.md#082_sector_hvac_controlssql): SIC 3822 (Trane) in Industrials with the HVAC makers.
+- [`083_gross_sales_revenue.sql`](DESIGN.md#083_gross_sales_revenuesql): a trading venue's gross sales read as not-meaningful revenue (Bullish).
+- [`084_net_sales_gross_margin.sql`](DESIGN.md#084_net_sales_gross_marginsql): Walmart's and Costco's net sales, and their gross margin on them.

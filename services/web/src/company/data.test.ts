@@ -688,7 +688,7 @@ describe("howFiled: which figures a seal may say were taken from the filing (Ril
     expect(howFiled("revenue_ttm", k)).toEqual({ filed: true });
   });
   it("doesn't seal a ratio, a difference, four quarters added up or a fourth quarter worked out", () => {
-    expect(howFiled("gross_margin_ttm", k)).toEqual({ filed: false, how: "computed: gross profit ÷ revenue" });
+    expect(howFiled("gross_margin_ttm", k)).toMatchObject({ filed: false, how: expect.stringMatching(/^computed: gross profit ÷ revenue; .*on net sales: \(net sales − cost of revenue\) ÷ net sales$/) });
     expect(howFiled("roe_ttm", q)).toMatchObject({ filed: false, how: expect.stringContaining("average of stockholders' equity") });
     expect(howFiled("net_debt_q", q)).toMatchObject({ filed: false });
     expect(howFiled("free_cash_flow_ttm", k)).toMatchObject({ filed: false });

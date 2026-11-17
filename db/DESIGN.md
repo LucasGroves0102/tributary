@@ -922,3 +922,35 @@ quarter, because its 10-Qs tag none (70 listed companies on hermes before 080). 
 41 -> 5); `trust` (SIC 6221 commodity pools: net assets, no balance sheet totals or cash flow
 statement; out of scope, 13); `partners_capital` (a partnership's or LLC's equity, 8; 080 measured
 partners' capital as not safe to read as stockholders' equity). Words: web `company/coverage.ts`.
+
+### 082_sector_hvac_controls.sql
+
+Trane read as Technology (Riley 43): its SIC is 3822 (HVAC and building controls), inside 046's
+3820-3825 instruments range; it joins 3585's Industrials, Building & office products (the one
+registrant at 3822). Thermo Fisher stays in Technology: its SIC, 3829, also holds Rockwell Automation,
+Trimble, Onto, Mirion, Geospace and two more instrument makers; 3826 (lab instruments) was already
+Health Care. A SIC range can't hold one company apart.
+
+### 083_gross_sales_revenue.sql
+
+A trading venue's gross sales as revenue (Riley 42: Bullish, $244.81B against $244.73B of cost, ranked
+among the largest US companies). Revenue reads `not_meaningful` when its cost of revenue at the same
+period end is over 97% of it and at most 100% (a gross loss is revenue earned: 15 miners and micro-caps
+at 6199), at SIC 6199 or 62xx (`gold.gross_sales_sic`; real estate's home sellers and insurance agents
+measured and left out). On hermes: Bullish, SOS, eToro, The9 and Coincheck (the last two in another
+currency, which reads first); 97%, the owner's, spares Cango, a miner at 95.9%. gold.reading takes inputs, not probes, so
+gold.latest_reading and gold.screen_reading add the cost (live, or the stored figure of the same span)
+to revenue's inputs (`gold.with_cost`) behind a one-time filter; nothing stored changes. Peers count it
+as an unknown size; the statements show the revenue as filed.
+
+### 084_net_sales_gross_margin.sql
+
+Walmart's and Costco's gross margin on net sales (Riley 3, the owner's decision of 2026-11-15): their
+revenue includes membership fees and other income that cost of sales doesn't cover (039 leaves 5331's
+gross profit out). A `net_sales` metric read only for them: Walmart's own metric_tags rows of its
+standard tags (RevenueFromContractWithCustomerExcludingAssessedTax, SalesRevenueNet before FY2017),
+Costco's member pick (073) of the same concept by `us-gaap:ProductMember`. Gross margin is (net sales -
+cost of revenue) / net sales for every period with both, its inputs saying so; gross profit stays not
+computed. Walmart's quarter to Jul 2026 reads 25.4%, Costco's FY2026 11.1%. Reaches hermes like 073: the
+filing-facts job's extras pass reads both companies' stored documents and rebuilds their gold; no
+rules_version bump.
