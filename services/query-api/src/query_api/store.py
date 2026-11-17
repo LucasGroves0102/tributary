@@ -182,6 +182,19 @@ class Store:
                 " FROM unnest(%s::text[]) t(ticker)", (tickers,))
             return {r["ticker"]: r["company_id"] for r in cur.fetchall() if r["company_id"]}
 
+    def resolve_companies(self, user_id: str, names: list[str]) -> dict[str, str]:
+        """name (a ticker or a CIK) → company_id, by silver.resolve_company's best ticker or CIK
+        match (public identity; a CIK of any company in a lineage). Names matching neither are
+        absent. The spreadsheet route (query_api.sheets)."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                "SELECT t.name,"
+                "       (SELECT r.company_id FROM silver.resolve_company(t.name)"
+                "        WITH ORDINALITY r WHERE r.matched_on IN ('ticker', 'cik')"
+                "        ORDER BY r.ordinality LIMIT 1) AS company_id"
+                " FROM unnest(%s::text[]) t(name)", (names,))
+            return {r["name"]: r["company_id"] for r in cur.fetchall() if r["company_id"]}
+
     def tickers(self, user_id: str, company_ids: list[str]) -> dict[str, list[str]]:
         """company_id → its current tickers."""
         with self._session(user_id) as cur:
@@ -796,6 +809,41 @@ class Store:
                 """, (latest, company_id))
             readings = {r["metric"]: r for r in cur.fetchall()}
         return {"ttm": ttm, "quarters": by_quarter, "annual": annual, "latest": readings}
+
+    def sheet_readings(self, user_id: str, company_id: str, pairs: list[tuple[str, str]],
+                       dates: list[date], as_of: date | None = None) -> dict:
+        """How one company's figures read, for the spreadsheet route (query_api.sheets), in one
+        session under RLS: `latest`, {(span, metric): gold.latest_reading's row (value, date,
+        status, reason, unit), with period_status (its age alone, as model_inputs) and
+        filer_cik}, and `ages`, {date: gold.period_status of that period end against the
+        company's latest period}, for figures read elsewhere (per-share, fiscal years). as_of
+        (087): the readings as they stood at the end of that day (stale against that day)."""
+        out: dict[str, dict] = {"latest": {}, "ages": {}}
+        with self._session(user_id, as_of) as cur:
+            if pairs:
+                cur.execute(
+                    """
+                    SELECT m.span, m.metric, x.period_end, x.value, x.accession_no, x.form,
+                           x.filed, x.status, x.reason, x.unit,
+                           gold.period_status(x.period_end, lp.latest) AS period_status,
+                           (SELECT f.cik FROM silver.financial_facts f
+                            WHERE f.accession_no = x.accession_no LIMIT 1) AS filer_cik
+                    FROM silver.companies c
+                    CROSS JOIN LATERAL gold.latest_period(c.company_id, %(as_of)s) lp
+                    CROSS JOIN unnest(%(spans)s::text[], %(metrics)s::text[]) AS m(span, metric)
+                    CROSS JOIN LATERAL gold.latest_reading(c.company_id, m.span, m.metric,
+                                                           c.sic, lp.latest, %(as_of)s) x
+                    WHERE c.company_id = %(c)s
+                    """, {"c": company_id, "as_of": as_of, "spans": [s for s, _ in pairs],
+                          "metrics": [m for _, m in pairs]})
+                out["latest"] = {(r["span"], r["metric"]): r for r in cur.fetchall()}
+            if dates:
+                cur.execute(
+                    "SELECT d.d, gold.period_status(d.d, lp.latest) AS status"
+                    " FROM gold.latest_period(%s, %s) lp CROSS JOIN unnest(%s::date[]) d(d)",
+                    (company_id, as_of, dates))
+                out["ages"] = {r["d"]: r["status"] for r in cur.fetchall()}
+        return out
 
     def feed_status(self) -> dict:
         """When the newest filing was accepted by EDGAR and reached bronze (ops.feed_status,

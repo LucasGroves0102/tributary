@@ -17,8 +17,9 @@ expired or revoked key gets the same 401 body as a bad JWT ("invalid token"). No
 a revocation takes effect on the key's next request, on every replica.
 
 Scopes. A key can reach only the routes in KEY_ROUTES (default deny: a route added later refuses
-keys until it is listed here). `read`: the data routes (GET, plus the three POST calculations that
-store nothing: formula validate/evaluate, the model) and the user's own watchlist and saved work.
+keys until it is listed here). `read`: the data routes (GET, plus the POSTs that store nothing:
+formula validate/evaluate, the model, the spreadsheets' batch read) and the user's own watchlist and
+saved work.
 `write` (always with read): creating and editing the user's own saved work and watchlist. Deleting
 a workspace or an item stays sign-in only (not restorable). Everything else refuses every key with
 403: the account (these key routes, passwords, alert settings, webhooks and notifications,
@@ -117,6 +118,7 @@ READ_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/v1/sectors"),
     ("POST", "/v1/formulas/validate"),  # calculations: store nothing
     ("POST", "/v1/formulas/evaluate"),
+    ("POST", "/v1/sheets/values"),  # spreadsheets: many figures, stores nothing (sheets.py)
     ("GET", "/v1/watchlist"),
     ("GET", "/v1/workspaces"),
     ("GET", "/v1/workspaces/{workspace_id}"),
