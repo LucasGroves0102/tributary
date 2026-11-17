@@ -54,7 +54,9 @@ def test_first_deploy_counts_every_company_current(loaded):
     results = catchup.run(loaded, 60)
     # current at 071's baseline, except the checks 072 changed: every company re-checked
     assert [(r.kind, r.done, r.behind, r.failed) for r in results] == [
-        ("check_segments", 5, 0, 0), ("check_financials", 5, 0, 0), ("gold", 0, 0, 0)]
+        ("check_segments", 5, 0, 0), ("check_financials", 5, 0, 0), ("gold", 0, 0, 0),
+        # 086: no company has a history at the deploy; every one is replayed
+        ("known", 5, 0, 0)]
 
 
 def test_a_rules_bump_rebuilds_every_company_in_budgeted_batches(loaded):
@@ -104,6 +106,46 @@ def test_a_check_bump_reruns_the_check_without_rebuilding(loaded):
     assert refreshed(loaded) == at  # nothing re-derived
     assert {v[0] for v in stamps(loaded, "check_financials").values()} == {999}
     assert {v[0] for v in stamps(loaded, "check_segments").values()} == {998}
+
+
+def known(conn) -> list[tuple]:
+    return conn.execute(
+        "SELECT company_id, span, metric, period_end, known_from, known_to, value"
+        " FROM gold.financials_known ORDER BY 1, 2, 3, 4, 5").fetchall()
+
+
+def test_the_history_is_replayed_after_the_deploy_and_kept_by_every_build(loaded):
+    """086: the 'known' kind replays every company once (its catch-up starts on deploy); a gold
+    build then keeps a replayed company's history and leaves the others to the catch-up."""
+    assert stamps(loaded, "known") == {} and known(loaded) == []
+    r = catchup.catch_up(loaded, "known", FOREVER, batch=2)
+    assert (r.done, r.behind, r.failed) == (5, 0, 0)
+    assert {c: v[0] for c, v in stamps(loaded, "known").items()} == dict.fromkeys(ALL, 80)
+    history = known(loaded)
+    assert {h[0] for h in history} == set(ALL)
+    # the open versions are gold today
+    assert loaded.execute(
+        "SELECT count(*) FROM gold.financials_known WHERE known_to IS NULL").fetchone()[0] == \
+        loaded.execute("SELECT (SELECT count(*) FROM gold.quarterly_financials)"
+                       " + (SELECT count(*) FROM gold.derived_financials)").fetchone()[0]
+    # a rebuild with nothing new changes nothing; the catch-up has nothing left
+    loaded.execute("SELECT gold.refresh_financials(%s)", (ALL,))
+    assert known(loaded) == history
+    assert catchup.catch_up(loaded, "known", FOREVER).done == 0
+    # ops.rebuild_soon (a CIK linked): gold first, then the history again
+    loaded.execute("SELECT ops.rebuild_soon(ARRAY[%s])", (XOM,))
+    assert loaded.execute("SELECT count(*) FROM ops.company_backlog('known')").fetchone() == (0,)
+    catchup.catch_up(loaded, "gold", FOREVER)
+    assert catchup.catch_up(loaded, "known", FOREVER).done == 1
+    assert known(loaded) == history
+
+
+def test_the_history_waits_while_its_gold_is_rebuilt(loaded):
+    bump(loaded, "gold.rules_version", 999)
+    assert loaded.execute("SELECT count(*) FROM ops.company_backlog('known')").fetchone() == (0,)
+    results = {r.kind: r for r in catchup.run(loaded, 600)}
+    assert results["gold"].done == 5 and results["known"].done == 5
+    assert {v[0] for v in stamps(loaded, "known").values()} == {999}
 
 
 def test_a_check_waits_while_its_gold_is_rebuilt(loaded):

@@ -1,7 +1,10 @@
--- Backout of 085_point_in_time_pipeline.sql (never a migration: README.md): gold's pipeline back to
--- the bodies before 085, copied unchanged (gold.usable_facts and gold.best_facts with one argument,
--- 056's and 080's; the writers 043's and 084's), and the pure functions and their types dropped. The
--- same rows either way (085 is behaviour-neutral): nothing to rebuild.
+-- Backout of 085_point_in_time_pipeline.sql, 086_financials_known.sql (never a migration: README.md): everything point-in-time
+-- undone, newest first: 086's history (gold.financials_known, gold.known_companies and their
+-- functions dropped; gold.refresh_financials back to 078's body; the 'known' catch-up kind and its
+-- stamps removed, ops.company_rule_version, ops.company_backlog and ops.rebuild_soon back to 071's,
+-- 074's and 076's), then 085's pipeline (gold.usable_facts and gold.best_facts with one argument,
+-- 056's and 080's; the writers 043's and 084's; the pure functions and their types dropped). Gold's
+-- own rows are the same either way: nothing to rebuild.
 --
 -- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as
 -- postgres, a function it drops and re-creates would belong to postgres, and the non-superuser
@@ -31,21 +34,32 @@ BEGIN
         ('gold.derived_rows(text[],date,gold.quarter_row[])', 'd22751c4c57103d6fda7665e6477a179'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
+        ('gold.financial_rows(text[],date)', '861bf05e3f8d8f5743e946c9761e291d'),
+        ('gold.input_values(jsonb)', '06de5fab08b2d846d578a006a9efc859'),
+        ('gold.knowledge_facts(text)', '18e26ac36e3c21f7ce905a870362750c'),
+        ('gold.known_changed_from(text)', '61c37386d5747694eadbb421824e579f'),
         ('gold.latest_reading(text,text,text,text,date)', '097ab17641e6893f4284b9d08c621637'),
         ('gold.not_applicable_metrics(text,text)', '31aa1cba6092282684aaf6b699539359'),
         ('gold.not_computed(text,text)', 'a1d6b45f36a10d029335de6f30893f96'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '81ab67cd9d086d5c9184ffb843304748'),
         ('gold.quarterly_rows(text[],date)', '58f05bc5ff7d5f1f6bce48ec05d1201a'),
+        ('gold.rebuild_known(text[])', '7c0e1472047486fb812194cfe5b5919b'),
         ('gold.refresh_derived_financials(text[])', '6e9debd1c4fec0936d3498b7a9e4c147'),
-        ('gold.refresh_financials(text[])', '4bd8545d1e9cf94fa665cdee21294039'),
+        ('gold.refresh_financials(text[])', 'b3f53c9f634d1d1383ec72d363982a61'),
+        ('gold.refresh_known(text[])', '4e601c1d2eab3b6f283829ea2c4774fc'),
         ('gold.refresh_quarterly_financials(text[])', '4cf929c3db5e1b7830220b9b3574bfe2'),
+        ('gold.replay_companies(text[],boolean)', 'a88eba6b35d5504daf597ad643fe35a0'),
+        ('gold.replay_known(text,date)', '39c0339c527f6718a084b2bc4c656f29'),
         ('gold.screen_backlog()', '972441f449f03e3d8fa36a9748610e85'),
         ('gold.screen_company(text)', 'd0ab770fb304683145115aeb8dcee30d'),
         ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', 'f110e0894f0dff22b6fb8fe0423313fe'),
         ('gold.usable_facts(text[])', NULL),
         ('gold.usable_facts(text[],date)', 'fe486d44c294971b08f43188f6822765'),
         ('ops.check_financials(text[])', 'a8a94bf23f986a93f3f61c8fc5f35461'),
+        ('ops.company_backlog(text)', 'c57e6d676904010c5295c661689911ca'),
+        ('ops.company_rule_version(text)', 'c42c4ab6b3199df8659901cfcff470c4'),
+        ('ops.rebuild_soon(text[])', '9426fba21e20547353faa6ed8bc0824e'),
         ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
         ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2')
     ) v(fn, want) LOOP
@@ -65,6 +79,90 @@ END
 $guard$;
 -- end guard
 
+-- 086: the history
+-- 078's gold.refresh_financials, copied unchanged
+CREATE OR REPLACE FUNCTION gold.refresh_financials(p_company_ids text[]) RETURNS integer
+LANGUAGE plpgsql AS $$
+DECLARE
+    n integer;
+    rules integer := gold.rules_version();
+    checks integer := ops.check_financials_version();
+BEGIN
+    PERFORM gold.lock_companies(p_company_ids);
+    n := gold.refresh_quarterly_financials(p_company_ids);
+    PERFORM gold.refresh_derived_financials(p_company_ids);
+    PERFORM gold.refresh_screen(p_company_ids);  -- 078
+    PERFORM ops.check_financials(p_company_ids);
+    PERFORM ops.stamp_builds('gold', p_company_ids, rules);
+    PERFORM ops.stamp_builds('check_financials', p_company_ids, checks);
+    RETURN n;
+END
+$$;
+
+DROP FUNCTION gold.refresh_known(text[]);
+DROP FUNCTION gold.rebuild_known(text[]);
+DROP FUNCTION gold.replay_companies(text[], boolean);
+DROP FUNCTION gold.known_changed_from(text);
+DROP FUNCTION gold.replay_known(text, date);
+DROP FUNCTION gold.knowledge_facts(text);
+DROP FUNCTION gold.financial_rows(text[], date);
+DROP FUNCTION gold.input_values(jsonb);
+DROP TABLE gold.known_companies;
+DROP TABLE gold.financials_known;
+
+-- the 'known' kind: its stamps and runs, then its row and the constraints as 074 left them
+DELETE FROM ops.company_builds WHERE kind = 'known';
+DELETE FROM ops.catchup_runs WHERE kind = 'known';
+DELETE FROM ops.catchup WHERE kind = 'known';
+ALTER TABLE ops.company_builds DROP CONSTRAINT company_builds_kind_check;
+ALTER TABLE ops.company_builds ADD CONSTRAINT company_builds_kind_check
+    CHECK (kind IN ('gold', 'check_financials', 'check_segments'));
+ALTER TABLE ops.catchup DROP CONSTRAINT catchup_kind_check;
+ALTER TABLE ops.catchup ADD CONSTRAINT catchup_kind_check
+    CHECK (kind IN ('parser', 'passages', 'diffs', 'gold', 'check_financials', 'check_segments',
+                    'check_sections', 'statements'));
+
+-- 071's ops.company_rule_version, 074's ops.company_backlog, 076's ops.rebuild_soon, copied
+-- unchanged
+CREATE OR REPLACE FUNCTION ops.company_rule_version(p_kind text) RETURNS integer
+LANGUAGE sql STABLE AS $$
+    SELECT CASE p_kind WHEN 'gold' THEN gold.rules_version()
+                       WHEN 'check_financials' THEN ops.check_financials_version()
+                       WHEN 'check_segments' THEN ops.check_segments_version() END
+$$;
+CREATE OR REPLACE FUNCTION ops.company_backlog(p_kind text)
+RETURNS TABLE (company_id text, built_at timestamptz, failed boolean)
+LANGUAGE sql STABLE AS $$
+    SELECT c.company_id, b.built_at,
+           b.failed_version IS NOT DISTINCT FROM ops.company_rule_version(p_kind)
+    FROM silver.companies c
+    JOIN ops.catchup k ON k.kind = p_kind
+    LEFT JOIN ops.company_builds b ON b.kind = p_kind AND b.company_id = c.company_id
+    WHERE (coalesce(b.version, k.baseline) < ops.company_rule_version(p_kind)
+           -- 074
+           OR (p_kind = 'check_financials' AND EXISTS (
+                  SELECT 1 FROM silver.company_ciks x
+                  JOIN silver.statement_reads r ON r.cik = x.cik
+                  WHERE x.company_id = c.company_id
+                    AND r.read_at > coalesce(b.built_at, '-infinity'::timestamptz))))
+      AND (p_kind <> 'check_financials' OR c.company_id NOT IN (
+              SELECT g.company_id FROM ops.company_backlog('gold') g WHERE NOT g.failed))
+$$;
+CREATE OR REPLACE FUNCTION ops.rebuild_soon(p_company_ids text[]) RETURNS integer
+LANGUAGE sql AS $$
+    WITH due AS (
+        INSERT INTO ops.company_builds AS b (kind, company_id, version, built_at)
+        SELECT DISTINCT 'gold', id, 0, 'epoch'::timestamptz
+        FROM unnest(p_company_ids) id WHERE id IS NOT NULL
+        ON CONFLICT (kind, company_id) DO UPDATE
+        SET version = 0, built_at = 'epoch', failed_version = NULL, failed_at = NULL,
+            error = NULL
+        RETURNING 1
+    )
+    SELECT count(*)::integer FROM due
+$$;
+
+-- 085: the pipeline
 -- 043's gold.refresh_quarterly_financials, copied unchanged
 CREATE OR REPLACE FUNCTION gold.refresh_quarterly_financials(p_company_ids text[])
 RETURNS integer
@@ -659,7 +757,7 @@ DROP TYPE gold.derived_row;
 DROP TYPE gold.quarter_row;
 
 -- 056's gold.usable_facts, copied unchanged
-CREATE OR REPLACE FUNCTION gold.usable_facts(p_company_ids text[])
+CREATE FUNCTION gold.usable_facts(p_company_ids text[])
 RETURNS TABLE (company_id text, metric text, tag text, taxonomy text, unit text, period_start date,
                period_end date, period_type text, value numeric, accession_no text, form text,
                filed date, ingested_at timestamptz, cik text, priority numeric, additive boolean)
@@ -858,7 +956,7 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- 080's gold.best_facts, copied unchanged
-CREATE OR REPLACE FUNCTION gold.best_facts(p_company_ids text[])
+CREATE FUNCTION gold.best_facts(p_company_ids text[])
 RETURNS TABLE (company_id text, metric text, tag text, taxonomy text, unit text, period_start date,
                period_end date, period_type text, value numeric, accession_no text, form text,
                filed date, ingested_at timestamptz, cik text, priority numeric, additive boolean)

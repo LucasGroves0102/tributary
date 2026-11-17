@@ -49,7 +49,8 @@ screener's stored figures (078) for companies with none (all of them after that 
 companies), 200 a transaction under their gold locks; then companies an older version built, those whose CIKs changed first (`ops.rebuild_soon`, 076: a re-registration linked), then oldest build first,
 the checks re-run 100 at a time (nothing re-derived; a check waits while the company's gold is due),
 then gold rebuilt 25 at a time by the `--rebuild` path (no SEC requests; `gold.companies_for_ciks`
-borrowers included). Each batch commits alone and takes the companies' gold locks, so a stopped run
+borrowers included), then gold's history (086, kind `known`) replayed 5 companies a transaction
+(`gold.rebuild_known`: one view per filing date; only companies whose gold is current). Each batch commits alone and takes the companies' gold locks, so a stopped run
 leaves whole companies and the nightly jobs wait for a batch rather than interleave with it. A batch
 that raises is retried a company at a time; one that still raises is recorded
 (`ops.company_builds.failed_version`, `error`) and left until the next version. Progress:

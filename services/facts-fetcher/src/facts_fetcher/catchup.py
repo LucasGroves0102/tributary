@@ -14,8 +14,11 @@ Kinds, in this order (the cheap ones first, so a long gold catch-up never holds 
 - gold: the financials-rebuild path for the batch's CIKs: their stored companyfacts payloads
   re-projected with the current metric tags, silver, then `gold.refresh_financials` of the companies
   and of `gold.companies_for_ciks` (co-registrants that borrow the CIKs' filings).
+- known: gold's history (migration 086): `gold.rebuild_known(batch)` replays each company's views
+  as of every filing date at the current rules, only companies whose gold is current
+  (ops.company_backlog). Not paused on deploy (the owner's call); a few seconds a company.
 
-The versions are gold.rules_version(), ops.check_financials_version() and
+The versions are gold.rules_version() (gold and known), ops.check_financials_version() and
 ops.check_segments_version(); every refresh stamps ops.company_builds (gold.refresh_financials,
 gold.refresh_segments, ops.recheck), so the nightly jobs' and a hand-run rebuild's work counts too.
 Each batch commits alone and gold writes take gold.lock_companies, so stopping at any point leaves
@@ -46,8 +49,8 @@ from facts_fetcher.payload import reproject
 
 log = logging.getLogger("facts_fetcher.catchup")
 
-KINDS = ("check_segments", "check_financials", "gold")
-BATCH = {"check_segments": 100, "check_financials": 100, "gold": 25}
+KINDS = ("check_segments", "check_financials", "gold", "known")
+BATCH = {"check_segments": 100, "check_financials": 100, "gold": 25, "known": 5}
 SCREEN_BATCH = 200  # companies' stored screener figures a transaction (078)
 SECONDS = 1200
 JOB_SECONDS = 3000  # the hourly job's whole run, so the next hour's is never skipped (Forbid)
@@ -68,8 +71,12 @@ class Result:
 
 
 def build(conn: psycopg.Connection, kind: str, companies: Sequence[str]) -> None:
-    """Rebuild (gold) or re-check these companies in one transaction; the SQL stamps them."""
+    """Rebuild (gold), replay (known) or check these companies again in one transaction; the
+    SQL stamps them."""
     with conn.transaction():
+        if kind == "known":
+            conn.execute("SELECT gold.rebuild_known(%s)", (list(companies),))
+            return
         if kind != "gold":
             conn.execute("SELECT ops.recheck(%s, %s)", (kind, list(companies)))
             return

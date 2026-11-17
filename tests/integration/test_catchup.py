@@ -43,7 +43,8 @@ def test_versions_live_with_their_rules():
                          ).fetchone() == (80, 74, 72, 72)
         assert c.execute("SELECT kind, baseline FROM ops.catchup WHERE baseline IS NOT NULL"
                          " ORDER BY 1").fetchall() == [
-            ("check_financials", 57), ("check_segments", 70), ("gold", 64)]
+            ("check_financials", 57), ("check_segments", 70), ("gold", 64),
+            ("known", 0)]  # 086: no company has a history at the deploy
         # 071 ships the parser kind paused (the owner's call), every other kind running
         assert c.execute("SELECT kind FROM ops.catchup WHERE paused").fetchall() == [("parser",)]
         assert c.execute("SELECT ops.parser_version_number('rust-7'),"
@@ -107,7 +108,7 @@ def test_state_tells_paused_from_stalled(conn):
 def test_ops_reader_sees_the_status_only(conn):
     run(conn, "gold", 1, behind=3, done=1)
     conn.execute("SET LOCAL ROLE ops_reader")
-    assert conn.execute("SELECT count(*) FROM ops.catchup_status").fetchone() == (8,)
+    assert conn.execute("SELECT count(*) FROM ops.catchup_status").fetchone() == (9,)
     for table in ("ops.catchup", "ops.catchup_runs", "ops.company_builds"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
             conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
@@ -122,7 +123,7 @@ def test_the_exporter_query_runs_as_ops_reader(conn):
     conn.execute("SET LOCAL ROLE ops_reader")
     rows = {r[0]: r[1:] for r in conn.execute(query)}
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
-                         "check_segments", "check_sections", "statements"}
+                         "check_segments", "check_sections", "statements", "known"}
     assert rows["gold"][:5] == (3, 0, 0, 1, 0)
     assert rows["parser"][4] == 0  # the fixture unpaused it; paused = 1 keeps the alert quiet
     assert all(v is not None for r in rows.values() for v in r)
