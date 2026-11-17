@@ -43,14 +43,14 @@ def refreshed(conn) -> list[tuple]:
 
 
 def test_every_refresh_stamps_its_companies(loaded):
-    assert {c: v[0] for c, v in stamps(loaded, "gold").items()} == dict.fromkeys(ALL, 77)
+    assert {c: v[0] for c, v in stamps(loaded, "gold").items()} == dict.fromkeys(ALL, 80)
     assert {c: v[0] for c, v in stamps(loaded, "check_financials").items()} == \
         dict.fromkeys(ALL, 74)
 
 
 def test_first_deploy_counts_every_company_current(loaded):
     loaded.execute("DELETE FROM ops.company_builds")  # as on the day 071 lands
-    bump(loaded, "gold.rules_version", 64)  # 071's rules (077 bumped them since)
+    bump(loaded, "gold.rules_version", 64)  # 071's rules (077 and 080 bumped them since)
     results = catchup.run(loaded, 60)
     # current at 071's baseline, except the checks 072 changed: every company re-checked
     assert [(r.kind, r.done, r.behind, r.failed) for r in results] == [
@@ -91,7 +91,7 @@ def test_a_company_whose_ciks_changed_is_rebuilt_first(loaded):
 
     catchup.catch_up(loaded, "gold", FOREVER, batch=1, build=build)
     assert built[0] == XOM and sorted(built) == ALL
-    assert stamps(loaded, "gold")[XOM][0] == 77
+    assert stamps(loaded, "gold")[XOM][0] == 80
 
 
 def test_a_check_bump_reruns_the_check_without_rebuilding(loaded):
@@ -125,7 +125,7 @@ def test_a_company_that_raises_is_recorded_and_left_until_the_next_version(loade
     bump(loaded, "gold.rules_version", 999)
     r = catchup.catch_up(loaded, "gold", FOREVER, build=build)
     assert (r.done, r.behind, r.failed) == (4, 0, 1)
-    assert stamps(loaded, "gold")[NVDA][::2] == (77, 999)  # (version, failed_version)
+    assert stamps(loaded, "gold")[NVDA][::2] == (80, 999)  # (version, failed_version)
     assert catchup.catch_up(loaded, "gold", FOREVER, build=build).done == 0
     bump(loaded, "gold.rules_version", 1000)
     assert catchup.catch_up(loaded, "gold", FOREVER).done == 5
@@ -179,7 +179,7 @@ def test_a_new_versions_backlog_is_recorded_before_the_run_works(loaded):
                                  " WHERE kind = 'gold'").fetchone())
         catchup.build(conn, kind, companies)
 
-    catchup.catch_up(loaded, "gold", FOREVER)  # 77: nothing to do, recorded
+    catchup.catch_up(loaded, "gold", FOREVER)  # 80: nothing to do, recorded
     bump(loaded, "gold.rules_version", 999)
     catchup.catch_up(loaded, "gold", FOREVER, build=build, batch=5)
     assert seen == [("999", "catching_up", 5)]

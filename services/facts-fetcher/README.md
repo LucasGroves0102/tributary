@@ -56,7 +56,7 @@ that raises is retried a company at a time; one that still raises is recorded
 `ops.catchup_status` (a new version's backlog is recorded when its first run starts). A full gold catch-up of hermes' ~8,100 companies is about 1-2 hours of
 rebuilding, so it is done within a few hours of the deploy; the checks within the first run.
 
-Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 077,
+Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 080,
 over `gold.usable_facts`): the quarters, the annual fallback for TTM (040) and the checks' annual
 comparison (041) all read it. For revenue, a zero loses to another tag's value, and a figure under
 20% of the period's gross line is a part, not the total: `Revenues` under contract revenue (039),
@@ -69,7 +69,12 @@ filing reports as two tags (a bank's net interest plus noninterest income; NVIDI
 securities) is a `silver.metric_sums` row whose parts are `silver.metric_tags` rows with
 `gold_line = false` (038). Net income is one line a year (077): inside a year whose own filings tag it
 `ProfitLoss` only (`NetIncomeLoss` only in later comparatives), `ProfitLoss` reads first (PNC); its last fallback is
-`NetIncomeLossAvailableToCommonStockholdersBasic` (Booking since 2016).
+`NetIncomeLossAvailableToCommonStockholdersBasic` (Booking since 2016). Revenue's industry totals
+(080: `RealEstateRevenueNet`, `SalesRevenueGoodsNet`, `SalesRevenueServicesNet`, most filers' total
+before 2018) are read only where no other revenue tag gives the period, never at a company whose
+filings give one under 80% of another revenue tag (a part there), never two in one period; another
+revenue tag under 20% of one is a part (Conagra's FY2012-2016 `Revenues`). Total assets falls back
+to `LiabilitiesAndStockholdersEquity`.
 
 A filing's facts are the company's whose CIK the filing's own XBRL names (migration 050): since July
 2026 the SEC files some multi-registrant 10-K/10-Qs only under a co-registrant's CIK (DTE Energy's under

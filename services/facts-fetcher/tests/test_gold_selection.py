@@ -67,6 +67,10 @@ METRICS = {
     "DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent": "short_term_investments",
     "DebtSecuritiesCurrent": "short_term_investments",
     "EquitySecuritiesFvNi": "short_term_investments",
+    "RealEstateRevenueNet": "revenue",
+    "SalesRevenueGoodsNet": "revenue",
+    "SalesRevenueServicesNet": "revenue",
+    "LiabilitiesAndStockholdersEquity": "total_assets",
 }
 
 
@@ -1711,3 +1715,96 @@ def test_a_year_restated_after_its_quarters_explains_their_sum(conn):
     rows = conn.execute("SELECT severity, detail->>'restated' FROM ops.quality_findings"
                         " WHERE company_id = %s AND check_name = 'annual_sum'", (CO,)).fetchall()
     assert rows == [("warning", None)]
+
+
+# --- 080: industry totals for revenue, the balance sheet's other total ---------------------------
+
+GOODS, SERVICES = "SalesRevenueGoodsNet", "SalesRevenueServicesNet"
+REAL_ESTATE = "RealEstateRevenueNet"
+
+
+def test_an_industry_total_fills_a_period_no_other_tag_gives(conn):
+    # Church & Dwight's net sales to 2017, Centerspace's real estate revenue to 2018
+    put(conn, [(GOODS, *Q3, 970_000_000, "q", FILED), (REAL_ESTATE, *Q2, 45_000_000, "q2", FILED)])
+    assert gold(conn, "revenue", END) == (970_000_000, GOODS)
+    assert gold(conn, "revenue", Q2[1]) == (45_000_000, REAL_ESTATE)
+    # 078: the same gold build stores the screener's figures, so 080's catch-up rebuild reaches them
+    assert conn.execute("SELECT period_end, value FROM gold.screen_figures WHERE company_id = %s"
+                        " AND metric = 'revenue' AND span = 'quarter'", (CO,)
+                        ).fetchone() == (date.fromisoformat(END), 970_000_000)
+
+
+def test_any_other_revenue_tag_outranks_an_industry_total(conn):
+    # the same period under SalesRevenueNet (a later filing's comparative) and goods: the trusted
+    # tag
+    put(conn, [(GOODS, *Q3, 950_000_000, "q", FILED),
+               ("SalesRevenueNet", *Q3, 970_000_000, "k", "2027-02-20", "10-K")])
+    assert gold(conn, "revenue", END) == (970_000_000, "SalesRevenueNet")
+
+
+def test_an_industry_total_the_company_gives_as_a_part_is_never_read(conn):
+    # Ultragenyx: product sales beside total revenue one quarter (12-18% of it), alone the next
+    put(conn, [("Revenues", *Q2, 100_000_000, "q2", "2026-08-01"),
+               (GOODS, *Q2, 15_000_000, "q2", "2026-08-01"),
+               (GOODS, *Q3, 17_000_000, "q3", FILED)])
+    assert gold(conn, "revenue", Q2[1]) == (100_000_000, "Revenues")
+    assert gold(conn, "revenue", END) is None
+
+
+def test_an_industry_total_above_a_restated_total_is_still_read(conn):
+    # Campbell's net sales before its later 10-Ks restated the year for discontinued operations
+    put(conn, [("Revenues", *Q2, 1_600_000_000, "k", "2027-02-20", "10-K"),
+               (GOODS, *Q2, 2_160_000_000, "q2", "2026-08-01"),
+               (GOODS, *Q3, 2_200_000_000, "q3", FILED)])
+    assert gold(conn, "revenue", Q2[1]) == (1_600_000_000, "Revenues")
+    assert gold(conn, "revenue", END) == (2_200_000_000, GOODS)
+
+
+def test_an_excluded_industry_total_is_never_read(conn):
+    # Brown-Forman's pre-2017 goods tag: sales before excise taxes (industry_total_exclusions)
+    conn.execute("INSERT INTO silver.industry_total_exclusions (company_id, tag, cause)"
+                 " VALUES (%s, %s, 'excise')", (CO, GOODS))
+    put(conn, [(GOODS, *Q3, 1_100_000_000, "q", FILED),
+               ("Revenues", *Q2, 4_000_000, "q2", "2026-08-01"),
+               (GOODS, *Q2, 1_050_000_000, "q2", "2026-08-01")])
+    assert gold(conn, "revenue", END) is None
+    # no evidence either: the small Revenues line stays what gold reads
+    assert gold(conn, "revenue", Q2[1]) == (4_000_000, "Revenues")
+
+
+def test_goods_and_services_in_one_period_are_neither_read(conn):
+    # KVH's product and service lines: parts of a total no tag gives
+    put(conn, [(GOODS, *Q3, 26_000_000, "q", FILED), (SERVICES, *Q3, 18_000_000, "q", FILED)])
+    assert gold(conn, "revenue", END) is None
+
+
+def test_a_revenue_tag_under_a_fifth_of_the_industry_total_is_a_part(conn):
+    # Materion's 10-Qs: Revenues of $1.5M (one line) beside net sales of $250M; Camden's contract
+    # revenue beside its real estate revenue (Q2 2018)
+    put(conn, [("Revenues", *Q3, 1_483_000, "q", FILED), (GOODS, *Q3, 250_400_000, "q", FILED),
+               ("RevenueFromContractWithCustomerExcludingAssessedTax", *Q2, 1_826_000, "q2",
+                "2026-08-01"),
+               (REAL_ESTATE, *Q2, 237_133_000, "q2", "2026-08-01")])
+    assert gold(conn, "revenue", END) == (250_400_000, GOODS)
+    assert gold(conn, "revenue", Q2[1]) == (237_133_000, REAL_ESTATE)
+
+
+def test_a_revenue_tag_above_a_fifth_of_the_industry_total_stays(conn):
+    # LGL: Revenues a third of its goods line, as 039's 20%: no part
+    put(conn, [("Revenues", *Q3, 7_000_000, "q", FILED), (GOODS, *Q3, 24_000_000, "q", FILED)])
+    assert gold(conn, "revenue", END) == (7_000_000, "Revenues")
+
+
+def test_a_zero_industry_total_is_not_read(conn):
+    # a biotech's product sales of 0 before approval: no revenue figure, not a zero
+    put(conn, [(GOODS, *Q3, 0, "q", FILED)])
+    assert gold(conn, "revenue", END) is None
+
+
+def test_liabilities_and_equity_give_total_assets_without_assets(conn):
+    # SEI Investments' 10-Qs since July 2025 tag the balance sheet's other total only
+    put(conn, [("Assets", None, Q2[1], 2_626_266_000, "q2", "2026-08-01"),
+               ("LiabilitiesAndStockholdersEquity", None, Q2[1], 2_626_266_000, "q2", "2026-08-01"),
+               ("LiabilitiesAndStockholdersEquity", None, END, 3_434_639_000, "q", FILED)])
+    assert gold(conn, "total_assets", Q2[1]) == (2_626_266_000, "Assets")
+    assert gold(conn, "total_assets", END) == (3_434_639_000, "LiabilitiesAndStockholdersEquity")
