@@ -58,6 +58,7 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 | `#/workspace/<id>`, `#/report/<id>` | saved work and research notes the assistant writes | [Saved work and reports](DESIGN.md#saved-work-and-reports) |
 | `#/thesis/<id>`, `#/model/<id>` | a thesis (Write view, Check my thesis, Revisit) and a model | [Theses and models](DESIGN.md#theses-and-models) |
 | `#/alerts` | filing alerts | [Filing alerts](DESIGN.md#filing-alerts) |
+| `#/portfolio[/<holding>]`, `#/portfolio/import` | your holdings on your own prices, a holding's buys, sales and journal, the Fidelity import | [Portfolio](DESIGN.md#portfolio) |
 | `#/settings` | filing alerts, Connect your data (when on), API keys | [Price](DESIGN.md#price-connect-your-data), [API keys](DESIGN.md#api-keys-and-using-the-api) |
 | `#/about` | what Tributary covers and doesn't | [Screens](DESIGN.md#screens-hash-routes) |
 | `#/status` | Data status: freshness, completeness, quality checks by what they mean for a reader, filing-section checks, recorded suites; public | [Screens](DESIGN.md#screens-hash-routes) |
@@ -135,7 +136,7 @@ npm run e2e       # Playwright flows in e2e/ against dist/ (build first)
 The root `make test` and ruff don't cover this folder; `make typecheck` runs its typecheck. Pin exact
 versions in `package.json` and update `package-lock.json` with them.
 
-The 23 end-to-end flows (`e2e/app.spec.ts`; the list is in [DESIGN.md](DESIGN.md#end-to-end-flows))
+The 24 end-to-end flows (`e2e/app.spec.ts`; the list is in [DESIGN.md](DESIGN.md#end-to-end-flows))
 run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts`, so no backend runs.
 One worker and one headless chromium (`npx playwright install chromium` once). CI runs them in the
 `e2e` job. One flow fails on any console error or 4xx/5xx on the main screens (#68), so a route the

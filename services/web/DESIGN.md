@@ -1197,6 +1197,26 @@ and the delivery log in words ("Retrying: it answered 500; tried 2 times"); an E
 server has email. `alerts/alerts.ts` only words what the API
 decided.
 
+## Portfolio
+
+`src/portfolio/` (Query API README "Portfolio" decides every figure; `portfolio.ts` only words
+them). `#/portfolio`: a sentence first (what you hold, what it cost, what it's worth on your own
+prices and how far up or down), "Not investment advice", a review-due note, then the holdings table
+(shares, cost, your price with its day and source in the hover, value, gain, weight by value or by
+cost as the API says, next report, the linked analysis or thesis), closed holdings, the latest
+journal entries; empty, it explains itself. `#/portfolio/<id>`: the position as a ledger, your
+price form, the research link (a select of your projects and theses for the company), buys, sales,
+the journal. `#/portfolio/import`: the browser reads Fidelity's CSV and posts its text; the preview
+lists every row (keep it or not, a cost to type where the export had none, the account label as a
+name) and what was left out; Add saves; the export's last prices are kept only if ticked. The
+company page's head says "You hold N shares, since <day>" for an open holding.
+
+Rules: your money is shown to the cent (`cash`, parentheses for a negative), never with a seal
+(nothing here is a filed figure); umber (`--warn`) marks what asks for your writing (a review due,
+a correction); journal text renders as plain text (`pre-wrap`), never Markdown; an entry past its
+24 hours offers only Correct, which writes a new entry shown under it. The assistant gets nothing
+of it: the page is "about" to agent-api (`uiContext`) and suggests nothing.
+
 ## Finding a company
 
 Finding a company (`components/CompanySearch.tsx`): one server-backed combobox everywhere a
@@ -1360,12 +1380,13 @@ the narrow-screen menu, the shortcut sheet, Ctrl+arrow table jumps and the limit
 Home and the tearsheet, writing a report from a workspace with a mocked SSE stream (embedded charts,
 the flagged figure, Markdown download, print styles), customizing Home and the watchlist and screener
 columns, workspace actions, a clean console on Home, Companies, a company's Overview and Statements,
-Compare, the chart builder, Analysis, Alerts, Settings, Data status and Using the API (#68), no screen
+Compare, the chart builder, Analysis, Alerts, Portfolio and its import, Settings, Data status and Using the API (#68), no screen
 scrolling sideways on a phone, at 1024 or at 1440 with the panel open, the screener's numbers under a
 frozen name with the panel open, a company reporting in euros, labelled everywhere and never ranked
 or averaged with dollars, a thesis check that says what it costs before it runs and links a claim of the
-user's own model, an earnings release's guidance table read as a table (parser v7), and API keys: a GitHub account makes one, sees it once and revokes it, a
-sandbox's Settings offers none, and the public Using the API page from the front door) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
+user's own model, an earnings release's guidance table read as a table (parser v7), API keys: a GitHub account makes one, sees it once and revokes it, a
+sandbox's Settings offers none, and the public Using the API page from the front door, and the portfolio: a
+Fidelity export previewed then added, a holding by hand with why, a journal entry, the company page's line) run against `vite preview` with every `/api/*` call answered by `e2e/mockApi.ts` (route
 interception), so no backend runs. One worker and one headless chromium
 (`npx playwright install chromium` once). CI runs them in the `e2e` job.
 
@@ -1432,4 +1453,7 @@ stripped from a save an older API refuses. API keys: `/v1/api-keys` answering 40
 section, and `/v1/openapi-keys.json` answering 404 makes Using the API say the server doesn't take
 keys yet (the rest of the page is static). Data trust, part 2: an older API sends no `confidence`
 (no mark in the header or the screener) and no tag disagreement `figures` (the note keeps its
-tags-only wording); nothing new is requested.
+tags-only wording); nothing new is requested. Portfolio: `/v1/portfolio` and the journal answering
+404 say the portfolio isn't available yet, the company page's holding line asks
+`/v1/portfolio/position` and shows nothing on a 404, and the bell counts `reviews_due` only when
+the unread answer has it.

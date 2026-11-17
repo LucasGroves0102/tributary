@@ -107,6 +107,26 @@ tokens: `make token USER=alice`.
 | `POST /v1/alerts/webhooks/{id}/test` | token, app DB | a signed test event now (5 an hour) |
 | `GET /v1/alerts/deliveries?webhook_id=&limit=` | token, app DB | the delivery log: status, attempts, last HTTP status, error code, next try |
 
+The portfolio and decision journal (sign-in only, never an API key or the MCP server; owner-only,
+app DB; [Portfolio](#portfolio)):
+
+| Route | Needs | Returns |
+|---|---|---|
+| `GET /v1/portfolio` | token | holdings with lots and sells, cost, realised gain; value, gain and weight on the caller's own price (source, day, `stale`); next report; linked project or thesis; `review_due` |
+| `GET /v1/portfolio/position/{id}` | token | `{"position": {shares, open, first_bought, added_at} \| null}` (the company page) |
+| `POST /v1/portfolio/holdings` | token | `{company_id \| symbol, name?, lot}`: a buy, making the holding if there is none; a ticker resolves to a company, else a not-covered symbol |
+| `DELETE /v1/portfolio/holdings/{id}` | token | the holding, its buys, sales and price (the journal stays) |
+| `POST /v1/portfolio/holdings/{id}/lots`, `DELETE /v1/portfolio/lots/{lot}` | token | a buy `{shares, cost_total \| cost_per_share, bought_on?, account_label?}` / delete one (409 if a sale would then sell more than held) |
+| `POST /v1/portfolio/holdings/{id}/sells`, `DELETE /v1/portfolio/sells/{sell}` | token | a sale `{shares, price, sold_on}` (409 over the shares held that day) / delete one |
+| `PUT` / `DELETE /v1/portfolio/holdings/{id}/price` | token | the caller's own price `{price, on}` (covered companies only) / clear it |
+| `PUT /v1/portfolio/holdings/{id}/link` | token | `{project_id}`, `{thesis_item_id}` or `{}`: the caller's own Analysis project or thesis |
+| `POST /v1/portfolio/import/preview` | token | Fidelity's Portfolio Positions CSV as the raw body (512 KB): rows matched or not covered, skipped rows and why, what's held; saves nothing, never returns an account number |
+| `POST /v1/portfolio/import` | token | `{positions, price_on?}` chosen from a preview; companies matched again server-side |
+| `POST /v1/portfolio/prices/refresh` | `DATA_CONNECTIONS_KEY`, own connection | asks the caller's provider for their open holdings' closes |
+| `GET /v1/portfolio/journal?company_id=&symbol=&limit=` | token | entries newest first: `kept`, `editable_until`, `corrects` |
+| `POST /v1/portfolio/journal` | token | `{company_id \| symbol, kind, why, sell_rules?, red_line_ids?, confidence?, decided_on?, corrects?}` |
+| `PATCH` / `DELETE /v1/portfolio/journal/{entry}` | token | within 24 hours of writing it; after, 409 (add a correction) |
+
 Saved work, preferences and the routes only agent-api calls (all owner-only, app DB):
 
 | Route | Needs | Returns |
@@ -422,6 +442,26 @@ webhook rules: [DESIGN.md](DESIGN.md#filing-alerts).
 Email is a provider interface, off: `ALERT_SMTP_HOST` + `ALERT_SMTP_FROM` (`ALERT_SMTP_PORT`
 default 587, `ALERT_SMTP_USER`, `ALERT_SMTP_PASSWORD`) turn it on in the job, but no user address
 is verified yet, so nothing is sent. SMTP also needs `alertEmail.enabled` in the Helm values.
+
+## Portfolio
+
+What a user holds, valued only on their own prices, and the decision journal (`portfolio.py`,
+`portfolio_maths.py`, `portfolio_import.py`, `journal.py`; their docstrings are the rules; app
+migration 021, owner-only, forced RLS, not streamed). Cost is a running average cost; realised gain
+is worked out on each sale; a sale of more than was held that day is refused. A price is the user's
+own: their Connect-your-data close (only with `DATA_CONNECTIONS_KEY`) or one they typed or imported,
+the newer winning, always with its source and day; over 7 days old it is `stale`. Tributary
+fetches no price for anyone. Funds and ETFs (a symbol that resolves to no company the caller reads
+financials for) are kept by symbol and cost, without a price.
+
+Fidelity's export is read by header names; Account Number is dropped as it is read, an account
+label that looks like a number is refused (and the database refuses it too); cash, money-market,
+pending and option rows are skipped with a reason. Journal entries can be edited or deleted for 24
+hours, then a trigger keeps them as written and a change is a new entry that `corrects` the old.
+Open holdings join the filing alerts' follows (source `portfolio`); a review falls due when a
+held company files a 10-K or 10-Q after the holding was added and after the last `review` entry,
+and `GET /v1/alerts/unread` counts it (`reviews_due`). No API key reaches any of it (not in
+`KEY_ROUTES`), so neither does the MCP server; agent-api has no tool for it.
 
 ## Statement callouts
 
