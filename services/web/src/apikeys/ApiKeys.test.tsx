@@ -283,6 +283,33 @@ describe("Using the API", () => {
     expect(container.querySelectorAll("table.api-routes tbody tr")).toHaveLength(5);
   });
 
+  it("says how to use the key in Excel and Google Sheets, reading the script only when asked", async () => {
+    const loadScript = vi.fn(async () => "function TRIBUTARY() {}");
+    await mount(<ApiDocs load={async () => DOC} origin="https://tributary.example" loadScript={loadScript} />);
+    const folio = [...container.querySelectorAll("section.folio")].find((s) => s.querySelector("h2")?.textContent === "In your spreadsheet");
+    expect(folio).toBeTruthy();
+    const text = folio!.textContent ?? "";
+    expect(text).toContain('=TRIBUTARY.VALUE("NVDA", "revenue")');
+    expect(text).toContain("=HYPERLINK(TRIBUTARY.SOURCE(");
+    expect(text).toContain("up to 200 figures and 25 companies a request, and each request counts once");
+    expect(text).toContain("Tributary never converts currencies");
+    expect(text).toContain("anyone who can edit the spreadsheet can edit the script, and so use that key");
+    const manifest = folio!.querySelector<HTMLAnchorElement>("a.api-manifest");
+    expect(manifest?.href).toBe("https://tributary.example/addins/excel/manifest.xml");
+    expect(manifest?.hasAttribute("download")).toBe(true);
+    expect(folio!.querySelector<HTMLAnchorElement>("a.api-script")?.href).toBe("https://tributary.example/addins/sheets/Tributary.gs");
+    expect(loadScript).not.toHaveBeenCalled();
+    const details = folio!.querySelector<HTMLDetailsElement>("details.api-script-code")!;
+    await act(async () => {
+      details.open = true;
+      details.dispatchEvent(new Event("toggle"));
+    });
+    await settle();
+    expect(loadScript).toHaveBeenCalledTimes(1);
+    expect(details.querySelector('pre[aria-label="The Google Sheets script"]')?.textContent).toBe("function TRIBUTARY() {}");
+    expect(button("Copy the script", details)).toBeTruthy();
+  });
+
   it("is a public route with its own title, read by the assistant as an information page", () => {
     expect(parse("#/api")).toEqual({ view: "api" });
     expect(href({ view: "api" })).toBe("#/api");

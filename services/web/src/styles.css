@@ -7416,6 +7416,48 @@ table.t.release-grid {
   margin: 0;
 }
 
+/* In your spreadsheet: Excel and Google Sheets under one rubric */
+.api-docs .api-sub {
+  margin: var(--sp-9) 0 var(--sp-4);
+  font-family: var(--sans);
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+
+/* each formula over its words: a formula is wider than the words' column would leave */
+.api-docs .api-formulas {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--sp-2);
+  margin-bottom: var(--sp-8);
+}
+
+.api-formulas dd {
+  margin-bottom: var(--sp-5);
+  color: var(--ink-2);
+}
+
+.api-formulas dt code {
+  overflow-wrap: anywhere;
+}
+
+.api-script-code {
+  max-width: 100%;
+  margin: 0 0 var(--sp-6);
+}
+
+.api-script-code summary {
+  margin-bottom: var(--sp-4);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.api-script-code .api-code {
+  max-height: 520px;
+  overflow: auto;
+}
+
 .api-routes td,
 .api-errors td {
   vertical-align: top;
