@@ -384,6 +384,10 @@ def main(argv: Iterable[str] | None = None) -> None:
 
             catchup.run(conn, catchup.budget(args.catchup_seconds, time.monotonic() - started),
                         args.parser_catchup, stats.diffed)
+        elif stats.locked_out:  # a hand-run job holds the lock: the status says so (079)
+            from filing_parser import catchup
+
+            catchup.skipped(conn)
 
 
 def outcome(stats: Stats) -> str:

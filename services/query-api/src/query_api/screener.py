@@ -6,11 +6,14 @@ bind parameter.
 
 Columns are `<metric>_ttm` (trailing twelve months; balance-sheet metrics at the quarter end)
 or `<metric>_q` (latest fiscal quarter), for every metric in the formula CATALOG with values in
-that view. Each value is the latest one of that metric and span (gold.latest_reading: an index
-lookup per company and column, migrations 032 and 035) and carries its own period_end, filing and
-how to read it: not applicable, not meaningful, old, or just behind the company's latest period.
-The rules are in 035, once; this module only asks. Sorts and range filters take the comparable
-value, `k<i>`, which is NULL for all of them but "behind": the exact figure stays in `v<i>`, so a
+that view. Each value is the latest one of that metric and span (gold.latest_reading's row,
+migrations 032 and 035) and carries its own period_end, filing and how to read it: not applicable,
+not meaningful, old, or just behind the company's latest period. The rules are in 035, once; this
+module only asks. The figures come from what the gold build stores for the screener (migration
+078: gold.screen_company and gold.screen_reading, read under RLS with today's date and the
+caller's SIC, the same rules); a company with nothing stored is read live, as before. Sorts and
+range filters take the comparable value, `k<i>`, which is NULL for all of them but "behind": the
+exact figure stays in `v<i>`, so a
 209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
 An amount in a currency other than the dollar reads `other_currency` (migration 056) and says its
 unit: shown in that currency, never sorted, filtered or averaged with dollar figures. Each page row
@@ -162,19 +165,26 @@ def _gate(company: str, granted: list[str] | None) -> str:
     return "" if granted is None else f" WHERE {company} = ANY(%(granted)s)"
 
 
+# the company's stored inputs (gold.screen_company, 078) as the ranked stage passes them on
+INPUTS = ("latest", "equity", "currency", "recent", "cached")
+
+
 def _latest(company: str, granted: list[str] | None) -> str:
-    """Lateral: the company's latest period (gold.latest_period): what "old" is against."""
-    return ("LEFT JOIN LATERAL (SELECT p.latest FROM gold.latest_period("
-            f"{company}) p{_gate(company, granted)}) a ON true")
+    """Lateral `a`: the company's latest period (what "old" is against) and the stored inputs of
+    its readings, or its latest period read live when nothing is stored (gold.screen_company)."""
+    return (f"LEFT JOIN LATERAL (SELECT {', '.join(f'p.{c}' for c in INPUTS)}"
+            f" FROM gold.screen_company({company}) p{_gate(company, granted)}) a ON true")
 
 
-def _values(slots: dict[str, int], company: str, sic: str, latest: str,
+def _values(slots: dict[str, int], company: str, sic: str, inputs: tuple[str, ...],
             granted: list[str] | None) -> str:
     """A lateral row with v<i> (the value), src<i> (its filing), st<i> and why<i> (how to read it)
     and k<i> (what it sorts and filters by) of these slots, for the company in the column
-    `company`."""
+    `company`: gold.screen_reading, which is gold.latest_reading's row, read from the stored
+    figures when the company's `inputs` (INPUTS' expressions) say they are stored."""
     if not slots:
         return "(SELECT 1)"
+    latest, equity, currency, recent, cached = inputs
     outputs, joins = [], []
     for i in slots.values():
         outputs += [f"x{i}.value AS v{i}",
@@ -184,20 +194,21 @@ def _values(slots: dict[str, int], company: str, sic: str, latest: str,
                     f"x{i}.status AS st{i}", f"x{i}.reason AS why{i}", f"x{i}.unit AS u{i}",
                     f"CASE WHEN x{i}.status IS NULL OR x{i}.status = 'behind'"
                     f" THEN x{i}.value END AS k{i}"]
-        joins.append(f"LEFT JOIN LATERAL gold.latest_reading({company}, %(s{i})s, %(m{i})s,"
-                     f" {sic}, {latest}) x{i} ON true")
+        joins.append(f"LEFT JOIN LATERAL gold.screen_reading({company}, %(s{i})s, %(m{i})s,"
+                     f" {sic}, {latest}, {cached}, {equity}, {currency}, {recent}) x{i} ON true")
     return (f"(SELECT {', '.join(outputs)} FROM (SELECT 1{_gate(company, granted)}) one "
             f"{' '.join(joins)})")
 
 
 def _has_value(columns: list[str], granted: list[str] | None, params: dict) -> str:
-    """Whether a company has a value in any of these columns: one lookup per place a value can
-    live, each a set of primary-key probes that stops at the first hit. Scalar subqueries with a
-    LIMIT, not EXISTS: under an OR the planner turns EXISTS into a hashed subplan, a seq scan of
+    """Whether a company has a value in any of these columns: the metric lists stored with its
+    figures (gold.screen_companies, 078: one primary-key probe), else one lookup per place a value
+    can live, each a set of primary-key probes that stops at the first hit. Scalar subqueries with
+    a LIMIT, not EXISTS: under an OR the planner turns EXISTS into a hashed subplan, a seq scan of
     all 5M rows of gold.derived_financials per query (1.7 s on a copy of this size, as query_api).
     Under RLS as usual. With the catalog closed, a company the caller can't read stays listed
     whatever it has."""
-    tests = []
+    tests, stored = [], []
     for span in ("quarter", "ttm"):
         names = sorted({COLUMNS[k][0] for k in columns if COLUMNS[k][1] == span})
         if names:
@@ -205,13 +216,17 @@ def _has_value(columns: list[str], granted: list[str] | None, params: dict) -> s
             tests.append("(SELECT true FROM gold.derived_financials d"
                          f" WHERE d.company_id = c.company_id AND d.span = '{span}'"
                          f" AND d.metric = ANY(%(has_{span})s::text[]) LIMIT 1) IS NOT NULL")
+            stored.append(f"s.{span}_metrics && %(has_{span})s::text[]")
     reported = sorted({COLUMNS[k][0] for k in columns if COLUMNS[k][0] not in DERIVED})
     if reported:
         params["has_reported"] = reported
         tests.append("(SELECT true FROM gold.quarterly_financials q"
                      " WHERE q.company_id = c.company_id"
                      " AND q.metric = ANY(%(has_reported)s::text[]) LIMIT 1) IS NOT NULL")
-    test = " OR ".join(tests) or "FALSE"
+        stored.append("s.reported_metrics && %(has_reported)s::text[]")
+    test = "FALSE" if not tests else (
+        f"coalesce((SELECT {' OR '.join(stored)} FROM gold.screen_companies s"
+        f" WHERE s.company_id = c.company_id), {' OR '.join(tests)})")
     return f"({test})" if granted is None else f"(c.company_id <> ALL(%(granted)s) OR {test})"
 
 
@@ -305,10 +320,14 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                              for i in ranked.values())
     page_outputs = "".join(f", w.v{i}, w.src{i}, w.st{i}, w.why{i}, w.u{i}"
                            for i in page.values())
-    # the latest period is read once per row: for every company when a sort or filter needs it,
-    # else only for the page
+    # the latest period and the readings' stored inputs (INPUTS) are read once per row: for every
+    # company when a sort or filter needs them (the ranked stage carries them to the page as
+    # latest_period and in_<input>), else only for the page
     early = bool(ranked)
-    page_latest = "r.latest_period" if early else "a.latest"
+    a_inputs = tuple(f"a.{c}" for c in INPUTS)
+    page_inputs = ("r.latest_period", *(f"r.in_{c}" for c in INPUTS[1:])) if early else a_inputs
+    page_latest = page_inputs[0]
+    carried = ", a.latest AS latest_period" + "".join(f", a.{c} AS in_{c}" for c in INPUTS[1:])
     # 046's sector, by range of SIC codes: for every company only when a sector filter or sort
     # needs it, else for the page's rows after the LIMIT. Joined for the whole catalog it cost
     # ~70 ms a call, and the range join's estimate (19 rows a company) misled the plan above it.
@@ -331,11 +350,11 @@ WITH base AS (
     WHERE {' AND '.join(meta)}
 ),
 ranked AS (
-    SELECT b.*{', a.latest AS latest_period' if early else ''}{ranked_outputs},
+    SELECT b.*{carried if early else ''}{ranked_outputs},
            count(*) OVER () AS total
     FROM base b
     {_latest('b.company_id', granted) if early else ''}
-    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', 'a.latest', granted)} v ON true
+    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', a_inputs, granted)} v ON true
     WHERE {' AND '.join(where)}
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
@@ -344,7 +363,7 @@ SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_se
        cf.level AS confidence, cf.reasons AS confidence_reasons
 FROM ranked r
 {'' if early else _latest('r.company_id', granted)}
-LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_latest, granted)} w ON true
+LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_inputs, granted)} w ON true
 LEFT JOIN LATERAL gold.company_confidence(r.company_id, r.sic, {page_latest}) cf ON true
 {page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id

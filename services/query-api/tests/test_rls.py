@@ -83,6 +83,8 @@ def client():
                 " 'Widgets', 'revenue', '2026-04-01', '2026-06-30', 0.1, 'USD', 'reported',"
                 " 'us-gaap:Revenues', 'srt:ProductOrServiceAxis', %s, %s, '2026-08-01',"
                 " ARRAY[%s], now())", (cid, f"{cid}-26-000001", cid, f"{cid}-26-000001"))
+        # 078: the screener's stored figures, as the gold build writes them
+        conn.execute("SELECT gold.refresh_screen(%s)", ([A, B],))
         conn.execute("UPDATE silver.companies SET sic = '2080', sic_description = 'Beverages',"
                      " exchanges = '{NYSE}' WHERE company_id = %s", (A,))
         conn.execute("DELETE FROM authz.user_access WHERE user_id LIKE 't-%'")
@@ -758,6 +760,7 @@ def visible(conn, user, sql, params=()):
 RLS_TABLES = {  # every table with a granted_* policy, and how to find a company's rows
     "gold.quarterly_financials": "company_id", "gold.derived_financials": "company_id",
     "gold.segment_financials": "company_id", "gold.filing_sections": "company_id",
+    "gold.screen_companies": "company_id", "gold.screen_figures": "company_id",  # 078
 }
 
 
@@ -941,8 +944,9 @@ def test_store_reads_the_catalog_list_under_rls(client):
 
 # Open access without an id list (migration 032): RLS alone, as with the catalog public ---------
 
-SEARCH_FN = "gold.search_passages(tsquery, text[], text, text, date, date, int, int)"
-SEARCH_PAGE_FN = "gold.search_page(tsquery, text[], text, text, date, date, text, int, int)"
+# 079 dropped 032's search_passages and 052's nine-argument search_page (older pods' forms)
+GONE_FNS = ("gold.search_passages(tsquery, text[], text, text, date, date, int, int)",
+            "gold.search_page(tsquery, text[], text, text, date, date, text, int, int)")
 SEARCH_EXACT_FN = ("gold.search_page(tsquery, text[], text, text, date, date, text, int, int,"
                    " tsquery)")
 
@@ -967,8 +971,8 @@ def public_client(conn):
 def passages(conn, user, companies=None, query="secret"):
     return visible(conn, user,
                    "SELECT company_id, section_key, passage, filed, rank > 0 FROM"
-                   " gold.search_passages(websearch_to_tsquery('english', %s), %s::text[], NULL,"
-                   " NULL, NULL, NULL, 10, 0) ORDER BY company_id",
+                   " gold.search_page(websearch_to_tsquery('english', %s), %s::text[], NULL,"
+                   " NULL, NULL, NULL, 'relevance', 10, 0, NULL) ORDER BY company_id",
                    (query, companies))
 
 
@@ -1068,7 +1072,8 @@ def test_latest_filings_rows_are_the_same_with_and_without_a_list(client):
         store.latest_filings("t-reader", [A, B], 10))
 
 
-def test_search_passages_applies_the_read_rule(client):
+def test_search_applies_the_read_rule(client):
+    """032's read rule, now asked of the one search function left (gold.search_page, 068)."""
     conn = client.app_conn
     for cid in (A, B):
         conn.execute("SELECT gold.refresh_section_search(ARRAY[%s])", (f"{cid}-26-000002",))
@@ -1091,9 +1096,11 @@ def test_search_passages_applies_the_read_rule(client):
     assert [r[0] for r in passages(conn, "t-reader")] == [B]
 
 
-def test_search_passages_is_locked_down(client):
+def test_search_is_locked_down(client):
     conn = client.app_conn
-    for fn in ((SEARCH_FN,), (SEARCH_PAGE_FN,), (SEARCH_EXACT_FN,)):
+    for fn in GONE_FNS:
+        assert conn.execute("SELECT to_regprocedure(%s)", (fn,)).fetchone() == (None,)
+    for fn in ((SEARCH_EXACT_FN,),):
         assert conn.execute("SELECT has_function_privilege('query_api', %s, 'EXECUTE')",
                             fn).fetchone() == (True,)
         assert conn.execute("SELECT has_function_privilege('ops_reader', %s, 'EXECUTE')",
@@ -1113,7 +1120,8 @@ def test_search_page_applies_the_read_rule(client):
     def page(user, companies=None, sort="relevance"):
         return visible(conn, user,
                        "SELECT company_id, total FROM gold.search_page(websearch_to_tsquery("
-                       "'english', 'secret'), %s::text[], NULL, NULL, NULL, NULL, %s, 10, 0)"
+                       "'english', 'secret'), %s::text[], NULL, NULL, NULL, NULL, %s, 10, 0,"
+                       " NULL)"
                        " ORDER BY company_id", (companies, sort))
     assert page("t-pro") == [(A, 1)]
     assert page("t-pro", [B]) == []
