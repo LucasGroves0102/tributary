@@ -132,7 +132,8 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "A formula's series over time, each point citing every input's filing. The same body as "
         "checking a formula; every company it names must be readable to you, and figures in two "
         "currencies can't be combined. `as_of` in the body (a past day): the inputs as they stood "
-        "at its end."),
+        "at its end. `mine.<dataset>.<field>` reads your own uploaded data; its points carry "
+        "`value_source` \"yours\" and the day each value was known instead of a filing."),
 
     # --- read: filings and text -------------------------------------------------------------
     ("GET", "/v1/companies/{company_id}/filings"): (
@@ -222,7 +223,9 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "`company_id`, `issue` (a data check's name); `sort` (a column, `-` first for descending), "
         "`limit`, `offset`, `format` json or csv. Figures only for companies whose financials you "
         "can read, each with how to read it. `as_of` (a past day): each company's figures as they "
-        "stood at its end, read against that day."),
+        "stood at its end, read against that day. `metric` (one of your saved metrics' item id, "
+        "up to 5): a column `m_<id without dashes>` evaluated over each company's latest figures "
+        "and your own data, sortable and filterable like the rest."),
 
     # --- read: your saved work --------------------------------------------------------------
     ("GET", "/v1/watchlist"): (
@@ -248,6 +251,27 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "One earlier version",
         "One earlier version of a thesis or model, with its contents."),
 
+    # --- read: your own data ----------------------------------------------------------------
+    ("GET", "/v1/datasets"): (
+        "Your datasets",
+        "The datasets you uploaded, by name, each with its fields and their units, its currency, "
+        "row, value and company counts, first and last day, and how its rows are dated "
+        "(`known_from`: a publication date column, or the upload day); and the upload limits. "
+        "Only you can read them."),
+    ("GET", "/v1/datasets/{dataset_id}"): (
+        "A dataset",
+        "One of your datasets: its fields, units, counts and days."),
+    ("GET", "/v1/datasets/{dataset_id}/rows"): (
+        "A dataset's rows",
+        "A page of one of your datasets' rows by company, newest day first, values as exact "
+        "decimal strings by field. `company_id`, `from`/`to` (days), `limit` 1-1000 (default "
+        "100), `offset`; `as_of` (a past day): each row as you knew it at its end; "
+        "`versions=true`: every version of each row instead."),
+    ("GET", "/v1/companies/{company_id}/datasets"): (
+        "Your data on a company",
+        "Each of your datasets with rows for this company, with its latest days. `as_of` (a past "
+        "day): as you knew them at its end."),
+
     # --- write ------------------------------------------------------------------------------
     ("PUT", "/v1/watchlist/{company_id}"): (
         "Watch a company",
@@ -269,8 +293,8 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "\"<name> (copy)\"."),
     ("POST", "/v1/workspaces/{workspace_id}/items"): (
         "Save an item",
-        "Saves a chart, comps set, screen, thesis or model (`kind`, `name`, `state`) into one of "
-        "your workspaces."),
+        "Saves a chart, comps set, screen, thesis, model or metric (`kind`, `name`, `state`) into "
+        "one of your workspaces."),
     ("PUT", "/v1/workspace-items/{item_id}"): (
         "Save over an item",
         "Replaces one of your items' contents (`state`, checked against its kind) and/or renames "
@@ -279,4 +303,22 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "Copy an item",
         "A copy of one of your items in the same workspace, or in another of yours "
         "(`workspace_id`), optionally named `name`."),
+    ("POST", "/v1/datasets"): (
+        "Upload a dataset",
+        "A CSV of your own figures by company and date, as multipart/form-data: `file` and "
+        "`name` (formulas read it as mine.<name>.<field>), optionally `title`, `company_column` "
+        "(tickers or CIKs), `date_column` (YYYY-MM-DD), `published_column` (the day each row was "
+        "published; without it, rows are known from today), `units` (`field:unit,...`: number, "
+        "ratio, money, shares, per_share), `currency`, `decimal` and `dry_run=true` (a preview, "
+        "nothing stored). Values must be numbers; a row whose company isn't a ticker or CIK "
+        "Tributary knows is left out and listed by row number. At most 20 MB, 200,000 rows and "
+        "50 columns a file; 50 datasets and 200 MB in all; 10 uploads an hour."),
+    ("POST", "/v1/datasets/{dataset_id}/upload"): (
+        "Upload into a dataset",
+        "A later file into one of your datasets, the same form as uploading one: `mode=replace` "
+        "(default: its rows become the file's) or `mode=append` (the same fields: rows added, an "
+        "unchanged one isn't stored again, a changed one becomes a later version)."),
+    ("PATCH", "/v1/datasets/{dataset_id}"): (
+        "Change a dataset",
+        "Its `title`, a field's unit (`units`: field to unit) or its money's `currency`."),
 }

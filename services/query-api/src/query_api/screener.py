@@ -35,14 +35,28 @@ readable at this tier, so no id list goes into the query and RLS alone bounds th
 list would come from authz.public_access, which RLS reads anyway). A value filter can't be
 evaluated without a value, so ungranted companies drop out of any screen with a value filter; a
 sort on a value column puts them last.
+
+Own metrics (B2d, MetricColumn): a saved formula of the caller's (a workspace item of kind
+`metric`) as a column `m_<item id>`, at most MAX_METRICS a screen. It is evaluated at read time
+over each company's latest figures, the same readings as the columns (gold.screen_reading, or as
+of a day gold.latest_reading), and the latest day of the caller's own datasets it names
+(userdata.field_points, as known at the end of `as_of`): each input's comparable value (k<i>'s
+rule: none for n/m, n/a, old, stale or another currency), then the formula, so a figure that
+doesn't read as a value never makes one. Without a value the column says the first input's
+reading, named by its ref. It sorts and filters like any column. A formula with a ticker or a lag
+isn't a column (each row is its own company; only the latest figures are read): ScreenError. Its
+SQL is fixed fragments too: input slots and named parameters, never the formula's text.
 """
 
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Literal, get_args
+from typing import Any, Literal, get_args
 
-from query_api.formula import CATALOG, DERIVED, POINT_IN_TIME
+from query_api.formula import CATALOG, DERIVED, POINT_IN_TIME, FormulaError, analyze, parse
+from query_api.formula.check import FIELD_UNITS, Analysis, DatasetInfo, mine_refs
+from query_api.formula.grammar import BinOp, Call, Lag, Neg, Node, Num, Ref
 
 SPAN_SUFFIX = {"quarter": "q", "ttm": "ttm"}
 # column key → (metric, span, unit)
@@ -75,10 +89,107 @@ DEFAULT_COLUMNS = ["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "ope
                    "net_margin_ttm", "free_cash_flow_ttm", "debt_to_equity_q", "total_assets_q"]
 MAX_COLUMNS = 30
 MAX_WHERE = 10
+MAX_METRICS = 5  # own metrics (B2d) a screen evaluates
 
 
 class ScreenError(ValueError):
     """A malformed screen (unknown column, bad filter). Message is safe to return."""
+
+
+@dataclass(frozen=True)
+class MetricInput:
+    """One input of an own metric: Tributary's latest (metric, span), or the latest day of a
+    field (1-based position) of one of the caller's datasets."""
+    ref: str
+    metric: str | None = None
+    span: str | None = None
+    dataset_id: str | None = None
+    position: int | None = None
+    other_currency: str | None = None  # a dataset's money in a currency other than USD
+
+
+@dataclass(frozen=True)
+class MetricColumn:
+    """An own metric as a screener column (module docstring, "Own metrics")."""
+    key: str           # m_<item id, 32 hex>
+    item_id: str
+    name: str
+    formula: str
+    view: str          # quarter | ttm
+    unit: str
+    display: str | None
+    ast: Node
+    analysis: Analysis
+    inputs: tuple[MetricInput, ...]
+
+
+def metric_key(item_id: str) -> str:
+    return "m_" + item_id.replace("-", "").lower()
+
+
+def metric_column(item_id: str, name: str, formula: str, view: str,
+                  datasets: dict[str, DatasetInfo] | None) -> MetricColumn:
+    """A saved formula as a column, or ScreenError (words safe to return: the formula is the
+    caller's own). datasets: the caller's, by name (the ones mine_refs names)."""
+    try:
+        ast = parse(formula)
+        a = analyze(ast, view, datasets)
+    except FormulaError as e:
+        raise ScreenError(f"metric {name!r}: {e.message}") from None
+    if a.tickers:
+        raise ScreenError(f"metric {name!r} names a company: a column reads each row's own "
+                          "company, so write it without a ticker")
+    if any(i.lag for i in a.inputs):
+        raise ScreenError(f"metric {name!r} looks back (a lag): a column reads each company's "
+                          "latest figures only; use a growth metric")
+    inputs = []
+    for inp in a.inputs:
+        if inp.dataset is None:
+            inputs.append(MetricInput(inp.ref, metric=inp.metric, span=inp.span))
+            continue
+        info = a.datasets[inp.dataset]
+        unit = info.unit_of(inp.metric)
+        money = FIELD_UNITS[unit][2].startswith("USD")
+        inputs.append(MetricInput(inp.ref, dataset_id=info.dataset_id,
+                                  position=info.fields.index(inp.metric) + 1,
+                                  other_currency=info.currency
+                                  if money and info.currency != "USD" else None))
+    return MetricColumn(metric_key(item_id), item_id, name, formula, view, a.unit, a.display,
+                        ast, a, tuple(inputs))
+
+
+def metric_datasets(formula: str) -> list[str]:
+    """The dataset names a saved formula reads (none when it doesn't parse: metric_column says
+    why)."""
+    try:
+        return sorted(mine_refs(parse(formula)))
+    except FormulaError:
+        return []
+
+
+def _metric_expr(n: Node, a: Analysis, refs: list[str], params: dict, prefix: str) -> str:
+    """The formula over its inputs' comparable values `refs`: fixed fragments, constants as named
+    parameters (compile.py's rules: NULLIF on a divisor)."""
+    match n:
+        case Num(value=v):
+            key = f"{prefix}c{len([k for k in params if k.startswith(prefix + 'c')])}"
+            params[key] = v
+            return f"%({key})s::numeric"
+        case Ref():
+            return refs[a.input_of[id(n)]]
+        case Lag(expr=e) | Call(name="ttm", arg=e):
+            return _metric_expr(e, a, refs, params, prefix)
+        case Call(name="abs", arg=e):
+            return f"abs({_metric_expr(e, a, refs, params, prefix)})"
+        case Neg(arg=e):
+            return f"(-{_metric_expr(e, a, refs, params, prefix)})"
+        case BinOp(op="/", left=left, right=right):
+            return (f"({_metric_expr(left, a, refs, params, prefix)} / "
+                    f"NULLIF({_metric_expr(right, a, refs, params, prefix)}, 0))")
+        case BinOp(op=op, left=left, right=right) if op in ("+", "-", "*"):
+            return (f"({_metric_expr(left, a, refs, params, prefix)} {op} "
+                    f"{_metric_expr(right, a, refs, params, prefix)})")
+    raise TypeError(n)
 
 
 @dataclass
@@ -113,6 +224,7 @@ class Screen:
     limit: int = 50
     offset: int = 0
     as_of: date | None = None              # gold as it stood at the end of that day (087)
+    metrics: dict[str, MetricColumn] = field(default_factory=dict)  # own metrics by column key
 
 
 @dataclass(frozen=True)
@@ -123,13 +235,14 @@ class Compiled:
     slots: dict[str, int]   # column key → slot (selected first, then filter/sort-only)
 
 
-def parse_filter(text: str) -> Filter:
-    """`<column>:<op>:<number>`, e.g. operating_margin_ttm:gte:0.2 (ratios are fractions)."""
+def parse_filter(text: str, extra: Collection[str] = ()) -> Filter:
+    """`<column>:<op>:<number>`, e.g. operating_margin_ttm:gte:0.2 (ratios are fractions).
+    extra: more column keys (the screen's own metrics)."""
     parts = text.split(":")
     if len(parts) != 3:
         raise ScreenError(f"filter {text!r}: expected <column>:<op>:<number>")
     column, op, raw = parts
-    if column not in COLUMNS:
+    if column not in COLUMNS and column not in extra:
         raise ScreenError(f"filter {text!r}: unknown column {column!r}")
     if op not in OPS:
         raise ScreenError(f"filter {text!r}: op must be one of {sorted(OPS)}")
@@ -188,17 +301,83 @@ def _latest(company: str, granted: list[str] | None, as_of: bool = False) -> str
             f" FROM gold.screen_company({company}) p{_gate(company, granted)}) a ON true")
 
 
+def _reading(alias: str, metric: str, span: str, company: str, sic: str,
+             inputs: tuple[str, ...], as_of: bool) -> str:
+    """The lateral join of one (metric, span)'s reading for the company: gold.screen_reading
+    (stored, else live) or, as of a day, gold.latest_reading over the history (the same rules).
+    metric and span are parameter names."""
+    latest, equity, currency, recent, cached = inputs
+    if as_of:
+        # 087: as of a day, gold.latest_reading over the history (the same rules)
+        return (f"LEFT JOIN LATERAL gold.latest_reading({company}, %({span})s, %({metric})s,"
+                f" {sic}, {latest}, %(as_of)s) {alias} ON true")
+    return (f"LEFT JOIN LATERAL gold.screen_reading({company}, %({span})s, %({metric})s,"
+            f" {sic}, {latest}, {cached}, {equity}, {currency}, {recent}) {alias} ON true")
+
+
+def _metric_values(i: int, m: MetricColumn, company: str, sic: str, inputs: tuple[str, ...],
+                   as_of: bool, params: dict) -> tuple[list[str], list[str]]:
+    """(outputs, joins) of an own metric's slot i: each input's reading or dataset value as
+    x<i>_<j>, its comparable value, then the formula over those (module docstring)."""
+    joins, refs, reads = [], [], []
+    for j, inp in enumerate(m.inputs):
+        x = f"x{i}_{j}"
+        if inp.metric is not None:
+            params[f"m{i}_{j}"], params[f"s{i}_{j}"] = inp.metric, inp.span
+            joins.append(_reading(x, f"m{i}_{j}", f"s{i}_{j}", company, sic, inputs, as_of))
+        else:
+            params[f"d{i}_{j}"], params[f"p{i}_{j}"] = inp.dataset_id, inp.position
+            params[f"o{i}_{j}"] = inp.other_currency
+            params.setdefault("data_as_of", None)
+            joins.append(
+                "LEFT JOIN LATERAL (SELECT y.value, y.day AS period_end,"
+                f" CASE WHEN %(o{i}_{j})s::text IS NOT NULL THEN 'other_currency' END AS status,"
+                f" NULL::text AS reason, %(o{i}_{j})s::text AS unit"
+                f" FROM userdata.field_points(%(d{i}_{j})s::uuid, {company}, %(p{i}_{j})s,"
+                f" %(data_as_of)s::date) y ORDER BY y.day DESC LIMIT 1) {x} ON true")
+        params[f"r{i}_{j}"] = inp.ref
+        refs.append(f"CASE WHEN {x}.status IS NULL OR {x}.status = 'behind'"
+                    f" THEN {x}.value END")
+        reads.append(x)
+    expr = _metric_expr(m.ast, m.analysis, refs, params, f"e{i}_")
+    blank = f"({expr}) IS NULL"
+    def first(what: Callable[[str, int], str]) -> str:
+        """The first input's `what` whose reading says something (not "behind")."""
+        return "coalesce(" + ", ".join(f"CASE WHEN {x}.status <> 'behind' THEN {what(x, j)} END"
+                                       for j, x in enumerate(reads)) + ")"
+
+    status = first(lambda x, _: f"{x}.status")
+    reason = first(lambda x, j: f"%(r{i}_{j})s || ': ' || coalesce({x}.reason,"
+                                f" replace({x}.status, '_', ' '))")
+    unit = ("coalesce(" + ", ".join(f"CASE WHEN {x}.status = 'other_currency' THEN {x}.unit END"
+                                    for x in reads) + ")")
+    behind = " OR ".join(f"{x}.status = 'behind'" for x in reads)
+    outputs = [f"{expr} AS v{i}", f"NULL::jsonb AS src{i}",
+               f"CASE WHEN {blank} THEN {status} WHEN {behind} THEN 'behind' END AS st{i}",
+               f"CASE WHEN {blank} THEN {reason} END AS why{i}",
+               f"CASE WHEN {blank} THEN {unit} END AS u{i}", f"{expr} AS k{i}"]
+    return outputs, joins
+
+
 def _values(slots: dict[str, int], company: str, sic: str, inputs: tuple[str, ...],
-            granted: list[str] | None, as_of: bool = False) -> str:
+            granted: list[str] | None, as_of: bool = False,
+            metrics: dict[str, MetricColumn] | None = None, params: dict | None = None) -> str:
     """A lateral row with v<i> (the value), src<i> (its filing), st<i> and why<i> (how to read it)
     and k<i> (what it sorts and filters by) of these slots, for the company in the column
     `company`: gold.screen_reading, which is gold.latest_reading's row, read from the stored
-    figures when the company's `inputs` (INPUTS' expressions) say they are stored."""
+    figures when the company's `inputs` (INPUTS' expressions) say they are stored. An own
+    metric's slot (`metrics`, by column key) adds its inputs' parameters to `params`."""
     if not slots:
         return "(SELECT 1)"
     latest, equity, currency, recent, cached = inputs
     outputs, joins = [], []
-    for i in slots.values():
+    for key, i in slots.items():
+        if metrics and key in metrics:
+            assert params is not None
+            more, laterals = _metric_values(i, metrics[key], company, sic, inputs, as_of, params)
+            outputs += more
+            joins += laterals
+            continue
         outputs += [f"x{i}.value AS v{i}",
                     f"CASE WHEN x{i}.period_end IS NOT NULL THEN jsonb_build_object("
                     f"'period_end', x{i}.period_end, 'accession_no', x{i}.accession_no,"
@@ -267,26 +446,52 @@ def _has_value(columns: list[str], granted: list[str] | None, params: dict) -> s
     return f"({test})" if granted is None else f"(c.company_id <> ALL(%(granted)s) OR {test})"
 
 
+def _has_metric_value(s: Screen, granted: list[str] | None, params: dict) -> str:
+    """hide_blank with own metrics: a value in a plain column, in one of the metrics' inputs of
+    Tributary's figures, or a row of one of the datasets they read (the caller's own, RLS)."""
+    keys = [k for k in s.columns if k in COLUMNS]
+    for k in s.columns:
+        for inp in s.metrics[k].inputs if k in s.metrics else ():
+            if inp.metric is not None:
+                keys.append(f"{inp.metric}_{SPAN_SUFFIX[inp.span or 'ttm']}")
+    keys = [k for k in dict.fromkeys(keys) if k in COLUMNS]
+    tests = []
+    if keys:
+        tests.append(_has_value_at(keys, None, params) if s.as_of is not None
+                     else _has_value(keys, None, params))
+    datasets = sorted({inp.dataset_id for k in s.columns if k in s.metrics
+                       for inp in s.metrics[k].inputs if inp.dataset_id})
+    if datasets:
+        params["has_data"] = datasets
+        tests.append("(SELECT true FROM userdata.rows r WHERE r.dataset_id = ANY("
+                     "%(has_data)s::uuid[]) AND r.company_id = c.company_id LIMIT 1) IS NOT NULL")
+    test = " OR ".join(tests) or "FALSE"
+    return f"({test})" if granted is None else f"(c.company_id <> ALL(%(granted)s) OR {test})"
+
+
 def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
-    unknown = [c for c in s.columns if c not in COLUMNS]
+    unknown = [c for c in s.columns if c not in COLUMNS and c not in s.metrics]
     if unknown:
         raise ScreenError(f"unknown columns: {unknown}")
     if len(s.columns) > MAX_COLUMNS:
         raise ScreenError(f"at most {MAX_COLUMNS} columns")
     if len(s.filters) > MAX_WHERE:
         raise ScreenError(f"at most {MAX_WHERE} filters")
+    if len(s.metrics) > MAX_METRICS:
+        raise ScreenError(f"at most {MAX_METRICS} of your metrics a screen")
     descending = s.sort.startswith("-")
     sort_key = s.sort.removeprefix("-")
-    if sort_key not in COLUMNS and sort_key not in META_SORT:
+    if sort_key not in COLUMNS and sort_key not in META_SORT and sort_key not in s.metrics:
         raise ScreenError(f"unknown sort {sort_key!r}")
     bad = [c for c in s.filer_categories if c not in FILER_CATEGORIES]
     if bad:
         raise ScreenError(f"filer_category: one of {list(FILER_CATEGORIES)}")
 
     # every value column the query needs gets a slot: selected ones first
+    valued = sort_key in COLUMNS or sort_key in s.metrics
     slots: dict[str, int] = {}
     for key in [*dict.fromkeys(s.columns), *(f.column for f in s.filters),
-                *([sort_key] if sort_key in COLUMNS else [])]:
+                *([sort_key] if valued else [])]:
         slots.setdefault(key, len(slots))
 
     params: dict = {"limit": s.limit, "offset": s.offset}
@@ -295,6 +500,8 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
     at = s.as_of is not None
     if at:
         params["as_of"] = s.as_of
+    if s.metrics:
+        params["data_as_of"] = s.as_of  # the caller's own rows known by then (None: latest)
     meta = ["TRUE"]
     if s.coverage:
         # 078: the stored metric lists (a company with quarterly rows) when this caller reads them,
@@ -304,7 +511,9 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                     " WHERE s.company_id = c.company_id),"
                     " (SELECT true FROM gold.financials_coverage v"
                     " WHERE v.company_id = c.company_id LIMIT 1), false)")
-    if s.hide_blank:
+    if s.hide_blank and s.metrics:
+        meta.append(_has_metric_value(s, granted, params))
+    elif s.hide_blank:
         meta.append(_has_value_at(s.columns, granted, params) if at
                     else _has_value(s.columns, granted, params))
     if s.company_ids is not None:
@@ -349,18 +558,19 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
         params["issue"] = s.issue
 
     for key, i in slots.items():
-        params[f"m{i}"], params[f"s{i}"] = COLUMNS[key][0], COLUMNS[key][1]
+        if key not in s.metrics:
+            params[f"m{i}"], params[f"s{i}"] = COLUMNS[key][0], COLUMNS[key][1]
 
     where = ["TRUE"]
     for j, f in enumerate(s.filters):
         where.append(f"v.k{slots[f.column]} {OPS[f.op]} %(w{j})s")
         params[f"w{j}"] = f.value
 
-    needed = {f.column for f in s.filters} | ({sort_key} if sort_key in COLUMNS else set())
+    needed = {f.column for f in s.filters} | ({sort_key} if valued else set())
     ranked = {k: i for k, i in slots.items() if k in needed}
     page = {k: i for k, i in slots.items() if k not in needed}
     direction = "DESC" if descending else "ASC"
-    order = f"v.k{slots[sort_key]}" if sort_key in COLUMNS else META_SORT[sort_key]
+    order = f"v.k{slots[sort_key]}" if valued else META_SORT[sort_key]
     final = order.replace("v.k", "r.k").replace("b.", "r.")
     ranked_outputs = "".join(f", v.v{i}, v.src{i}, v.st{i}, v.why{i}, v.u{i}, v.k{i}"
                              for i in ranked.values())
@@ -405,7 +615,8 @@ ranked AS (
            count(*) OVER () AS total
     FROM base b
     {_latest('b.company_id', granted, at) if early else ''}
-    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', a_inputs, granted, at)} v ON true
+    LEFT JOIN LATERAL {_values(ranked, 'b.company_id', 'b.sic', a_inputs, granted, at,
+                               s.metrics, params)} v ON true
     WHERE {' AND '.join(where)}
     ORDER BY {order} {direction} NULLS LAST, b.company_id
     LIMIT %(limit)s OFFSET %(offset)s
@@ -414,7 +625,8 @@ SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_se
        cf.level AS confidence, cf.reasons AS confidence_reasons
 FROM ranked r
 {'' if early else _latest('r.company_id', granted, at)}
-LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_inputs, granted, at)} w ON true
+LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_inputs, granted, at,
+                           s.metrics, params)} w ON true
 {confidence}
 {page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id
@@ -460,8 +672,15 @@ def notes_of(row: dict) -> str:
                      for k, r in row.get("readings", {}).items() if r["status"] != "behind")
 
 
-def column_info(keys: list[str]) -> list[dict]:
-    """`balance`: a point in time, so its _ttm column is the same number as its _q one."""
-    return [{"key": k, "metric": COLUMNS[k][0], "span": COLUMNS[k][1], "unit": COLUMNS[k][2],
+def column_info(keys: list[str], metrics: dict[str, MetricColumn] | None = None) -> list[dict]:
+    """`balance`: a point in time, so its _ttm column is the same number as its _q one. An own
+    metric's column (B2d) says so in `own` (its item, name, formula and how it reads)."""
+    def own(m: MetricColumn) -> dict[str, Any]:
+        return {"key": m.key, "metric": m.key, "span": m.view, "unit": m.unit, "balance": False,
+                "own": {"item_id": m.item_id, "name": m.name, "formula": m.formula,
+                        "display": m.display}}
+
+    return [own(metrics[k]) if metrics and k in metrics else
+            {"key": k, "metric": COLUMNS[k][0], "span": COLUMNS[k][1], "unit": COLUMNS[k][2],
              "balance": COLUMNS[k][0] in POINT_IN_TIME}
             for k in keys]

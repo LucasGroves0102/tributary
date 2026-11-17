@@ -23,12 +23,14 @@ from query_api.authorizer import Access, Authorizer, AuthzUnavailable, Readable
 from query_api.components import add_components_routes
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
+from query_api.datasets import UserData, add_dataset_routes
 from query_api.demo import add_sandbox_routes, demo_company_resolver
 from query_api.events import add_event_routes
 from query_api.formula import (
     CATALOG,
     Analysis,
     FormulaError,
+    Input,
     Node,
     alignment,
     analyze,
@@ -37,6 +39,7 @@ from query_api.formula import (
     suggest,
     to_dict,
 )
+from query_api.formula.check import FIELD_UNITS, DatasetInfo, mine_refs
 from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
 from query_api.insiders import add_insider_routes
 from query_api.journal import add_journal_routes
@@ -54,6 +57,7 @@ from query_api.sandbox import (
     is_sandbox_user,
     sandbox_workspaces,
 )
+from query_api.screener import MetricColumn, ScreenError, metric_column, metric_datasets
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
 from query_api.status import add_status_routes
@@ -133,7 +137,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                monotonic: Callable[[], float] = time.monotonic,
                api_keys: ApiKeys | None = None,
                api_key_limits: Limits = KEY_LIMITS,
-               portfolio: AppPortfolio | None = None) -> FastAPI:
+               portfolio: AppPortfolio | None = None,
+               userdata: UserData | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -155,7 +160,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     api_keys, api_key_limits: personal API keys (query_api.api_keys; None: a "trb_" bearer is
     refused like a bad token, and the key routes answer 503).
     portfolio: holdings and the decision journal (query_api.portfolio, query_api.journal; None:
-    those routes answer 503); values use market_data's prices only when it is on."""
+    those routes answer 503); values use market_data's prices only when it is on.
+    userdata: the caller's own datasets (query_api.datasets; None: those routes answer 503 and
+    a formula naming mine.<dataset>.<field> too)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -254,8 +261,34 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             out.setdefault(c, set()).update(tiers)
         return Readable(out, access.public)
 
+    def own_metrics(user_id: str, item_ids: list[str]) -> dict[str, MetricColumn]:
+        """The caller's saved metrics (workspace items of kind `metric`) as screener columns;
+        another user's item and one that doesn't exist are the same 404."""
+        if workspaces is None:
+            raise HTTPException(503, "workspaces unavailable")
+        items = []
+        for item_id in item_ids:
+            item = workspaces.item(user_id, item_id)
+            if item is None or item.get("kind") != "metric":
+                raise HTTPException(404, "metric not found")
+            items.append(item)
+        names = sorted({n for i in items for n in metric_datasets(i["state"]["formula"])})
+        if names and userdata is None:
+            raise HTTPException(503, "your data is unavailable")
+        datasets = userdata.catalog(user_id, names) if names and userdata else {}
+        out = {}
+        for i in items:
+            try:
+                m = metric_column(i["item_id"], i["name"], i["state"]["formula"],
+                                  i["state"].get("view", "ttm"), datasets)
+            except ScreenError as e:
+                raise HTTPException(422, str(e)) from None
+            out[m.key] = m
+        return out
+
     add_ui_routes(app, store=store, current_user=current_user, require=require,
-                  allowed=allowed, readable=readable, today=today, watchlists=watchlists)
+                  allowed=allowed, readable=readable, today=today, watchlists=watchlists,
+                  own_metrics=own_metrics)
     add_research_routes(app, store=store, current_user=current_user, require=require,
                         readable=readable)
     add_notes_routes(app, store=store, current_user=current_user, require=require,
@@ -285,6 +318,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      resolver=webhook_resolver, clock=now,
                      reviews_due=reviews_due if portfolio is not None else None)
     add_status_routes(app, store=store, clock=now)
+    add_dataset_routes(app, data=userdata, current_user=current_user,
+                       today=today or today_eastern)
     add_api_key_routes(app, keys=api_keys, current_user=current_user, limits=api_key_limits,
                        clock=now)
     demo_companies = demo_company_resolver(store)
@@ -724,10 +759,20 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             } for r in rows
         ]}
 
-    def checked(body: FormulaRequest) -> tuple[Node, Analysis]:
+    def own_datasets(user_id: str, ast: Node) -> dict[str, DatasetInfo] | None:
+        """The caller's own datasets a formula names (mine.<dataset>.<field>), read only when it
+        names one: a formula of Tributary's figures alone costs nothing more."""
+        names = mine_refs(ast)
+        if not names:
+            return None
+        if userdata is None:
+            raise HTTPException(503, "your data is unavailable")
+        return userdata.catalog(user_id, sorted(names))
+
+    def checked(user_id: str, body: FormulaRequest) -> tuple[Node, Analysis]:
         try:
             ast = parse(body.formula)
-            a = analyze(ast, body.view)
+            a = analyze(ast, body.view, own_datasets(user_id, ast))
         except FormulaError as e:
             raise HTTPException(422, {"errors": [x.to_dict() for x in e.all()]}) from None
         if a.bare and not body.default_company:
@@ -753,8 +798,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         """Parse and check a formula: names, units, limits, and that every ticker is one of
         the caller's companies. Reads no financial data."""
         try:
-            ast, a = checked(body)
+            ast, a = checked(user_id, body)
         except HTTPException as e:
+            if e.status_code != 422:
+                raise
             return {"valid": False, **e.detail}
         resolved = store.resolve_tickers(user_id, sorted(a.tickers)) if a.tickers else {}
         if a.tickers:
@@ -770,8 +817,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     @app.post("/v1/formulas/evaluate")
     def evaluate_formula(user_id: User, body: FormulaRequest) -> dict:
         """A formula's series. Every company it references is checked (layer 1) before the
-        query, which runs under RLS like every Store query."""
-        ast, a = checked(body)
+        query, which runs under RLS like every Store query. The caller's own data
+        (mine.<dataset>.<field>) is read under its owner-only RLS (query_api.datasets)."""
+        ast, a = checked(user_id, body)
         resolved = store.resolve_tickers(user_id, sorted(a.tickers)) if a.tickers else {}
         companies: dict[str | None, str] = {t: resolved[t] for t in a.tickers if t in resolved}
         if a.bare and body.default_company:
@@ -853,9 +901,17 @@ def _inputs(a: Analysis, companies: dict[str | None, str | None],
         cs = (currencies or {}).get(i, set())
         return {"currency": next(iter(cs))} if len(cs) == 1 and cs != {"USD"} else {}
 
+    def unit(inp: Input) -> str:
+        if inp.dataset is None:
+            return CATALOG[inp.metric][0]
+        return FIELD_UNITS[a.datasets[inp.dataset].unit_of(inp.metric)][2]
+
     return [{"input": i, "ref": inp.ref, "ticker": inp.ticker,
              "company_id": companies.get(inp.ticker), "metric": inp.metric, "span": inp.span,
-             "lag_quarters": inp.lag, "unit": CATALOG[inp.metric][0], **currency(i)}
+             "lag_quarters": inp.lag, "unit": unit(inp), **currency(i),
+             # B2c: the caller's own dataset this input reads (additive: only then)
+             **({"dataset": inp.dataset, "dataset_id": a.datasets[inp.dataset].dataset_id}
+                if inp.dataset else {})}
             for i, inp in enumerate(a.inputs)]
 
 
@@ -867,6 +923,11 @@ def _point(r: dict, align: str, refs: list[str] | None = None) -> dict:
     year, quarter = divmod(r["period_key"], 4)
     prefix = "FY" if align == "fiscal" and r["fiscal_key"] else "CY"
     inputs = [{
+        # the caller's own data (B2c): no filing to cite, the day it was known instead
+        "input": x["input"], "period_start": None, "period_end": x["period_end"],
+        "value": x["value"], "value_source": "yours", "citation": None,
+        "known_at": x["filed"],
+    } if x["value_source"] == "yours" else {
         "input": x["input"], "period_start": x["period_start"], "period_end": x["period_end"],
         "value": x["value"], "value_source": x["value_source"],
         **({"not_meaningful": x["not_meaningful"]} if x.get("not_meaningful") else {}),

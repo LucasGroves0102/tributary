@@ -213,12 +213,17 @@ services:
     # webhooks: the alert settings' "Send a test" (query_api/alerts.py, 5 an hour per user)
     uses: [postgres, app-postgres, openfga, jwt, demo, github, market-data, webhooks]
     from: [web, agent-api, mcp-server]
+    env:
+      # Your data (query_api/datasets.py): every user's uploaded rows on disk, at most; past it
+      # uploads are refused (507) until datasets are deleted. Per-user quotas are in the code.
+      USER_DATA_SPACE_MB: "4096"
     resources:
       requests:
         cpu: 50m
         memory: 128Mi
       limits:
-        memory: 384Mi
+        # a 20 MB dataset upload is read in memory, one at a time per pod (~150 MB at worst)
+        memory: 512Mi
   agent-api:
     image: agent
     port: 8001

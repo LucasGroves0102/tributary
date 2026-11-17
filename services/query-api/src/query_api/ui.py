@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, get_args
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import psycopg
@@ -31,7 +32,9 @@ from query_api.peers import rank as rank_peers
 from query_api.screener import (
     COLUMNS,
     FILER_CATEGORIES,
+    MAX_METRICS,
     FilerCategory,
+    MetricColumn,
     Screen,
     ScreenError,
     band_filters,
@@ -91,7 +94,11 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                   allowed: Callable[[str, str, str], bool],
                   readable: Callable[[str], Readable],
                   today: Callable[[], date] | None = None,
-                  watchlists: Watchlists | None = None) -> None:
+                  watchlists: Watchlists | None = None,
+                  own_metrics: Callable[[str, list[str]], dict[str, MetricColumn]] | None = None,
+                  ) -> None:
+    """own_metrics: the caller's saved metrics (B2d) by item id → screener columns (app.py);
+    None: the screener's `metric` answers 503."""
     clock = today or today_eastern
 
     def saved(user_id: str) -> list[dict]:
@@ -175,14 +182,25 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         as_of: Annotated[date | None, Query(
             description="a past day (YYYY-MM-DD): each company's figures as they stood at its "
                         "end (echoed as `known_on`)")] = None,
+        metric: Annotated[list[UUID] | None, Query(
+            description=f"your saved metrics (item ids, at most {MAX_METRICS}) as columns "
+                        "m_<id without dashes>: sortable and filterable like the others")]
+            = None,
     ) -> dict | Response:
         """Companies with a figure in at least one of these columns (naming a company or a data
         check lists it whatever it has). Metadata is public; values only for companies the caller
         can read financials for. Value filters exclude companies without readable values. A value
         that reads as not meaningful, not applicable or old (`readings`, migration 035) is still
         returned, exact, but sorts last and never passes a value filter. `as_of`: as of a past
-        day (point_in_time.py); stale is against that day."""
+        day (point_in_time.py); stale is against that day. `metric`: your own metrics, evaluated
+        now over each company's latest figures and your data (screener.py, "Own metrics")."""
         known_on = point_in_time.check(as_of, clock())
+        wanted = list(dict.fromkeys(str(m) for m in metric or []))
+        if len(wanted) > MAX_METRICS:
+            raise HTTPException(422, f"metric: at most {MAX_METRICS} of your metrics a screen")
+        if wanted and own_metrics is None:
+            raise HTTPException(503, "your metrics are unavailable")
+        metrics = own_metrics(user_id, wanted) if wanted and own_metrics else {}
         if fmt == "json" and limit > MAX_JSON_ROWS:
             raise HTTPException(422, f"limit: at most {MAX_JSON_ROWS} rows as JSON")
         if any(len(s) != 4 or not s.isdigit() for s in sic or []):
@@ -197,15 +215,17 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                 or any(len(c) != 10 or not c.isdigit() for c in company_id)):
             raise HTTPException(422, f"company_id: at most {MAX_COMPANY_IDS} 10-digit ids")
         try:
-            filters = [parse_filter(w) for w in where or []]
+            filters = [parse_filter(w, metrics) for w in where or []]
             if revenue_band:
                 filters += band_filters("revenue_ttm", revenue_band)
             if assets_band:
                 filters += band_filters("total_assets_q", assets_band)
         except ScreenError as e:
             raise HTTPException(422, str(e)) from None
+        shown = columns if columns is not None else Screen().columns
         screen = Screen(
-            columns=columns if columns is not None else Screen().columns,
+            columns=[*shown, *(k for k in metrics if k not in shown)],
+            metrics=metrics,
             company_ids=sorted(set(company_id)) if company_id is not None else None,
             coverage=company_id is None,
             hide_blank=company_id is None and q is None and issue is None,
@@ -227,7 +247,7 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         # the web app can tell the two apart
         return {"as_of": _now(), **({"known_on": known_on} if known_on is not None else {}),
                 "total": total, "limit": limit, "offset": offset, "sort": sort,
-                "columns": column_info(compiled.columns), "rows": rows,
+                "columns": column_info(compiled.columns, metrics), "rows": rows,
                 **({"issue": issue} if issue else {})}
 
     @app.get("/v1/companies/{company_id}/expected-filings", response_model=dict)

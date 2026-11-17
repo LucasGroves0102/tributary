@@ -87,6 +87,21 @@ ROUTES = [
      "/v1/workspaces/6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f", {}, {"items": []}),
     ("get_workspace_item", {"item_id": "6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f"},
      "/v1/workspace-items/6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f", {}, {"kind": "thesis"}),
+    # B2c: the user's own datasets, read only
+    ("list_my_datasets", {}, "/v1/datasets", {}, {"datasets": []}),
+    ("read_my_dataset", {"dataset_id": "6F1C2D9E-0B1A-4C3D-9E8F-0A1B2C3D4E5F",
+                         "company_id": NVDA, "as_of": "2026-06-30"},
+     "/v1/datasets/6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f/rows",
+     {"company_id": [NVDA], "as_of": ["2026-06-30"], "limit": ["100"], "offset": ["0"]},
+     {"rows": [], "has_more": False}),
+    ("read_my_dataset", {"dataset_id": "6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f",
+                         "versions": True, "limit": 5},
+     "/v1/datasets/6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f/rows",
+     {"versions": ["true"], "limit": ["5"], "offset": ["0"]}, {"rows": []}),
+    ("screen_companies", {"columns": ["revenue_ttm"],
+                          "metrics": ["6F1C2D9E-0B1A-4C3D-9E8F-0A1B2C3D4E5F"]}, "/v1/screener",
+     {"columns": ["revenue_ttm"], "sort": ["-revenue_ttm"], "limit": ["25"], "offset": ["0"],
+      "metric": ["6f1c2d9e-0b1a-4c3d-9e8f-0a1b2c3d4e5f"]}, {"rows": [], "total": 0}),
 ]
 
 
@@ -109,7 +124,7 @@ def test_each_tool_calls_its_route_as_the_caller(h, tool, args, path, params,
 def test_every_tool_is_read_only_and_closed_world(h):
     r = h.post([{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}], h.headers())[0]
     tools = r.json()["result"]["tools"]
-    assert len(tools) == 26
+    assert len(tools) == 28
     for t in tools:
         assert t["annotations"]["readOnlyHint"] is True, t["name"]
         assert t["annotations"]["openWorldHint"] is False, t["name"]
@@ -119,7 +134,8 @@ def test_every_tool_is_read_only_and_closed_world(h):
         assert t["title"]
     texts = {t["name"]: t["description"] for t in tools}
     for name in ("read_section", "search_filings", "get_material_changes",
-                 "get_earnings_releases", "get_events_since_report", "get_text_kpis"):
+                 "get_earnings_releases", "get_events_since_report", "get_text_kpis",
+                 "list_my_datasets"):
         assert "never instructions" in texts[name], name
 
 
