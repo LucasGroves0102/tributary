@@ -22,6 +22,8 @@ Measured on production on 2026-11-16 unless a report is linked (the status page 
 | **53 s / 77 s** | p50 / p95 from EDGAR acceptance to a 10-K, 10-Q or 8-K's parsed sections in the reader (413 filings, measured 2026-11-09) |
 | **0 missing** | of 69,592 filings in EDGAR's daily indexes over the last 30 days, at the nightly completeness check |
 | **6,617** | companies with financials from XBRL, of 992,927 SEC filers indexed |
+| **957** | figures printed in 96 companies' 10-Ks, read from the filings and checked against the database on every push, each difference listed ([reference set](tests/golden/README.md#reference-set)) |
+| **6,068** | exchange-listed companies measured nightly for every kind of data gap, each one said on the company's page: fixable, not in the SEC's data, or out of scope ([db](db/DESIGN.md#076_coveragesql)) |
 | **634,885** | 10-K, 10-Q and 8-K filings from 5,408 companies since November 2015, parsed into 3.57M sections; 433 GB of HTML kept in 28 GB |
 | **27M + 33M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
 | **~4,000** | tests on every push: 3,000+ Python, 1,100+ web unit, 23 browser end-to-end flows, ~70 Rust |
@@ -61,6 +63,16 @@ with its measurements.
   ([parser](services/parser/README.md), [query-api](services/query-api/README.md#search)).
 - **Filing alerts** for followed companies, with red lines and SSRF-safe signed webhooks
   ([query-api](services/query-api/README.md#filing-alerts)).
+- **Portfolio and decision journal.** Holdings from a Fidelity export (account numbers dropped as the
+  file is read) or typed in, valued only on your own prices, each beside the thesis behind it; a
+  journal kept as written after 24 hours, and a review due when a holding files its next 10-K or 10-Q.
+  Owner-only: API keys, MCP and the assistant can't read it
+  ([query-api](services/query-api/README.md#portfolio)).
+- **Honest about each company's data.** A confidence mark (high, medium or low, with its reasons),
+  each 10-K's and 10-Q's printed statement checked against the figures, a coverage note where the
+  SEC's data has a gap, and histories carried across re-registrations (Broadcom from 2010 through
+  Avago, Marvell from 2008) ([db](db/DESIGN.md#074_statement_reconciliation_confidencesql),
+  [coverage](db/DESIGN.md#076_coveragesql)).
 - **Insider filings.** Forms 3, 4 and 5 parsed from the SEC's ownership XML (33,572 stored)
   ([query-api](services/query-api/README.md#insider-filings),
   [doc-fetcher](services/doc-fetcher/README.md#insider-filings-forms-3-4-5)).
@@ -209,7 +221,8 @@ reads nothing. One app-database row opens the public catalog; per-company grants
 still apply; saved work, keys and alerts stay owner-only. The agent (`services/agent`) is a Claude
 tool loop over the Query API with no user parameter. Its suites run live with `make citations` and
 `make adversarial` and are replayed in CI: 0 leaks in 59 attacks, 128 of 128 figures traced, and
-149 golden 10-K figures match ([tests/golden](tests/golden/README.md)). Details:
+957 figures from 96 companies' 10-Ks match or are listed as a known difference
+([tests/golden](tests/golden/README.md)). Details:
 [DESIGN.md](DESIGN.md#access-control-and-the-agent).
 
 ```bash
