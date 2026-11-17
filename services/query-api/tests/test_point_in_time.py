@@ -1,6 +1,6 @@
 """query_api.point_in_time: the day's bounds, the restatement kinds (the notes' one split rule),
 and `original` on the right rows. Pure: rows shaped as gold.restatements and /financials give them;
-the database side is tests/golden/test_point_in_time*.py."""
+the database side is tests/golden/test_point_in_time.py."""
 
 from datetime import date
 from decimal import Decimal

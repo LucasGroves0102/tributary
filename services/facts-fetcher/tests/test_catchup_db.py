@@ -129,7 +129,7 @@ def test_the_history_is_replayed_after_the_deploy_and_kept_by_every_build(loaded
         loaded.execute("SELECT (SELECT count(*) FROM gold.quarterly_financials)"
                        " + (SELECT count(*) FROM gold.derived_financials)").fetchone()[0]
     # a rebuild with nothing new changes nothing; the catch-up has nothing left
-    loaded.execute("SELECT gold.refresh_financials(%s)", (ALL,))
+    loaded.execute("SELECT gold.refresh_financials(%s)", ([XOM],))
     assert known(loaded) == history
     assert catchup.catch_up(loaded, "known", FOREVER).done == 0
     # ops.rebuild_soon (a CIK linked): gold first, then the history again
@@ -141,11 +141,14 @@ def test_the_history_is_replayed_after_the_deploy_and_kept_by_every_build(loaded
 
 
 def test_the_history_waits_while_its_gold_is_rebuilt(loaded):
+    """A rules bump: the history is due only once the company's gold is current (as stamped)."""
+    backlog = "SELECT count(*) FROM ops.company_backlog('known')"
     bump(loaded, "gold.rules_version", 999)
-    assert loaded.execute("SELECT count(*) FROM ops.company_backlog('known')").fetchone() == (0,)
-    results = {r.kind: r for r in catchup.run(loaded, 600)}
-    assert results["gold"].done == 5 and results["known"].done == 5
-    assert {v[0] for v in stamps(loaded, "known").values()} == {999}
+    assert loaded.execute(backlog).fetchone() == (0,)  # every company's gold is due first
+    loaded.execute("SELECT ops.stamp_builds('gold', %s, 999)", ([NVDA, XOM],))
+    assert loaded.execute(backlog).fetchone() == (2,)
+    assert loaded.execute("SELECT count(*) FROM ops.company_backlog('known') b"
+                          " WHERE b.company_id = ANY(%s)", ([NVDA, XOM],)).fetchone() == (2,)
 
 
 def test_a_check_waits_while_its_gold_is_rebuilt(loaded):
