@@ -83,6 +83,12 @@ measured, and the alert ignores it). The parser kind ships paused: `UPDATE ops.c
 false WHERE kind = 'parser';` starts it. A backout leaves the
 versions as they are: run `financials-rebuild` after one.
 
+A run that did nothing says why in `note` (079: `skipped: lock held` while a hand-run job holds
+parser-index's lock, with the last count), and a new version's backlog is recorded when its first
+run starts. The screener's stored figures (078: `gold.screen_companies`, `gold.screen_figures`) are
+written by every gold build and filled for companies without them by the `segments` job's catch-up,
+first (`gold.refresh_screen_backlog`); a company without them is read live.
+
 ### What each migration adds
 
 One line each; the full notes (what it changes, why, the measurements) are in [DESIGN.md](DESIGN.md).
@@ -159,3 +165,5 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`070_check_segments_overlap.sql`](DESIGN.md#070_check_segments_overlapsql): `ops.check_segments`: overlapping members aren't a deviation when a set adds up.
 - [`071_auto_catchup.sql`](DESIGN.md#071_auto_catchupsql): rule versions, per-company build stamps and the catch-up's state, status and parser re-queue.
 - [`072_data_trust_checks.sql`](DESIGN.md#072_data_trust_checkssql): the tag-disagreement check, check tiers and findings per 1,000 figures, parser-output checks, the extremes report.
+- [`078_screener_figures.sql`](DESIGN.md#078_screener_figuressql): the screener's latest figures, stored by the gold build; the readings' rules in `gold.reading`.
+- [`079_catchup_status_cleanups.sql`](DESIGN.md#079_catchup_status_cleanupssql): catch-up status says why a run did nothing; backlogs as anti-joins; search's old forms dropped.

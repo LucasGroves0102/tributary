@@ -44,14 +44,16 @@ A migration that changes the tags or gold's rules replaces `gold.rules_version()
 number; one that changes `ops.check_financials` or `ops.check_segments` bumps that check's version
 (migration 071, [db](../../db/README.md#versions-and-catch-up)). Every refresh stamps the companies
 it built in `ops.company_builds`, and the hourly `segments` job, once its own work is done, spends up
-to `CATCHUP_SECONDS` (1,200; never past 50 minutes into the job) on `catchup.py`: companies an older version built, those whose CIKs changed first (`ops.rebuild_soon`, 076: a re-registration linked), then oldest build first,
+to `CATCHUP_SECONDS` (1,200; never past 50 minutes into the job) on `catchup.py`: first the
+screener's stored figures (078) for companies with none (all of them after that deploy, then new
+companies), 200 a transaction under their gold locks; then companies an older version built, those whose CIKs changed first (`ops.rebuild_soon`, 076: a re-registration linked), then oldest build first,
 the checks re-run 100 at a time (nothing re-derived; a check waits while the company's gold is due),
 then gold rebuilt 25 at a time by the `--rebuild` path (no SEC requests; `gold.companies_for_ciks`
 borrowers included). Each batch commits alone and takes the companies' gold locks, so a stopped run
 leaves whole companies and the nightly jobs wait for a batch rather than interleave with it. A batch
 that raises is retried a company at a time; one that still raises is recorded
 (`ops.company_builds.failed_version`, `error`) and left until the next version. Progress:
-`ops.catchup_status`. A full gold catch-up of hermes' ~8,100 companies is about 1-2 hours of
+`ops.catchup_status` (a new version's backlog is recorded when its first run starts). A full gold catch-up of hermes' ~8,100 companies is about 1-2 hours of
 rebuilding, so it is done within a few hours of the deploy; the checks within the first run.
 
 Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 077,

@@ -248,12 +248,15 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
     can't be caused on purpose, at most REFUNDS_PER_DAY times per user per day:
     - a model API error (outage, overload) before any model call returned and before any text
       streamed: nothing billable was produced;
-    - a thesis check that saved nothing because its replies were cut off at max_tokens.
+    - a thesis check that saved nothing because its replies were cut off at max_tokens;
+    - a report stopped (the client went away) before it saved anything: nothing was saved to
+      read later, and the cap above bounds what stopping on purpose could get (Riley #18).
     Nothing else is given back: an error after a paid round (a user can push the context past
     the model's limit), a model that chose not to submit, a save refused because the thesis or
-    workspace was deleted mid-run, a client that disconnects (it may have read the answer). A
-    result counts, partial ones included (a check the model submitted before stopping). The
-    "refunded" event is sent only when the questions really were given back."""
+    workspace was deleted mid-run, an answer or a check whose client disconnects (it may have
+    read the answer). A result counts, partial ones included (a check the model submitted before
+    stopping). The "refunded" event is sent only when the questions really were given back
+    (never for a stopped report: nobody is listening)."""
     app = FastAPI(title="Tributary Agent", version="1")
     instrument(app)
     bearer = HTTPBearer(auto_error=False)
@@ -295,16 +298,20 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
         "refunded" event before done (or the error), only as create_app's docstring says."""
         produces = result or "text"
 
-        def give_back(why: str) -> Iterator[str]:
+        def refundable(why: str) -> bool:
             if not limits.take_refund(user_id):
                 log.info("user=%s %s not refunded (%s): today's refunds are used", user_id,
                          kind, why, extra={"user_id": user_id, "kind": kind, "why": why})
-                return
-            paid.refund()
+                return False
             log.info("user=%s %s refunded %d questions (%s)", user_id, kind, paid.questions,
                      why, extra={"user_id": user_id, "kind": kind, "questions": paid.questions,
                                  "why": why})
-            yield f"data: {json.dumps({'type': 'refunded', 'questions': paid.questions})}\n\n"
+            return True
+
+        def give_back(why: str) -> Iterator[str]:
+            if refundable(why):
+                paid.refund()
+                yield f"data: {json.dumps({'type': 'refunded', 'questions': paid.questions})}\n\n"
 
         def stream() -> Iterator[str]:
             produced = False  # the result: an answer's text, a saved report or check
@@ -356,6 +363,14 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                 if not produced and not billable:
                     yield from give_back("model error before any output")
                 yield f"data: {json.dumps({'type': 'error', 'message': 'model unavailable'})}\n\n"
+            except GeneratorExit:
+                # the client went away: a report stopped before it saved anything gives its
+                # questions back (no event: nobody is listening). The Query API's refund is an
+                # HTTP call and this may run wherever the stream is collected, the event loop
+                # included: it goes on a thread of its own (Charge.refund never raises).
+                if result == "report" and not produced and refundable("stopped before it saved"):
+                    threading.Thread(target=paid.refund, name="refund", daemon=True).start()
+                raise
             finally:  # a client that went away: what the model calls cost still counts
                 spend(partial)
 
@@ -396,7 +411,8 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             (report.py). Streams the agent's events, a "report" event once saved (or an
             "error"), then "done". Counts as REPORT_QUESTIONS questions against every limit,
             taken only once the workspace is the user's and has something to report on, and
-            given back ("refunded") only after a model error before any output."""
+            given back only after a model error before any output ("refunded") or when the
+            user stops it before it saved (create_app's docstring)."""
             user_id = who_is(tok)
             reporter = reporter_for(tok)
             try:

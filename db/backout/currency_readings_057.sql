@@ -19,10 +19,10 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: net_income_077.sql, readings_069.sql,
--- revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql,
--- banks_058.sql) and this one hasn't, and unless the login owns the functions (the migrate login;
--- header).
+-- nothing, unless every newer backout has run (newest first: screener_figures_078.sql,
+-- net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql,
+-- currency_speed_061.sql, annual_currency_060.sql, banks_058.sql) and this one hasn't, and unless
+-- the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -42,7 +42,11 @@ BEGIN
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '90812eb486b8ef14081bf2fea5ab1890'),
         ('gold.refresh_derived_financials(text[])', 'daf9fa4950728307efdbdefa793ec6d0'),
+        ('gold.refresh_financials(text[])', '127cb472ccd41e6cc6d6768bfb1935a0'),
         ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
+        ('gold.screen_backlog()', '7d5ea26e61bff2e3c0c610a7f5148a6f'),
+        ('gold.screen_company(text)', '476ff18b646bc1ce48eb45d1980cac51'),
+        ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', 'd89336966fbcc1d5b3b7ddafa8e5432c'),
         ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
         ('ops.check_financials(text[])', 'a8a94bf23f986a93f3f61c8fc5f35461'),
         ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
@@ -57,7 +61,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql');
+                'changed.', w.fn, 'screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql');
         END IF;
     END LOOP;
 END

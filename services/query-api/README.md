@@ -219,7 +219,10 @@ Companies you can't read are listed with metadata only and never match a value f
 signals (the checks' findings per 1,000 figures, the filings' own statements against gold, how old
 the latest figures are, the core figures on file, the currency, shells, pools, trusts and BDCs);
 `null` without the financials tier or a check. The web's company header reads it from its screener
-row. Filters, the JSON shape, sectors and co-registrants: [DESIGN.md](DESIGN.md#screener).
+row. The values come from the latest figures the gold build stores for the screener (migration 078),
+read through the same rules with today's date and under RLS (a company with nothing stored is read
+live): a cold first screen reads a few thousand pages instead of ~50,000. Filters, the JSON shape,
+sectors and co-registrants: [DESIGN.md](DESIGN.md#screener).
 
 ## Per-share figures on one share basis
 

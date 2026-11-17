@@ -109,12 +109,17 @@ def test_no_id_list_reaches_the_query_for_the_readings():
 
 
 def test_the_latest_period_is_read_once_per_row():
+    """With the readings' stored inputs (078): gold.screen_company once per row, its columns passed
+    on to every value column, carried from the ranked stage to the page."""
     ranked = compile_screen(Screen(columns=["revenue_ttm", "cash_q"], sort="-revenue_ttm"), None)
-    assert ranked.sql.count("gold.latest_period(") == 1
-    assert "b.sic, a.latest" in ranked.sql and "r.sic, r.latest_period" in ranked.sql
+    assert ranked.sql.count("gold.screen_company(") == 1
+    assert "b.sic, a.latest, a.cached, a.equity, a.currency, a.recent" in ranked.sql
+    assert "r.sic, r.latest_period, r.in_cached, r.in_equity, r.in_currency, r.in_recent" \
+        in ranked.sql
     named = compile_screen(Screen(columns=["revenue_ttm"], sort="name"), None)
-    assert named.sql.count("gold.latest_period(") == 1
-    assert "r.sic, a.latest" in named.sql
+    assert named.sql.count("gold.screen_company(") == 1
+    assert "r.sic, a.latest, a.cached" in named.sql
+    assert "gold.latest_reading(" not in ranked.sql + named.sql  # only through screen_reading
 
 
 @pytest.mark.parametrize(

@@ -168,3 +168,44 @@ def test_gold_writers_of_one_company_take_turns():
         a.rollback()
         b.execute("SELECT gold.lock_companies(%s)", ([COST],))
         b.rollback()
+
+
+def test_a_new_versions_backlog_is_recorded_before_the_run_works(loaded):
+    """The status read during the first run after a bump says how far behind, not "current"."""
+    seen = []
+
+    def build(conn, kind, companies):
+        seen.append(conn.execute("SELECT version, state, behind FROM ops.catchup_status"
+                                 " WHERE kind = 'gold'").fetchone())
+        catchup.build(conn, kind, companies)
+
+    catchup.catch_up(loaded, "gold", FOREVER)  # 77: nothing to do, recorded
+    bump(loaded, "gold.rules_version", 999)
+    catchup.catch_up(loaded, "gold", FOREVER, build=build, batch=5)
+    assert seen == [("999", "catching_up", 5)]
+    # the version unchanged: no start row
+    runs = loaded.execute("SELECT count(*) FROM ops.catchup_runs WHERE kind = 'gold'").fetchone()
+    catchup.catch_up(loaded, "gold", FOREVER)
+    assert loaded.execute("SELECT count(*) FROM ops.catchup_runs WHERE kind = 'gold'"
+                          ).fetchone()[0] == runs[0] + 1
+
+
+def test_the_gold_build_and_the_catch_up_keep_the_screeners_figures(loaded):
+    """078: every refresh writes them; the catch-up fills companies that have none, first."""
+    def rows():
+        return loaded.execute("SELECT span, metric, company_id, period_end, value, unit"
+                              " FROM gold.screen_figures ORDER BY 1, 2, 3").fetchall()
+
+    built = rows()
+    assert {r[2] for r in built} == set(ALL)
+    live = loaded.execute(
+        "SELECT k.metric, k.span, c, x.period_end, x.value, x.unit FROM unnest(%s::text[]) c"
+        " CROSS JOIN ops.extreme_columns() k"
+        " CROSS JOIN LATERAL gold.latest_row(c, k.span, k.metric) x ORDER BY 2, 1, 3",
+        (ALL,)).fetchall()
+    assert [(s, m, c, p, v, u) for m, s, c, p, v, u in live] == \
+        [r for r in built if (r[0], r[1]) in {(s, m) for m, s, *_ in live}]
+    loaded.execute("TRUNCATE gold.screen_companies, gold.screen_figures")
+    catchup.run(loaded, 60)
+    assert rows() == built
+    assert loaded.execute("SELECT count(*) FROM gold.screen_backlog()").fetchone() == (0,)

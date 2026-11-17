@@ -208,4 +208,53 @@ def test_status_view_counts_each_kind(conn):
     types = {c.name: c.type_code for c in conn.execute(
         "SELECT * FROM ops.catchup_status LIMIT 0").description}
     text_oid = 25
-    assert {n for n, t in types.items() if t == text_oid} == {"kind", "state", "version"}
+    # labels only: 079's note says why a run did nothing ("skipped: lock held")
+    assert {n for n, t in types.items() if t == text_oid} == {"kind", "state", "version", "note"}
+
+
+def status(conn) -> dict[str, tuple]:
+    return {r[0]: r[1:] for r in conn.execute(
+        "SELECT kind, state, version, behind, note FROM ops.catchup_status")}
+
+
+def test_a_run_locked_out_by_a_hand_run_job_says_so_and_keeps_the_count(conn):
+    """079: the hourly run found section-passages holding the lock. Before, its catch-up never ran
+    and the status read "current, 0 behind" (2026-11-16, 409,157 behind)."""
+    for y in (2020, 2021):
+        doc(conn, f"h-{y}", f"{y}-05-01", version="rust-7")
+    index.run(conn)
+    conn.execute("UPDATE ops.section_index SET passages_rule = NULL")
+    # no run recorded yet for passages: the skip measures it
+    catchup.skipped(conn)
+    assert status(conn)["passages"] == ("catching_up", index.SEARCH_RULE, 2,
+                                        "skipped: lock held")
+    # a real run, then a skip: the run's count is kept, measured at the run
+    assert catchup.passages(conn, 0).behind == 2  # no time: nothing done, measured
+    conn.execute("UPDATE ops.section_index SET passages_rule = %s WHERE accession_no = 'h-2020'",
+                 (index.SEARCH_RULE,))  # the hand-run job rebuilds one meanwhile
+    catchup.skipped(conn)
+    assert status(conn)["passages"] == ("catching_up", index.SEARCH_RULE, 2,
+                                        "skipped: lock held")
+    # a skip counts as progress: no stall alert while the other job works
+    conn.execute("UPDATE ops.catchup SET started_at = now() - interval '3 days'")
+    conn.execute("UPDATE ops.catchup_runs SET run_at = run_at - interval '2 days'"
+                 " WHERE note IS NULL")
+    assert status(conn)["passages"][0] == "catching_up"
+
+
+def test_a_new_versions_first_run_records_its_backlog_before_it_works(conn):
+    for y in (2020, 2021, 2022):
+        doc(conn, f"v-{y}", f"{y}-05-01", version="rust-7")
+    index.run(conn)
+    conn.execute("UPDATE ops.section_index SET passages_rule = NULL")
+    conn.execute("INSERT INTO ops.catchup_runs (kind, run_at, version, behind)"
+                 " VALUES ('passages', now() - interval '1 hour', 'furniture-0', 0)")
+
+    def runs():
+        return conn.execute("SELECT version, behind, done FROM ops.catchup_runs"
+                            " WHERE kind = 'passages' ORDER BY run_at").fetchall()
+
+    catchup.passages(conn, 60)
+    assert runs() == [("furniture-0", 0, 0), (index.SEARCH_RULE, 3, 0), (index.SEARCH_RULE, 0, 3)]
+    catchup.passages(conn, 60)  # the same version: one row, at the end
+    assert len(runs()) == 4

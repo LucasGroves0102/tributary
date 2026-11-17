@@ -836,3 +836,49 @@ reads first, so the year's quarters, year-to-date figures and derived Q4 never m
 years, 69 more than 10% apart). A coverage-majority rule was tried first and dropped: Kroger, Prologis and Duke tag
 ProfitLoss in more periods than NetIncomeLoss and print the attributable figure. `gold.rules_version()`
 77: the catch-up rebuilds every company.
+
+### 078_screener_figures.sql
+
+The screener's latest figures, stored by the gold build (Riley, test 6: a cold first request 2.6 s,
+filter changes 5-10 s). A screen sorted or filtered on a value read, per company, its latest period
+(three probes), whether it has any value (hide_blank, two or three probes), financials coverage (one
+probe) and the column's latest reading (two probes into 12 GB of gold, plus currency and equity): tens
+of thousands of pages from disk when cold. Measured on hermes (2026-11-17, owner login, jit off): the
+default screen 4.8 s on its first run, 0.46 s the second (47,775 pages read); two filters and a growth
+sort 1.7 s / 0.72 s (63,664).
+
+`gold.screen_companies` (per company: `gold.latest_period`, the latest equity, the amounts' currency,
+the recent-quarters flag, which metrics have rows, `until`) and `gold.screen_figures` (per company,
+span and metric: `gold.latest_row`, with the inputs) hold only data. The readings are read time:
+`gold.reading` (069's two CASEs over inputs) is now what `gold.latest_reading` calls too, so the rules
+are written once; stale uses today's date when read; the SIC is the reader's; RLS is 030's policy.
+What depends on the date (the `<= current_date` filters of latest period and equity) ends at
+`until`, the first future period end of those metrics: from that day the company is read live until
+the catch-up refreshes it. `gold.screen_company` and `gold.screen_reading` read stored inputs, or
+live (`gold.latest_period`, `gold.latest_reading`) for a company without a row; both are inlined.
+`screen_figures`' primary key INCLUDEs every column a screen reads: a sort over one column is an
+index-only range of its ~6,600 entries, whatever the heap's order. The screener's coverage test reads
+the stored metric lists first; `gold.financials_coverage` itself is unchanged (the public catalog's
+membership reads it: access never depends on a cache).
+
+Kept current: `gold.refresh_financials` calls `gold.refresh_screen` for the companies it builds, under
+the same locks, in the same transaction. The tables ship empty (a build of the previous body running
+at the deploy writes nothing, so nothing stored can be older than gold); the `segments` job's
+catch-up fills them first (`gold.refresh_screen_backlog`, 200 companies a transaction; 6,600 synthetic
+companies took 20 s). Proved equal: test_screen_figures_db.py (every column of every fixture company
+at four dates, whole screens stored and live); on hermes, read-only, the stored path inlined against
+`gold.latest_reading` for 564 companies x 118 columns: 0 differences in 66,552 readings (every status
+present). On a catalog-sized copy (6,600 companies, 805,200 stored figures) as query_api: a cold
+default screen reads 2,521 pages instead of 21,066 (149 ms against 337 ms); warm 137 ms against
+242 ms. A change to what is stored (latest_row, latest_equity, quarterly_recent, amount_currency_of,
+metric kinds) TRUNCATEs both tables in its migration.
+
+### 079_catchup_status_cleanups.sql
+
+Catch-up status: `ops.catchup_runs.note` and `ops.catchup_skipped`: a run locked out by a hand-run job
+records `skipped: lock held` with the last count (measured when that count is of another version); a
+skip counts as progress. The first run of a new version records its backlog at its start (both
+catch-ups, Python). The parser-output checks' backlog was a LEFT JOIN with an OR, estimated at one row
+from stale statistics: a nested loop over company_ciks per document, 149 s per batch on hermes, so
+4,000 documents a run (6.5 days for 630,653); as NOT EXISTS 0.17 s; `ops.statement_backlog` likewise.
+`gold.search_passages` and the nine-argument `gold.search_page` dropped: nothing calls them since 065.

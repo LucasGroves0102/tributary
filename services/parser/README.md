@@ -188,8 +188,9 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
    live doc-fetcher stored has no crawl target; it gets the row the crawl writes for a filing it
    finds already stored. Each document is re-queued once per version;
 2. runs the parser-output checks (072) on every stored document no check of
-   `ops.check_sections_version()` has seen, oldest filing first, 2,000 a transaction, for up to 5 of
-   those minutes (kind `check_sections`; 634,653 documents on hermes, a batch in under a second);
+   `ops.check_sections_version()` has seen, oldest filing first, 10,000 a transaction, for up to 5 of
+   those minutes (kind `check_sections`; 634,653 documents on hermes; the backlog query took 149 s
+   per batch until 079 made it an anti-join, 0.2 s);
 3. reads the statement lines (074) of every stored 10-K/10-Q with tables that the current
    `statements.READER` hasn't read, oldest filing first, 100 a transaction, for up to 5 minutes
    (kind `statements`, `ops.statement_backlog`);
@@ -201,7 +202,9 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
 Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,
-`eta`). The parser kind ships paused (migration 071): it is measured every hour and re-queues
+`eta`, `note`). A new version's backlog is recorded when its first run starts; a run locked out by
+a hand-run job (`section-passages` holds the lock) records every kind as `skipped: lock held` with
+its last count (079). The parser kind ships paused (migration 071): it is measured every hour and re-queues
 nothing until the owner runs
 
 ```sql
