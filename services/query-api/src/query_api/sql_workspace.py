@@ -16,9 +16,10 @@ a read-only transaction, or nothing is returned (500, logged): a second line beh
 Limits, all per query unless said: statement_timeout 15 s, lock_timeout 1 s, work_mem 32 MB,
 temp_file_limit 256 MB (query_api holds SET on it: migration 105), no parallel workers, no JIT; the
 plan (EXPLAIN before running) refused when its total cost is over SQL_MAX_COST or any step expects
-more than SQL_MAX_PLAN_ROWS rows (a cartesian join; DEFAULT_MAX_COST says why both); at most MAX_ROWS rows
-(fetched through a cursor, MAX_RESULT_BYTES of them at most); one running query per user and SLOTS
-at once across replicas (transaction-scoped advisory locks: they go with the transaction); a daily
+more than SQL_MAX_PLAN_ROWS rows (a cartesian join; DEFAULT_MAX_COST says why both); at most
+MAX_ROWS rows (fetched through a cursor, MAX_RESULT_BYTES of them at most); one running query per
+user and SLOTS at once across replicas (transaction-scoped advisory locks: they go with the
+transaction); a daily
 budget of query seconds per user (SQL_SECONDS_PER_DAY, counted in the app database: sql_usage,
 app migration 023, owner-only). Errors carry Postgres' primary message and hint (names, and values
 only from rows RLS already let through), never its detail; logs carry the SQLSTATE only.
@@ -232,9 +233,9 @@ def run(pool: Any, user_id: str, checked: Checked, limits: Limits,
             cur.execute(f"EXPLAIN (FORMAT JSON) {checked.sql}".encode(), prepare=False)
             plan = _plan(_fetch_one(cur))["Plan"]
             cost = float(plan["Total Cost"])
-            rows = max(float(n.get("Plan Rows", 0)) for n in _nodes(plan))
-            if cost > limits.max_cost or rows > limits.max_plan_rows:
-                raise TooCostly(cost, rows, limits)
+            expected = max(float(n.get("Plan Rows", 0)) for n in _nodes(plan))  # at one step
+            if cost > limits.max_cost or expected > limits.max_plan_rows:
+                raise TooCostly(cost, expected, limits)
             cur.execute(f"DECLARE workspace_query NO SCROLL CURSOR FOR {checked.sql}".encode(),
                         prepare=False)
             columns, rows, truncated = _fetch(cur)
@@ -397,8 +398,8 @@ LEFT JOIN revenue r
   ON r.company_id = m.company_id AND m.day BETWEEN r.period_start AND r.period_end
 ORDER BY c.name, m.day, m.field"""},
     {"title": "Revenue as it was known on a past day",
-     "sql": """-- Microsoft's quarterly revenue as the filings stood at the end of 2023: the version of
--- each quarter believed then, nothing filed later (no look-ahead).
+     "sql": """-- Microsoft's quarterly revenue as the filings stood at the end of 2023: the
+-- version of each quarter believed then, nothing filed later (no look-ahead).
 SELECT f.period_end, f.value, f.unit, f.form, f.filed, f.known_from
 FROM financials_at(DATE '2023-12-31') f
 WHERE f.company_id = (SELECT company_id FROM companies WHERE 'MSFT' = ANY (tickers) LIMIT 1)
@@ -531,8 +532,9 @@ def add_sql_routes(app: FastAPI, *, store: Any, usage: SqlUsage | None,
                        "the workspace is busy with other queries: try again in a moment")
             return refuse(429, f"busy_{e.kind}", message)
         except TooCostly as e:
-            why = (f"one step expects about {e.rows:,.0f} rows, more than {limits.max_plan_rows:,.0f}:"
-                   " a join without a condition?" if e.rows > limits.max_plan_rows else
+            why = (f"one step expects about {e.rows:,.0f} rows, more than"
+                   f" {limits.max_plan_rows:,.0f}: a join without a condition?"
+                   if e.rows > limits.max_plan_rows else
                    f"its estimated cost is {e.cost:,.0f}, over {limits.max_cost:,.0f}")
             return refuse(422, "too_costly", f"the plan is too large to run here ({why}); filter"
                           " on company_id, metric or dates, or read latest_figures",
