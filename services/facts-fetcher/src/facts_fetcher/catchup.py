@@ -92,7 +92,9 @@ def catch_up(conn: psycopg.Connection, kind: str, deadline: float, *,
         with conn.transaction():
             ids = [x[0] for x in conn.execute(
                 "SELECT company_id FROM ops.company_backlog(%s) WHERE NOT failed"
-                " ORDER BY built_at NULLS FIRST, company_id LIMIT %s",
+                # the epoch: inputs changed (ops.rebuild_soon, 076), before the oldest builds
+                " ORDER BY (built_at = 'epoch') IS TRUE DESC, built_at NULLS FIRST,"
+                " company_id LIMIT %s",
                 (kind, batch or BATCH[kind]))]
         if not ids or seen.issuperset(ids):  # nothing left, or rebuilding changed nothing
             break

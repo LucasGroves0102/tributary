@@ -646,6 +646,9 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
         "error", "warning", "kept_out", "coverage", "info"}
     assert {c["check"] for c in body["parser"]["checks"]} == {
         "invalid_key", "no_sections", "missing_core_item", "duplicate_section", "empty_section"}
+    # 076: the coverage sweep's counts (none before its first run), never a company
+    assert body["gaps"]["kinds"] == [] or all(
+        set(k) == {"kind", "reason", "companies"} for k in body["gaps"]["kinds"])
     for table in ("bronze.filings", "ops.filing_completeness", "ops.section_index"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             with conn.transaction():

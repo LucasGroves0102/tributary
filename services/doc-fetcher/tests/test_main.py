@@ -136,6 +136,31 @@ def test_material_8k_is_fetched_with_its_exhibits():
     assert conn.statements.count("INSERT bronze.filing_exhibits") == 2
 
 
+def test_a_10k_is_stored_with_its_annual_report_exhibit():
+    """076: a 10-K's EX-13 (its statements, where Item 8 points to the annual report) comes from
+    the index the live path reads anyway: one more request, only when the 10-K has one."""
+    index_10k = (FIXTURES / "nvda-10-K-index-ex13.htm").read_bytes()
+    requests: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[-1]
+        requests.append(name)
+        if name.endswith("-index.htm"):
+            return httpx.Response(200, content=index_10k)
+        return httpx.Response(200, content=b"<html>10-K</html>")
+
+    conn, producer = FakeConn(), FakeProducer()
+    tenk = event(form_type="10-K", accession_no="0001045810-26-000021",
+                 url="https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
+                     "0001045810-26-000021-index.htm")
+    assert handle(conn, httpx.Client(transport=httpx.MockTransport(respond)), producer,
+                  tenk) is True
+    assert requests == ["0001045810-26-000021-index.htm", "nvda-20260125.htm",
+                        "nvda-2026xex13.htm"]
+    assert conn.in_tx == ["INSERT bronze.filing_documents", "INSERT bronze.filing_exhibits",
+                          "INSERT ops.document_outbox"]
+
+
 def test_the_document_its_exhibits_and_the_owed_event_commit_together():
     conn, producer = FakeConn(), FakeProducer()
     assert handle(conn, client([]), producer, event()) is True

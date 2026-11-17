@@ -36,14 +36,14 @@
     "checks": {
       "absent": 1,
       "adjusted": 70,
-      "annual": 789,
+      "annual": 791,
       "annual_per_share": 70,
       "annual_silver": 18,
-      "differs": 9
+      "differs": 7
     },
     "hand_checked": 21,
     "readme": "tests/golden/README.md",
-    "commit": "b964849",
+    "commit": "fadf50f",
     "committed": "2026-11-16"
   }
 }

@@ -8,6 +8,10 @@ from lxml import html
 
 SEC_BASE = "https://www.sec.gov"
 EXHIBIT = re.compile(r"EX-99\.\d{1,2}")
+# The exhibits stored with each form: an 8-K's press releases and similar (EX-99.x); a 10-K's
+# annual report to shareholders (EX-13), where IBM, Wells Fargo and others print their financial
+# statements, Item 8 only pointing to it (the coverage sweep's statements_exhibit, migration 076).
+EXHIBITS = {"8-K": EXHIBIT, "10-K": re.compile(r"EX-13(\.\d{1,2})?")}
 
 
 @dataclass(frozen=True)
@@ -45,14 +49,18 @@ class Exhibit:
     url: str
 
 
-def parse_exhibits(raw: bytes) -> list[Exhibit]:
-    """EX-99.x HTML exhibits (press releases and similar), in index order."""
+def parse_exhibits(raw: bytes, form: str = "8-K") -> list[Exhibit]:
+    """The form's stored HTML exhibits (EXHIBITS: an 8-K's EX-99.x, a 10-K's EX-13), in index
+    order; none for another form."""
+    pattern = EXHIBITS.get(form)
+    if pattern is None:
+        return []
     doc = html.fromstring(raw)
     exhibits = []
     for tr in doc.xpath("//table[@class='tableFile']//tr[td]"):
         cells = [c.text_content().strip() for c in tr.xpath("./td")]
         hrefs = tr.xpath(".//a/@href")
-        if len(cells) < 4 or not hrefs or not EXHIBIT.fullmatch(cells[3]):
+        if len(cells) < 4 or not hrefs or not pattern.fullmatch(cells[3]):
             continue
         href = hrefs[0].removeprefix("/ix?doc=")
         if not href.lower().endswith((".htm", ".html")):

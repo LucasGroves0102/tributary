@@ -9,6 +9,8 @@ them. Sources (migration 023):
 - silver.filings (public SEC index) + the accession column of silver.financial_facts: 10-K /
   10-Q filings on EDGAR, filed on or after the latest filing in gold, whose XBRL the SEC's
   companyfacts API doesn't carry yet ("companyfacts behind EDGAR").
+- ops.coverage (076, the company route's `coverage`): the nightly coverage sweep's gaps, each
+  with its cause and reason (`coverage_notes`).
 
 Findings are about values, so they are NOT public metadata: the company route calls
 require(financials) and the cross-company route takes the companies from readable(); then
@@ -521,6 +523,22 @@ def summary(notes: list[dict], findings: int) -> dict:
     return {**out, "findings": findings}
 
 
+def coverage_notes(rows: list[dict]) -> list[dict]:
+    """The company's coverage gaps (migration 076's nightly sweep, `coverage` on the company's
+    data notes): what is missing from its figures or documents and why, most telling first. Each
+    is {kind, cause, reason, since, detail}; `reason` is fixable (Tributary's gap), not_in_sec_data
+    or out_of_scope; detail holds dates, forms, accessions, metric names and counts, never values.
+    The web words them (company/coverage.ts); a history cut short by a re-registration comes with
+    the re_registration gap itself."""
+    order = {k: i for i, k in enumerate(COVERAGE_ORDER)}
+    return [{"kind": r["kind"], "cause": r["cause"], "reason": r["reason"],
+             "since": _iso(_as_date(r["first_seen"])), "detail": r["detail"] or {}}
+            for r in sorted(rows, key=lambda r: (order.get(r["kind"], len(order)), r["kind"]))]
+
+
+# The order a page lists coverage gaps in: no figures at all first, documents last.
+COVERAGE_ORDER = ("no_figures", "re_registration", "history_short", "metric_missing",
+                  "figures_behind", "statements_exhibit", "documents_missing")
 COMPANY_FINDINGS = 1000  # newest findings per company page (restatements can be many)
 MAX_COMPANIES = 50  # as /v1/filing-index: a watchlist; beyond it the URL and the id list get long
 SPLIT_ROOM, MIN_RAW_FINDINGS = 10, 200
@@ -554,11 +572,15 @@ def add_notes_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
     def company_notes(user_id: User, company_id: CompanyId) -> dict:
         """Data-quality and freshness notes for one company: gaps, overlapping quarters,
         restatements, derived quarters, filings the SEC's XBRL API doesn't reflect yet. Each
-        names its filings. Needs the financials tier (the notes are about values)."""
+        names its filings. `coverage`: what is missing from its figures or documents and why
+        (no figures, history cut short, a metric missing lately, figures behind its latest report,
+        a re-registration not linked, documents or statements not stored). Needs the financials
+        tier (the notes are about values)."""
         require(user_id, "financials", company_id)
         notes, checked, findings = load(user_id, [company_id], True, COMPANY_FINDINGS)
         return {"company_id": company_id, "as_of": _now(), "checked_at": checked,
-                "summary": summary(notes, findings), "notes": notes}
+                "summary": summary(notes, findings), "notes": notes,
+                "coverage": coverage_notes(store.coverage(user_id, company_id))}  # 076
 
     @app.get("/v1/data-notes", response_model=dict)
     def recent_notes(user_id: User,

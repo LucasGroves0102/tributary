@@ -89,6 +89,11 @@ class FakeStore:
             "parser": [{"check_name": "invalid_key", "severity": "error", "documents": 6,
                         "documents_checked": 4000, "last_checked_at": "2026-11-02T09:00:00Z",
                         "accession_no": "0001045810-26-000075"}],
+            "gaps": [{"kind": "history_short", "reason": "fixable", "companies": 81,
+                      "listed": 6068, "refreshed_at": "2026-11-17T10:05:00Z",
+                      "company_id": NVDA},
+                     {"kind": "no_figures", "reason": "out_of_scope", "companies": 361,
+                      "listed": 6068, "refreshed_at": "2026-11-17T10:05:00Z"}],
         }
 
     def segments(self, user_id, company_id, axis, metric, periods, view, basis):
@@ -468,7 +473,7 @@ def test_status_data_is_public_and_aggregate_only(client):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"as_of", "max_age_seconds", "freshness", "ingest", "completeness",
-                         "coverage", "quality", "parser", "recorded"}
+                         "coverage", "quality", "parser", "gaps", "recorded"}
     assert body["ingest"] == {"window_days": 7, "window_start": "2026-10-26T15:00:00Z",
                               "filings": 40000, "via_feed": 39000, "live_pct": 97.5,
                               "p50_seconds": 41.2, "p95_seconds": 170.0}
@@ -484,6 +489,10 @@ def test_status_data_is_public_and_aggregate_only(client):
         "documents_checked": 4000, "last_checked_at": "2026-11-02T09:00:00Z",
         "checks": [{"check": "invalid_key", "severity": "error", "documents": 6,
                     "per_1000": 1.5}]}
+    assert body["gaps"] == {
+        "listed": 6068, "refreshed_at": "2026-11-17T10:05:00Z",
+        "kinds": [{"kind": "history_short", "reason": "fixable", "companies": 81},
+                  {"kind": "no_figures", "reason": "out_of_scope", "companies": 361}]}
     # nothing the store returned beyond the named fields reaches the public route
     text = r.text
     assert NVDA not in text and "0001045810-26-000075" not in text and "NVDA" not in text

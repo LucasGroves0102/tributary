@@ -810,3 +810,29 @@ Data trust, part 2. An independent source and a mark per company.
 note is read, as the user (DEFINER, `authz.readable_companies('financials')` its only rule:
 `figure_facts`' pattern). Findings, ops views and the status page stay figure-free (014); a figure silver
 no longer holds reads as "corrected since".
+
+### 076_coverage.sql
+
+The coverage sweep: no more unknown gaps. Every exchange-listed company (Nasdaq, NYSE, CBOE, TXSE) is
+measured each night, after the financials-bulk job's extremes report, for each kind of gap; each row says
+why: `fixable` (Tributary's: a link, a mapping, a pipeline step), `not_in_sec_data` (no XBRL, no reports,
+a bank that files with its regulator) or `out_of_scope` (funds, asset-backed issuers, a subsidiary filed
+in its parent's combined report). Kinds: no figures, figures behind the latest report (domestic and
+foreign), history cut short (re-registration, revenue under a tag gold doesn't read, companyfacts
+starting late), a core metric missing lately, an unlinked re-registration, documents missing, 10-K
+statements in an unstored Exhibit 13. `ops.coverage_found()` is the read-only rule (the whole sweep 36 s
+on hermes), `ops.refresh_coverage()` applies it (first_seen kept while a gap lasts). Readers: the
+company's data notes (`coverage`, RLS financials), the status page (counts per kind and reason via
+`ops.public_coverage_gaps()`), `make coverage` (ops). `ops.rebuild_soon` drops a company's gold build
+stamp when the company-loader links a CIK to it, so the catch-up rebuilds it first.
+
+### 077_net_income_one_line.sql
+
+Net income from one line. `NetIncomeLossAvailableToCommonStockholdersBasic` is the last fallback
+(Booking's 10-Ks and 10-Qs since 2016; the same figure without preferred stock), and inside a year whose
+own filings tag net income ProfitLoss only (NetIncomeLoss only in later filings' comparatives), ProfitLoss
+reads first, so the year's quarters, year-to-date figures and derived Q4 never mix the two (PNC's 2025:
+7,015 against the printed 6,997, now 6,997; on hermes 417 periods at 129 companies hold both tags in such
+years, 69 more than 10% apart). A coverage-majority rule was tried first and dropped: Kroger, Prologis and Duke tag
+ProfitLoss in more periods than NetIncomeLoss and print the attributable figure. `gold.rules_version()`
+77: the catch-up rebuilds every company.

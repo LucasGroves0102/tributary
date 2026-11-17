@@ -131,6 +131,31 @@ describe("Status", () => {
     expect(container.querySelector(".status-home")).toBeNull(); // in the app shell: no way back needed
   });
 
+  it("counts the coverage gaps by kind and whose gap it is, never a company", async () => {
+    await mount(<Status load={async () => status({
+      gaps: {
+        listed: 6068, refreshed_at: "2026-11-02T10:00:00Z",
+        kinds: [
+          { kind: "no_figures", reason: "out_of_scope", companies: 361 },
+          { kind: "no_figures", reason: "not_in_sec_data", companies: 70 },
+          { kind: "history_short", reason: "fixable", companies: 81 },
+        ],
+      },
+    })} now={() => NOW} />);
+    const t = text();
+    expect(t).toContain("Gaps in coverage");
+    expect(t).toContain("6,068 exchange-listed companies measured, last run 5 h ago");
+    const rows = [...container.querySelectorAll("table tr")].map((r) => r.textContent ?? "");
+    expect(rows.find((r) => r.startsWith("No figures"))).toBe("No figures at all070361");
+    expect(rows.find((r) => r.startsWith("History cut short"))).toContain("81");
+    expect(t).not.toContain("Figures behind the latest"); // a kind with no gaps isn't listed
+  });
+
+  it("leaves the gaps out with an older API", async () => {
+    await mount(<Status load={async () => status({ gaps: undefined })} now={() => NOW} />);
+    expect(text()).not.toContain("Gaps in coverage");
+  });
+
   it("says the completeness check is pending before its first run", async () => {
     const empty = status({
       completeness: {

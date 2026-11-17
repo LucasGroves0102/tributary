@@ -1,6 +1,6 @@
 """Turn SEC reference data + curated files into company identity rows. Pure, no I/O."""
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
@@ -60,16 +60,31 @@ def parse_tickers(raw: dict) -> list[TickerRow]:
 
 
 class Lineage:
-    """Maps each CIK to its company_id: the first CIK in its chain of successions."""
+    """Maps each CIK to its company_id: the first CIK in its chain of successions, after any
+    re-registration links (`keeps_successor_id`): a predecessor found after its successor became a
+    company here joins the successor's company, whose id never changes."""
 
     def __init__(self, successions: Iterable[Succession]) -> None:
-        self._predecessor = {s.successor_cik: s for s in successions}
-        self._successor = {s.predecessor_cik: s for s in self._predecessor.values()}
+        links = list(successions)
+        twice = sorted(c for ends in (Counter(s.successor_cik for s in links),
+                                      Counter(s.predecessor_cik for s in links))
+                       for c, n in ends.items() if n > 1)
+        if twice:
+            raise ValueError(f"a CIK with two predecessors or two successors: {twice}")
+        self._predecessor = {s.successor_cik: s for s in links}
+        self._successor = {s.predecessor_cik: s for s in links}
 
     def root(self, cik: str) -> str:
         while cik in self._predecessor:
             cik = self._predecessor[cik].predecessor_cik
         return cik
+
+    def company_id(self, cik: str) -> str:
+        """The root, moved down the chain past every re-registration link."""
+        cid = self.root(cik)
+        while cid in self._successor and self._successor[cid].keeps_successor_id:
+            cid = self._successor[cid].successor_cik
+        return cid
 
     def members(self, cik: str) -> list[str]:
         """Every CIK in this CIK's chain, oldest first."""
@@ -103,7 +118,7 @@ def build(
     tracked: list[str],
 ) -> Snapshot:
     lineage = Lineage(successions)
-    tracked_roots = {lineage.root(c) for c in tracked_ciks(tickers, tracked, lineage)}
+    tracked_ids = {lineage.company_id(c) for c in tracked_ciks(tickers, tracked, lineage)}
     name_by_cik = {t.cik: t.name for t in tickers}
 
     all_ciks = (
@@ -111,27 +126,27 @@ def build(
         | {c for s in successions for c in (s.predecessor_cik, s.successor_cik)}
         | {h.cik for h in history}
     )
-    by_root: dict[str, list[str]] = defaultdict(list)
+    by_id: dict[str, list[str]] = defaultdict(list)
     for cik in all_ciks:
-        by_root[lineage.root(cik)].append(cik)
+        by_id[lineage.company_id(cik)].append(cik)
 
     snap = Snapshot()
-    for root in sorted(by_root):
-        current = lineage.members(root)[-1]
+    for company_id in sorted(by_id):
+        current = lineage.members(company_id)[-1]
         sub = submissions.get(current, {})
         snap.companies.append(
             Company(
-                company_id=root,
+                company_id=company_id,
                 name=name_by_cik.get(current) or sub.get("name") or current,
                 current_cik=current,
                 sic=sub.get("sic") or None,
                 sic_description=sub.get("sicDescription") or None,
                 entity_type=sub.get("entityType") or None,
-                tracked=root in tracked_roots,
+                tracked=company_id in tracked_ids,
             )
         )
-        for cik in by_root[root]:
-            snap.ciks.append(CikRow(cik, root, *lineage.valid_range(cik)))
+        for cik in by_id[company_id]:
+            snap.ciks.append(CikRow(cik, company_id, *lineage.valid_range(cik)))
 
     for cik, sub in submissions.items():
         start, end = lineage.valid_range(cik)

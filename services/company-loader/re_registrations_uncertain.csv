@@ -1,0 +1,79 @@
+for_the_owner,successor_cik,ticker,successor_name,move,candidate_cik,candidate_name,shared_figures_equal,name,address,phone,why_not_linked
+True,0001090012,DVN,DEVON ENERGY CORP/DE,1999-08-18,0000837330,DEVON ENERGY CORP /OK/,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001163739,NBR,NABORS INDUSTRIES LTD,2002-06-26,0000798943,NABORS INDUSTRIES INC,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001163165,COP,CONOCOPHILLIPS,2002-08-30,0001066806,CONOCOPHILLIPS HOLDING CO,0 of 0,True,False,True,2 candidates pass
+True,0001163165,COP,CONOCOPHILLIPS,2002-08-30,0000078214,CONOCOPHILLIPS CO,0 of 0,True,True,False,2 candidates pass
+True,0001281761,RF,REGIONS FINANCIAL CORP,2004-07-01,0000036032,REGIONS FINANCIAL CORP,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001341439,ORCL,ORACLE CORP,2006-02-06,0000777676,Oracle Systems,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001333141,FMS,Fresenius Medical Care AG,2006-02-13,0001019600,FRESENIUS MEDICAL CARE CORP,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001405495,IDCC,"InterDigital, Inc.",2007-07-09,0000354913,INTERDIGITAL INC.,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001408075,GPK,GRAPHIC PACKAGING HOLDING CO,2008-03-10,0000886239,GRAPHIC PACKAGING CORP,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001451505,RIG,Transocean Ltd.,2008-12-19,0001083269,TRANSOCEAN INTERNATIONAL Ltd,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001467373,ACN,Accenture plc,2009-09-01,0001134538,ACCENTURE LTD,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001668717,BUD,Anheuser-Busch InBev SA/NV,2016-10-11,0001140467,Anheuser-Busch InBev S.A.,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001739940,CI,Cigna Group,2018-12-20,0000701221,Cigna Holding Co,26 of 37,True,True,True,figures disagree (26 of 37 equal)
+True,0001808898,BNTC,Benitec Biopharma Inc.,2020-04-15,0001552795,Benitec Biopharma LTD/ADR,0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0001973832,AU,AngloGold Ashanti PLC,2023-09-25,0001067428,ANGLOGOLD ASHANTI (PTY) LTD,12 of 32,True,False,False,figures disagree (12 of 32 equal)
+True,0001981535,SBET,"Sharplink, Inc.",2024-02-13,0001025561,SharpLink Gaming Ltd.,17 of 31,True,False,True,figures disagree (17 of 31 equal)
+True,0001999001,FUN,Six Flags Entertainment Corporation/NEW,2024-07-01,0000701374,Six Flags Entertainment Corp/OLD,19 of 25,True,False,False,predecessor is already company 0000701374
+True,0002052959,LION,Lionsgate Studios Corp.,2025-05-07,0002006191,Lionsgate Studios Holding Corp.,17 of 39,True,False,False,figures disagree (17 of 39 equal)
+True,0002074176,VNOM,"Viper Energy, Inc.",2025-08-19,0001602065,"VNOM Sub, Inc.",29 of 53,True,False,True,figures disagree (29 of 53 equal)
+True,0002082866,PNFP,"Pinnacle Financial Partners, Inc.",2026-01-02,0001115055,PINNACLE FINANCIAL PARTNERS INC,16 of 40,True,False,False,figures disagree (16 of 40 equal)
+True,0002082866,PNFP,"Pinnacle Financial Partners, Inc.",2026-01-02,0000018349,SYNOVUS FINANCIAL CORP,18 of 46,False,False,True,figures disagree (18 of 46 equal)
+True,0002086841,CBAT,CBAK Energy Technology Ltd,2026-06-23,0001117171,"CBAK Energy Technology, Inc.",0 of 0,True,False,False,"name only (no shared figures, address or phone)"
+True,0002107968,WQEY,WISeQey Corp.,2026-10-02,0001738699,WISeQey Corp.,0 of 0,True,True,True,predecessor is already company 0001738699
+True,0002152623,NAVI,"Navient Holdings, Inc.",2026-10-29,0001593538,Navient LLC,21 of 21,True,True,False,predecessor is already company 0001593538
+True,0002063345,CDLR,Cadeler plc,2026-11-05,0001978867,Cadeler A/S,0 of 0,True,False,False,predecessor is already company 0001978867
+False,0001067701,URI,"UNITED RENTALS, INC.",1998-08-07,0001047166,UNITED RENTALS NORTH AMERICA INC,0 of 0,True,True,True,predecessor files 111 periodic reports after the move
+False,0001090425,LAMR,LAMAR ADVERTISING CO/NEW,1999-08-20,0000899045,LAMAR MEDIA CORP/DE,0 of 0,True,False,True,predecessor files 108 periodic reports after the move
+False,0000706863,UNB,UNION BANKSHARES INC,1999-12-10,0000745083,UNION BANKSHARES CO/ME,0 of 0,True,False,False,predecessor files 31 periodic reports after the move
+False,0000706863,UNB,UNION BANKSHARES INC,1999-12-10,0000895688,UNION BANKSHARES LTD,0 of 0,True,False,False,predecessor files 7 periodic reports after the move
+False,0000706863,UNB,UNION BANKSHARES INC,1999-12-10,0000883948,Atlantic Union Bankshares Corp,0 of 0,True,False,False,predecessor files 105 periodic reports after the move; predecessor is already company 0000883948
+False,0001127371,CWBC,Community West Bancshares,2000-11-16,0001051343,COMMUNITY WEST BANCSHARES /,0 of 0,True,False,False,predecessor files 93 periodic reports after the move
+False,0001166691,CMCSA,COMCAST CORP,2002-11-18,0000022301,COMCAST HOLDINGS CORP,0 of 0,True,False,False,predecessor files 11 periodic reports after the move
+False,0001219601,CCK,"CROWN HOLDINGS, INC.",2003-02-26,0000799850,AMERICAS CARMART INC,0 of 0,True,False,False,predecessor files 94 periodic reports after the move; predecessor is already company 0000799850
+False,0001279495,BTE,BAYTEX ENERGY CORP.,2004-02-19,0001046182,BAYTEX ENERGY LTD,0 of 0,True,False,False,predecessor files 1 periodic reports after the move; predecessor filed nothing within 30 days of the move
+False,0001348952,ELC,"ENTERGY LOUISIANA, LLC",2006-01-06,0000060527,"ENTERGY LOUISIANA HOLDINGS, INC",0 of 0,True,False,False,predecessor files 1 periodic reports after the move
+False,0001326160,DUK,Duke Energy CORP,2006-04-04,0000030371,"Duke Energy Carolinas, LLC",0 of 0,True,False,True,predecessor files 89 periodic reports after the move
+False,0001389050,AROC,"Archrock, Inc.",2007-08-20,0001635881,Exterran Corp,0 of 0,True,False,False,predecessor files 28 periodic reports after the move; predecessor filed nothing within 30 days of the move
+False,0000003453,MATX,"Matson, Inc.",2009-02-04,0001545654,"Alexander & Baldwin, Inc.",0 of 0,True,False,False,"predecessor files 55 periodic reports after the move; successor reported from 1995-03-27, before the move; predecessor filed nothing within 30 days of the move"
+False,0000833444,JCI,Johnson Controls International plc,2009-03-17,0001608109,Tyco International plc,0 of 0,True,False,False,"predecessor files 1 periodic reports after the move; successor reported from 1996-05-10, before the move; predecessor filed nothing within 30 days of the move"
+False,0000833444,JCI,Johnson Controls International plc,2009-03-17,0001703056,ADT Inc.,0 of 0,True,False,False,"predecessor files 36 periodic reports after the move; successor reported from 1996-05-10, before the move; predecessor filed nothing within 30 days of the move; predecessor is already company 0001703056"
+False,0000833444,JCI,Johnson Controls International plc,2009-03-17,0001546640,ADT Corp,0 of 0,True,False,False,"predecessor files 15 periodic reports after the move; successor reported from 1996-05-10, before the move; predecessor filed nothing within 30 days of the move"
+False,0001466258,TT,Trane Technologies plc,2009-07-01,0001699150,Ingersoll Rand Inc.,0 of 0,True,False,False,predecessor files 38 periodic reports after the move; predecessor filed nothing within 30 days of the move; predecessor is already company 0001699150
+False,0001467373,ACN,Accenture plc,2009-09-01,0001647339,Accenture Holdings plc,0 of 0,True,False,True,predecessor files 10 periodic reports after the move; predecessor filed nothing within 30 days of the move
+False,0000077360,PNR,PENTAIR plc,2012-09-28,0001594420,Pentair Public Ltd Co,0 of 0,True,False,False,"predecessor files 1 periodic reports after the move; successor reported from 1994-03-30, before the move; predecessor filed nothing within 30 days of the move"
+False,0000077360,PNR,PENTAIR plc,2012-09-28,0001548223,Pentair Ltd.,0 of 0,True,False,False,"successor reported from 1994-03-30, before the move"
+False,0001571949,ICE,"Intercontinental Exchange, Inc.",2013-11-13,0001174746,"Intercontinental Exchange Holdings, Inc.",0 of 45,True,False,True,figures disagree (0 of 45 equal)
+False,0000923796,GEO,GEO GROUP INC,2014-06-30,0001275712,"GSE Holding, Inc.",0 of 51,True,False,False,"successor reported from 1996-08-13, before the move; figures disagree (0 of 51 equal)"
+False,0000833444,JCI,Johnson Controls International plc,2014-11-17,0000053669,JOHNSON CONTROLS INC,9 of 13,False,False,True,"predecessor files 7 periodic reports after the move; successor reported from 1996-05-10, before the move; figures disagree (9 of 13 equal)"
+False,0001610520,UBS,UBS Group AG,2014-11-26,0001114446,UBS AG,0 of 0,True,False,False,predecessor files 11 periodic reports after the move; predecessor is already company 0001114446
+False,0000844059,FRPH,"FRP HOLDINGS, INC.",2014-12-03,0001616741,"PATRIOT TRANSPORTATION HOLDING, INC.",0 of 29,True,True,False,"predecessor files 35 periodic reports after the move; successor reported from 1996-05-10, before the move; figures disagree (0 of 29 equal)"
+False,0001618756,QSR,Restaurant Brands International Inc.,2014-12-15,0001618755,Restaurant Brands International Limited Partnership,42 of 42,False,False,True,predecessor files 47 periodic reports after the move; predecessor is already company 0001618755
+False,0001652044,GOOGL,Alphabet Inc.,2015-10-02,0001566978,"Alphabet Holding Company, Inc.",0 of 12,True,False,False,predecessor files 1 periodic reports after the move; predecessor filed nothing within 30 days of the move; figures disagree (0 of 12 equal)
+False,0001091667,CHTR,"CHARTER COMMUNICATIONS, INC. /MO/",2016-05-20,0001271833,CCO HOLDINGS LLC,9 of 41,False,True,True,"predecessor files 41 periodic reports after the move; successor reported from 1999-12-22, before the move; figures disagree (9 of 41 equal)"
+False,0000037808,FNB,FNB CORP/PA/,2016-08-30,0000764811,CommunityOne Bancorp,0 of 228,True,False,False,"successor reported from 1995-05-11, before the move; figures disagree (0 of 228 equal)"
+False,0001692115,SWX,"Southwest Gas Holdings, Inc.",2017-01-03,0000092416,SOUTHWEST GAS CORP,60 of 68,True,False,True,predecessor files 39 periodic reports after the move
+False,0001701605,BKR,Baker Hughes Co,2017-07-03,0000808362,Baker Hughes Holdings LLC,45 of 64,True,True,True,predecessor files 24 periodic reports after the move; figures disagree (45 of 64 equal)
+False,0001750735,MRBK,Meridian Corp,2018-08-24,0001437925,Meridian Holdings Inc./NV,0 of 0,True,False,False,predecessor files 30 periodic reports after the move; predecessor is already company 0001437925
+False,0001733998,NWN,Northwest Natural Holding Co,2018-10-01,0000073020,NORTHWEST NATURAL GAS CO,45 of 48,False,True,True,predecessor files 32 periodic reports after the move
+False,0001707925,LIN,LINDE PLC,2018-11-02,0000884905,LINDE INC,25 of 39,True,False,False,"successor reported from 2017-10-30, before the move; figures disagree (25 of 39 equal)"
+False,0001400891,IHRT,"iHeartMedia, Inc.",2019-05-02,0001457737,"iHeartMedia Capital I, LLC",233 of 233,False,True,True,"predecessor's last report 2018-05-03 long before the move; successor reported from 2008-08-11, before the move"
+False,0001400891,IHRT,"iHeartMedia, Inc.",2019-05-02,0000739708,"iHeartCommunications, Inc.",300 of 300,False,True,True,"predecessor's last report 2018-05-03 long before the move; successor reported from 2008-08-11, before the move"
+False,0001770450,XRX,Xerox Holdings Corp,2019-07-31,0000108772,XEROX CORP,38 of 46,True,True,True,predecessor files 28 periodic reports after the move
+False,0001755953,ABTC,American Bitcoin Corp.,2019-10-21,0001719893,MTech Acquisition Corp,0 of 6,True,False,False,predecessor filed nothing within 30 days of the move; figures disagree (0 of 6 equal)
+False,0000812074,OI,"O-I Glass, Inc. /DE/",2019-12-27,0000812233,OWENS-ILLINOIS GROUP INC,230 of 411,True,False,False,"successor reported from 1994-03-30, before the move; figures disagree (230 of 411 equal)"
+False,0001706946,SPCE,"Virgin Galactic Holdings, Inc",2020-02-24,0001818874,"SoFi Technologies, Inc.",0 of 8,True,False,False,"predecessor files 25 periodic reports after the move; successor reported from 2017-11-14, before the move; predecessor filed nothing within 30 days of the move; predecessor is already company 0001818874; figures disagree (0 of 8 equal)"
+False,0001803696,ADEA,Adeia Inc.,2020-06-01,0001788999,Xperi Inc.,0 of 2,True,False,False,predecessor files 17 periodic reports after the move; predecessor filed nothing within 30 days of the move; predecessor is already company 0001788999
+False,0001808834,PRG,"PROG Holdings, Inc.",2020-10-16,0001821393,"Aaron's Company, Inc.",0 of 41,True,False,False,predecessor files 15 periodic reports after the move; figures disagree (0 of 41 equal)
+False,0001841666,APA,APA Corp,2021-03-01,0000006769,APACHE CORP,32 of 32,False,True,True,predecessor files 14 periodic reports after the move
+False,0000876883,STGW,Stagwell Inc,2021-07-30,0000773141,"SEKISUI HOUSE U.S., INC.",0 of 277,True,False,False,"predecessor files 20 periodic reports after the move; successor reported from 2002-07-01, before the move; figures disagree (0 of 277 equal)"
+False,0001858681,APO,"Apollo Global Management, Inc.",2022-01-03,0001411494,"Apollo Asset Management, Inc.",0 of 45,True,True,True,predecessor files 6 periodic reports after the move; figures disagree (0 of 45 equal)
+False,0000025445,CXT,"Crane NXT, Co.",2022-05-16,0001944013,Crane Co,6 of 14,True,False,False,"predecessor files 16 periodic reports after the move; successor reported from 1994-03-30, before the move; predecessor filed nothing within 30 days of the move; predecessor is already company 0001944013; figures disagree (6 of 14 equal)"
+False,0001895262,NE,Noble Corp plc,2022-09-30,0001169055,Noble Finance Co,0 of 0,True,False,True,predecessor files 1 periodic reports after the move
+False,0001981792,HHH,Howard Hughes Holdings Inc.,2023-08-11,0001498828,Howard Hughes Corp,42 of 42,True,False,False,predecessor files 12 periodic reports after the move
+False,0001723128,AMRX,"Amneal Pharmaceuticals, Inc.",2023-11-08,0001794846,Atlas Corp.,0 of 37,True,False,False,"predecessor files 2 periodic reports after the move; successor reported from 2018-03-09, before the move; figures disagree (0 of 37 equal)"
+False,0002028336,NUAI,"New ERA Energy & Digital, Inc.",2024-12-09,0002068385,SharonAI Holdings Inc.,0 of 1,True,False,False,predecessor files 3 periodic reports after the move; predecessor filed nothing within 30 days of the move; predecessor is already company 0002068385
+False,0001440972,LAR,Lithium Argentina AG,2025-01-24,0001966983,LITHIUM AMERICAS CORP.,0 of 18,True,False,False,"predecessor files 6 periodic reports after the move; successor reported from 2018-03-29, before the move; predecessor is already company 0001966983; figures disagree (0 of 18 equal)"
+False,0002020795,UNIT,Uniti Group Inc.,2025-08-01,0001620280,Uniti Group LLC,0 of 44,True,True,True,figures disagree (0 of 44 equal)
+False,0001654795,BBUC,Brookfield Business Corp,2026-03-27,0001871130,Brookfield Business Holdings Corp,0 of 99,True,True,True,"successor reported from 2017-03-10, before the move; figures disagree (0 of 99 equal)"

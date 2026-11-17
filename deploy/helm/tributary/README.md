@@ -68,7 +68,7 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `backfill` | poller (`poller-backfill --days 30`) | daily 02:00 | on | completeness check against 30 days of EDGAR's daily indexes; republishes missing filings (027) |
 | `companies` | company-loader | daily 03:00 | on | company identity: CIKs, tickers, former names |
 | `financials` | facts-fetcher | daily 04:00 | on | tracked companies' XBRL companyfacts → bronze, silver, gold |
-| `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies; then the extremes report (072, `ops.extremes`) |
+| `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies; then the extremes report (072, `ops.extremes`) and the coverage report (076, `ops.coverage`) |
 | `submissions` | company-loader (`company-loader-submissions`) | daily 05:30 | on | every filer's filing history and metadata from `submissions.zip` |
 | `insiders-catchup` | doc-fetcher (`doc-fetcher-insiders`) | daily 08:45 | on | Forms 3/4/5 of the last 7 days the live doc-fetcher missed (059) |
 | `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | on (Flux release) | filings companyfacts lacks, from their own XBRL (055) |

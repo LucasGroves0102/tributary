@@ -300,8 +300,9 @@ def build_server(api: QueryApi, *, cap: int = RESULT_CHARS) -> MCPServer:
     @tool("get_data_notes", "Data notes",
           "Notes on one company's figures, most important first: gaps, overlapping quarters, "
           "restatements and stock splits, quarters derived from year-to-date figures, filings "
-          "the SEC's XBRL data doesn't reflect yet, each with its filings. Read before relying on "
-          "an unusual figure.")
+          "the SEC's XBRL data doesn't reflect yet, each with its filings; `coverage` says what is "
+          "missing from its figures (history, a metric, the latest report) and why. Read before "
+          "relying on an unusual figure or a short history.")
     async def get_data_notes(ctx: Context, company_id: CompanyId) -> CallToolResult:
         data = await get(ctx, f"/v1/companies/{company_id}/data-notes")
         return result(data, cap=cap)

@@ -15,7 +15,15 @@ from datetime import date
 import httpx
 
 from doc_fetcher.db import Blob
-from doc_fetcher.index import SEC_BASE, Exhibit, FilingIndex, index_url, parse_exhibits, parse_index
+from doc_fetcher.index import (
+    EXHIBITS,
+    SEC_BASE,
+    Exhibit,
+    FilingIndex,
+    index_url,
+    parse_exhibits,
+    parse_index,
+)
 
 CHUNK = 1 << 16
 
@@ -61,7 +69,8 @@ def archive_url(cik: str, accession_no: str, name: str) -> str:
 
 def needs_index(target: Target) -> bool:
     name = (target.primary_document or "").lower()
-    return target.form == "8-K" or "/" in name or not name.endswith((".htm", ".html"))
+    # a form whose exhibits are stored (an 8-K's EX-99.x, a 10-K's EX-13) reads its index for them
+    return target.form in EXHIBITS or "/" in name or not name.endswith((".htm", ".html"))
 
 
 def download(client: httpx.Client, url: str, max_bytes: int) -> Blob:
@@ -96,8 +105,7 @@ def fetch_target(client: httpx.Client, target: Target, max_bytes: int) -> Fetche
             index = parse_index(resp.content, target.form)
         except ValueError as e:
             raise Unusable(str(e)) from e
-        if target.form == "8-K":
-            exhibits = parse_exhibits(resp.content)
+        exhibits = parse_exhibits(resp.content, target.form)
     else:
         assert target.primary_document is not None
         index = FilingIndex(

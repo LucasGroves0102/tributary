@@ -1367,6 +1367,43 @@ export interface DataNotes {
   /** notes per rank and the findings behind them (absent from an older API) */
   summary?: { attention: number; note: number; minor: number; findings: number };
   notes: DataNote[];
+  /** the company's coverage gaps (076's nightly sweep), most telling first; absent from an older
+   * API and on the cross-company route */
+  coverage?: CoverageGap[];
+}
+
+/** Why a coverage gap exists: Tributary's to fix, not in the SEC's structured data, or outside
+ * what Tributary reads (funds, asset-backed issuers, a parent's combined report). */
+export type CoverageReason = "fixable" | "not_in_sec_data" | "out_of_scope";
+
+/** One kind of gap in a company's figures or documents (query-api notes.coverage_notes). `detail`
+ * holds dates (YYYY-MM-DD), forms, accessions, metric names and counts, never values. */
+export interface CoverageGap {
+  kind: "no_figures" | "re_registration" | "history_short" | "metric_missing" | "figures_behind"
+    | "statements_exhibit" | "documents_missing" | string;
+  cause: string;
+  reason: CoverageReason;
+  /** when the sweep first found it */
+  since: string | null;
+  detail: {
+    figures_from?: string;
+    revenue_from?: string;
+    first_xbrl_report?: string;
+    moved_on?: string;
+    form?: string;
+    accession_no?: string;
+    filed?: string;
+    period_end?: string;
+    figures_to?: string;
+    last_10x?: string;
+    last_foreign?: string;
+    parent?: string;
+    metrics?: { metric: string; last: string }[];
+    expected?: number;
+    stored?: number;
+    last_filed?: string;
+    [key: string]: unknown;
+  };
 }
 
 /** A data-quality finding's group on the status page (query-api status.py): a figure shown that can't
@@ -1428,6 +1465,13 @@ export interface DataStatus {
       /** findings per 1,000 figures; null before the checks have counted their figures */
       per_1000?: number | null;
     }[];
+  };
+  /** the coverage sweep (076): listed companies measured and their open gaps per kind and reason,
+   * never a company; absent from an older API */
+  gaps?: {
+    listed: number | null;
+    refreshed_at: string | null;
+    kinds: { kind: string; reason: CoverageReason; companies: number }[];
   };
   /** the parser-output checks (072): documents, never a company; absent from an older API */
   parser?: {

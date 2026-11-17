@@ -34,6 +34,22 @@ def test_exhibits_from_8k_index():
     assert exhibits[0].description is None  # the index repeats the type
 
 
+def test_a_10k_stores_its_annual_report_exhibit_only():
+    """A 10-K's EX-13 (the annual report to shareholders, where IBM and Wells Fargo print their
+    statements) and nothing else; an 8-K's EX-99.x only; a 10-Q none. The EX-13 page is NVIDIA's
+    real FY2026 10-K index with its EX-19.1 row relabelled EX-13 (the shape IBM's index has)."""
+    from doc_fetcher.index import parse_exhibits
+
+    fixtures = Path(__file__).parent / "fixtures"
+    assert parse_exhibits(INDEX, "10-K") == []  # EX-19.1, 21.1, 23.1, 31, 32, 101: none stored
+    raw = (fixtures / "nvda-10-K-index-ex13.htm").read_bytes()
+    exhibits = parse_exhibits(raw, "10-K")
+    assert [(e.exhibit_type, e.document_name) for e in exhibits] == [
+        ("EX-13", "nvda-2026xex13.htm")]
+    assert parse_exhibits(raw, "10-Q") == [] and parse_exhibits(raw, "8-K") == []
+    assert parse_exhibits((fixtures / "nvda-8-K-index.htm").read_bytes(), "10-K") == []
+
+
 def test_index_url():
     from doc_fetcher.index import index_url
 

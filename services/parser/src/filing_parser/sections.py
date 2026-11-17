@@ -29,9 +29,9 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
    insensitive; either apostrophe). Splitting the text at end lines, the stretch with the most
    MD&A lines (at least 2; the earliest on a tie) becomes Item 7: from its first MD&A line to
    the end line that closes the stretch, or the end of the text. Key and title are unchanged.
-8. Exhibits (8-K EX-99.x) are parsed on their own: one section per exhibit, key the exhibit
-   type ("EX-99.1"), item its number, title the index description or "Exhibit 99.1", text
-   html_to_text of the exhibit, offsets into that text.
+8. Exhibits (8-K EX-99.x, a 10-K's EX-13: whatever doc-fetcher stores) are parsed on their own:
+   one section per exhibit, key the exhibit type ("EX-99.1"), item its number, title the index
+   description or "Exhibit 99.1", text html_to_text of the exhibit, offsets into that text.
 9. Title headings, for filings that title their items without numbering them ("RISK
    FACTORS"): only when the form starts with "10-K" or "10-Q" and rule 2 finds no Item
    heading. A title heading is a line (the text split at "\n"; it starts at the line's first

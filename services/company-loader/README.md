@@ -15,10 +15,24 @@ Sources:
     companies plus TSLA (the demo watchlist trap) and LLY (in the adversarial ground truth).
     Every ticker must be in `tests/fixtures/company_tickers.json`
   - `successions.csv`: old CIK → new CIK (e.g. Google Inc. → Alphabet)
+  - `re_registrations.csv`: a predecessor CIK linked to a successor issuer (8-K12B/8-K12G3) that was
+    already a company here, which keeps its id (Broadcom Inc. through Broadcom Ltd and Avago;
+    Marvell). Each row has its evidence: the successor's own figures for periods before the move
+    equal the predecessor's, or (before XBRL) the same name plus address or phone, and the
+    predecessor's 10-K/10-Q/20-F/40-F stop at the move. Candidates the rules refused (mergers,
+    predecessors still reporting, two candidates, figures that disagree) are in
+    `re_registrations_uncertain.csv` beside this README, for the owner
   - `ticker_history.csv`: retired tickers (e.g. FB)
 
 `company_id` is the first CIK in a company's lineage, so it never changes when a successor
-appears. Tickers from `company_tickers.json` are tracked over time: when one disappears its
+appears; a re-registration link keeps the successor's id instead (its users, grants and saved work
+hold it). A load that links a CIK to a company marks the company's gold as built at the epoch
+(`ops.rebuild_soon`, migration 076): the hourly catch-up rebuilds it first, with the linked CIK's
+companyfacts. The rows came from a read-only search of the stored submissions and facts
+([db/research/re_registration_search.sql](../../db/research/re_registration_search.sql): every
+8-K12B and 8-K12G3, candidates by name, address or phone, their filings and figures; its header has
+the rules); the uncertain file's `for_the_owner` column marks the 25 worth a look. The nightly
+coverage sweep lists a new unlinked re-registration (`make coverage KIND=re_registration`). Tickers from `company_tickers.json` are tracked over time: when one disappears its
 row gets a `valid_to` instead of being deleted.
 
 Look up a company: `SELECT * FROM silver.resolve_company('FB');`

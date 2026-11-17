@@ -55,7 +55,8 @@ nothing. Each migration's header has the measurements behind its thresholds and 
 production.
 
 [`rls/`](rls) and [`transforms/`](transforms) hold no SQL; their READMEs point to the
-migrations that define those objects.
+migrations that define those objects. [`research/`](research) holds read-only queries behind curated
+data (the re-registration search behind company-loader's `re_registrations.csv`); never run by a job.
 
 ### Versions and catch-up
 
