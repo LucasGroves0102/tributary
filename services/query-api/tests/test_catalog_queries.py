@@ -4,7 +4,7 @@ queries around it timed out (hermes, 2026-11-02; migration 032). Fails if a rout
 Also: layer 1 still blanks what it doesn't allow when no id list reaches the query."""
 
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -47,7 +47,9 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/search?q=supply+chain&window=exact&sort=date",
           f"/v1/companies/{NVDA}/insiders?limit=100&cursor=2026-09-18_0001588670-26-000014",
           # Riley (test 6): one company's per-share figures on one share basis
-          f"/v1/companies/{NVDA}/per-share?view=ttm"]
+          f"/v1/companies/{NVDA}/per-share?view=ttm",
+          # the portfolio: the caller's own holdings' companies only
+          "/v1/portfolio"]
 # POST routes: path, body
 POSTS = [(f"/v1/companies/{NVDA}/model",
           {"companyId": NVDA, "historyYears": 8, "ytd": True,
@@ -117,6 +119,12 @@ class RecordingStore:
     def answer_last_reports(self, *_):
         return {}
 
+    def answer_profiles(self, *_):
+        return {}
+
+    def answer_tickers(self, *_):
+        return {}
+
     def answer_company_8ks(self, user_id, company_id, since):
         return [{"accession_no": f"0001045810-26-{n:06d}", "cik": NVDA, "form": "8-K",
                  "filing_date": date(2026, 11, 5) - timedelta(days=n), "accepted_at": None,
@@ -177,6 +185,26 @@ class Watchlist:
         return [{"company_id": NVDA, "added_at": "2026-01-01"}]
 
 
+class Portfolio:
+    """One NVDA holding, in AppPortfolio's shapes (query_api/portfolio.py)."""
+    ADDED = datetime(2026, 11, 1, tzinfo=UTC)
+
+    def holdings(self, user_id):
+        return [{"holding_id": "h1", "company_id": NVDA, "symbol": "NVDA", "name": None,
+                 "project_id": None, "thesis_item_id": None, "price": None, "price_on": None,
+                 "price_source": None, "created_at": self.ADDED, "updated_at": self.ADDED,
+                 "project_name": None, "thesis_name": None, "candidates": [], "sells": [],
+                 "lots": [{"lot_id": "l1", "holding_id": "h1", "shares": Decimal(1),
+                           "cost_total": Decimal(100), "bought_on": None, "account_label": None,
+                           "source": "typed", "created_at": self.ADDED}]}]
+
+    def open_holdings(self, user_id):
+        return [{"company_id": NVDA, "created_at": self.ADDED}]
+
+    def last_reviews(self, user_id, ids):
+        return {}
+
+
 class Open:
     """OpenFGA with the catalog public to everyone, within `tiers`."""
 
@@ -194,7 +222,7 @@ def app(authorizer=None) -> Any:
     store: Any = RecordingStore()
     watchlists: Any = Watchlist()
     c: Any = TestClient(create_app(authorizer or Open(), store, SECRET, watchlists=watchlists,
-                                   today=lambda: TODAY))
+                                   today=lambda: TODAY, portfolio=Portfolio()))  # type: ignore
     c.store = store
     return c
 

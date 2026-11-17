@@ -419,6 +419,10 @@ ACCOUNT = [
     ("POST", "/v1/thesis-checks/0b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c11"),
     ("POST", "/v1/workspaces/0b6f8a52-63f4-4d6e-9d0e-2f4d3b8a1c11/reports"),
     ("GET", "/v1/recent"),
+    # the portfolio and journal: the user's holdings never reach a key (or the MCP server)
+    ("GET", "/v1/portfolio"), ("GET", "/v1/portfolio/journal"),
+    ("POST", "/v1/portfolio/holdings"), ("POST", "/v1/portfolio/import/preview"),
+    ("GET", f"/v1/portfolio/position/{NVDA}"),
 ]
 
 
@@ -467,7 +471,8 @@ def test_every_listed_route_exists_and_is_signed_in():
     assert PUBLIC_ROUTES <= public and PUBLIC_ROUTES.isdisjoint(routes)
     for _, p in KEY_ROUTES:
         assert not p.startswith(("/v1/api-keys", "/v1/alerts", "/v1/demo", "/v1/auth",
-                                 "/v1/views", "/v1/connections", "/v1/thesis-checks"))
+                                 "/v1/views", "/v1/connections", "/v1/thesis-checks",
+                                 "/v1/portfolio"))
         assert "/reports" not in p and "/checks" not in p
 
 

@@ -6,10 +6,12 @@ ten minutes) makes them; this module holds the rules, the app-database storage a
 
 Rules (the spec; README "Filing alerts"; test_alerts.py):
 
-- Followed companies: the watchlist's (`watchlist`, since the day each was added) and each
-  analysis project's company (`analysis`, since the project was made). A company followed both
-  ways is one alert with both sources. Watching grants nothing: an alert is about a public
-  filing, and its figures are read as the user, through layer 1 and RLS, or not at all.
+- Followed companies: the watchlist's (`watchlist`, since the day each was added), each
+  analysis project's company (`analysis`, since the project was made) and each open holding's
+  (`portfolio`, since it was added; app migration 021, query_api/portfolio.py). A company
+  followed several ways is one alert with every source. Watching grants nothing: an alert is
+  about a public filing, and its figures are read as the user, through layer 1 and RLS, or not
+  at all.
 - Forms: 10-K, 10-Q and 8-K, originals (amendments re-report). Per company the user may turn
   any of the three off (`alert_settings`; no row = all three, `other_8ks` off). Only filings
   filed on or after the day the company was followed alert.
@@ -73,6 +75,7 @@ from query_api.authorizer import Readable
 from query_api.connections import Limiter
 from query_api.formula import FormulaError, analyze, compile_formula, parse
 from query_api.formula.check import PERCENT
+from query_api.portfolio import OPEN_HOLDINGS
 from query_api.sandbox import is_sandbox_user
 from query_api.shapes import filing_url, percent_change
 from query_api.webhooks import (
@@ -97,7 +100,7 @@ log = logging.getLogger("query_api.alerts")
 FORMS: tuple[str, ...] = ("10-K", "10-Q", "8-K")
 # 8-K items that alert only when the user turns them on for the company (module docstring)
 OTHER_8K_ITEMS = frozenset({"7.01", "8.01"})
-SOURCES = ("watchlist", "analysis")
+SOURCES = ("watchlist", "analysis", "portfolio")
 LOOKBACK_DAYS = 3        # each run reads filings filed in the last 3 days (ET)
 PENDING_DAYS = 3         # a filing waits this long for its figures or items
 KEEP_DAYS = 180          # notifications older than this are deleted by the job
@@ -369,6 +372,8 @@ class AppAlerts:
                     FROM workspaces
                     WHERE user_id = %(u)s AND project IS NOT NULL
                       AND project->>'companyId' ~ '^\\d{10}$'
+                    UNION ALL
+                    SELECT company_id, 'portfolio', created_at FROM (""" + OPEN_HOLDINGS + """) h
                 ) f
                 GROUP BY company_id ORDER BY company_id
                 """, {"u": user_id})
@@ -862,9 +867,11 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
                      sender: Sender | None = None,
                      resolver: Callable[..., Any] | None = None,
                      clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                     test_sends: Limiter | None = None) -> None:
+                     test_sends: Limiter | None = None,
+                     reviews_due: Callable[[str], int] | None = None) -> None:
     """The /v1/alerts routes. Without the app database every one answers 503 (the web app hides
-    the bell on a 404 from an older API and shows "unavailable" on a 503)."""
+    the bell on a 404 from an older API and shows "unavailable" on a 503). `reviews_due(user)`:
+    the holdings whose review fell due (query_api/portfolio.py), counted on the bell."""
     User = Annotated[str, Depends(current_user)]
     send = sender or HttpsSender()
     limiter = test_sends or Limiter(TEST_SENDS_PER_HOUR)
@@ -881,9 +888,16 @@ def add_alert_routes(app: FastAPI, *, alerts: AppAlerts | None, store: Any,
 
     @app.get("/v1/alerts/unread", response_model=dict)
     def unread(user_id: User) -> dict:
-        """The bell: unread notifications, the newest one's time and the job's last look."""
+        """The bell: unread notifications, the newest one's time and the job's last look; with
+        a portfolio, `reviews_due` (holdings with a new 10-K/10-Q since their last review)."""
         r = db().unread(user_id)
-        return {"unread": r["unread"], "latest": r["latest"], "last_check": r["last_check"]}
+        out = {"unread": r["unread"], "latest": r["latest"], "last_check": r["last_check"]}
+        if reviews_due is not None:
+            try:
+                out["reviews_due"] = reviews_due(user_id)
+            except (psycopg.Error, HTTPException):  # an optional part never takes the bell down
+                log.warning("reviews due unavailable", extra={"user_id": user_id})
+        return out
 
     @app.get("/v1/alerts/notifications", response_model=dict)
     def notifications(

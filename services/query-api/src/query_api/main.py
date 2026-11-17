@@ -14,6 +14,7 @@ from query_api.authorizer import FgaAuthorizer
 from query_api.connections import AppConnections, market_data_from_env
 from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
 from query_api.password_accounts import AppPasswordAccounts
+from query_api.portfolio import AppPortfolio
 from query_api.providers import PROVIDERS
 from query_api.sandbox import AppSandboxes, SandboxConfig
 from query_api.store import Store
@@ -63,6 +64,8 @@ def build_app():
         # personal API keys (Settings); limits per key from API_KEY_PER_MINUTE / _PER_DAY
         api_keys=AppApiKeys(app_pool) if app_pool else None,
         api_key_limits=Limits.from_env(os.environ),
+        # holdings and the decision journal (owner-only; prices only the user's own)
+        portfolio=AppPortfolio(app_pool) if app_pool else None,
     )
 
 
