@@ -20,6 +20,7 @@ import { RecapTable } from "./RecapTable";
 import { Gate } from "./Tables";
 import { TextKpisCard } from "./TextKpis";
 import { useLoad } from "./useLoad";
+import { YourData } from "./YourData";
 
 const EXCERPT_CHARS = 1500;
 const CIK = /^\d{10}$/;
@@ -78,6 +79,7 @@ export function Overview({
       <Business token={token} companyId={companyId} name={name} canRead={canRead} foreign={foreign} />
       {canFin && <Revenue token={token} companyId={companyId} />}
       <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} folio />
+      <YourData token={token} companyId={companyId} name={name} />
     </div>
   );
 }

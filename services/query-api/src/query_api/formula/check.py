@@ -18,6 +18,13 @@ formula's shape (the web app draws from it; a layer's own choice overrides it):
 - x * or / a constant (other than 1) is number: receivables / revenue * 365 is days, not a
   percent; so is a constant / x. Products and quotients of ratios: alike stays alike, percent *
   multiple is percent, percent / percent is a multiple, anything else number.
+
+The caller's own data (B2c, `mine.<dataset>.<field>`, query_api/datasets.py): a field's unit is
+the one the upload gave it (FIELD_UNITS: number and ratio are dimensionless, reading as a number
+and a percent; money, shares and per_share as the catalog's USD, shares and USD/shares, money in
+the dataset's own currency). A field is a value at a date, never summed: inside ttm() or a TTM
+view it reads the same. Names are checked against the caller's datasets only, so an unknown
+dataset and another user's read the same ("You have no dataset ...").
 """
 
 from dataclasses import dataclass, field
@@ -102,22 +109,44 @@ DERIVED = frozenset({
     "revenue_growth", "net_income_growth", "eps_growth", "payout_ratio", "debt_to_equity",
     "net_debt", "current_ratio", "roe", "efficiency_ratio", "cash_and_investments"})
 _NAMES = {v: k for k, v in UNITS.items() if k != "pure"}  # (0, 0) reads "ratio"
+# a dataset field's unit (datasets_csv.UNITS) → (dimension, how a dimensionless one reads, the
+# catalog unit it reports as)
+FIELD_UNITS: dict[str, tuple[tuple[int, int], str | None, str]] = {
+    "number": ((0, 0), "number", "ratio"), "ratio": ((0, 0), "percent", "ratio"),
+    "money": ((1, 0), None, "USD"), "shares": ((0, 1), None, "shares"),
+    "per_share": ((1, -1), None, "USD/shares")}
 _LABELS = {"ratio": "a ratio", "USD": "dollars", "shares": "shares",
            "USD/shares": "dollars per share"}
 
 
 @dataclass(frozen=True)
+class DatasetInfo:
+    """One of the caller's datasets as a formula reads it (query_api/datasets.py)."""
+    dataset_id: str
+    name: str
+    fields: tuple[str, ...]   # in the stored rows' order (vals[1] is fields[0])
+    units: tuple[str, ...]    # FIELD_UNITS keys, one per field
+    currency: str = "USD"
+
+    def unit_of(self, field_name: str) -> str:
+        return self.units[self.fields.index(field_name)]
+
+
+@dataclass(frozen=True)
 class Input:
-    """One series the formula reads. ticker None = the default company."""
+    """One series the formula reads. ticker None = the default company. dataset: a field
+    (`metric`) of the caller's own dataset of that name; span is then always quarter."""
     ticker: str | None
     metric: str
     span: str     # quarter | ttm
     lag: int      # quarters back
+    dataset: str | None = None
 
     @property
     def ref(self) -> str:
-        name = f"{self.ticker}.{self.metric}" if self.ticker else self.metric
-        span = f"ttm({name})" if self.span == "ttm" else name
+        name = f"mine.{self.dataset}.{self.metric}" if self.dataset else self.metric
+        name = f"{self.ticker}.{name}" if self.ticker else name
+        span = f"ttm({name})" if self.span == "ttm" and not self.dataset else name
         return f"{span}[-{self.lag}q]" if self.lag else span
 
 
@@ -129,6 +158,7 @@ class Analysis:
     bare: tuple[int, int] | None = None  # first metric without a ticker
     input_of: dict[int, int] = field(default_factory=dict)  # id(Ref) → index into inputs
     display: str | None = None  # percent | multiple | number; None unless unit is ratio
+    datasets: dict[str, DatasetInfo] = field(default_factory=dict)  # the ones it reads, by name
 
 
 def unit_name(u: tuple[int, int]) -> str:
@@ -187,10 +217,15 @@ def _refs(n: Node) -> list[Ref]:
     return []
 
 
-def _unknown(ast: Node) -> list[FormulaError]:
-    """One problem for each distinct name that isn't a metric, so all of them show at once."""
+def _unknown(ast: Node, datasets: dict[str, DatasetInfo] | None = None) -> list[FormulaError]:
+    """One problem for each distinct name that isn't a metric (or one of the caller's datasets
+    and its fields), so all of them show at once."""
     seen: dict[str, FormulaError] = {}
     for n in _refs(ast):
+        if n.dataset is not None:
+            if n.key not in seen and (problem := _unknown_data(n, datasets or {})):
+                seen[n.key] = problem
+            continue
         if n.metric not in CATALOG and n.metric not in seen:
             s = suggest(n.metric, list(CATALOG))
             seen[n.metric] = FormulaError(
@@ -200,12 +235,32 @@ def _unknown(ast: Node) -> list[FormulaError]:
     return list(seen.values())
 
 
+def _unknown_data(n: Ref, datasets: dict[str, DatasetInfo]) -> FormulaError | None:
+    """The caller has no such dataset, or it has no such field. Suggestions name only the
+    caller's own datasets and fields."""
+    assert n.dataset is not None
+    info = datasets.get(n.dataset)
+    if info is None:
+        s = suggest(n.dataset, list(datasets))
+        return FormulaError(f"You have no dataset '{n.dataset}'", n.dataset_pos,
+                            len(n.dataset), f"Did you mean {s}?" if s else
+                            "Upload one on Your data, then write mine.dataset.field",
+                            code="unknown_dataset")
+    if n.metric not in info.fields:
+        s = suggest(n.metric, list(info.fields))
+        return FormulaError(f"{n.dataset} has no field '{n.metric}'", n.metric_pos,
+                            n.pos + n.length - n.metric_pos,
+                            f"Did you mean {s}?" if s else "Its fields: " + ", ".join(info.fields),
+                            code="unknown_field")
+    return None
+
+
 def _quotient_shape(left: Node, right: Node) -> str:
     """x / y where both are in the same unit, other than a ratio."""
     above, below = _refs(left), _refs(right)
     if len({r.ticker for r in above + below}) > 1:
         return MULTIPLE
-    tops, bottoms = {r.metric for r in above}, {r.metric for r in below}
+    tops, bottoms = {r.key for r in above}, {r.key for r in below}
     if tops == bottoms:
         return MULTIPLE
     if bottoms in ({"revenue"}, {"total_assets"}):
@@ -274,10 +329,17 @@ def _combine(n: BinOp, left: _Value, right: _Value) -> _Value:
     return _Value(unit, shape=shape, scaled=scaled)
 
 
-def analyze(ast: Node, view: str = "quarter") -> Analysis:
+def mine_refs(ast: Node) -> set[str]:
+    """The dataset names a parsed formula reads (mine.<dataset>.<field>), to look up first."""
+    return {n.dataset for n in _refs(ast) if n.dataset is not None}
+
+
+def analyze(ast: Node, view: str = "quarter",
+            datasets: dict[str, DatasetInfo] | None = None) -> Analysis:
     """Unit, display, inputs and tickers of a parsed formula; FormulaError on a problem: every
-    unknown metric at once (FormulaErrors), otherwise the first one found."""
-    unknown = _unknown(ast)
+    unknown metric at once (FormulaErrors), otherwise the first one found. datasets: the
+    caller's own, by name (only the names mine_refs gives are needed)."""
+    unknown = _unknown(ast, datasets)
     if len(unknown) == 1:
         raise unknown[0]
     if unknown:
@@ -289,6 +351,11 @@ def analyze(ast: Node, view: str = "quarter") -> Analysis:
         match n:
             case Num(value=v):
                 return _Value(RATIO, True, v)
+            case Ref(metric=metric, ticker=ticker, dataset=dataset) if dataset is not None:
+                info = (datasets or {})[dataset]
+                a.datasets[dataset] = info
+                dims, shape, _ = FIELD_UNITS[info.unit_of(metric)]
+                return _input(n, Input(ticker, metric, "quarter", lag, dataset), dims, shape)
             case Ref(metric=metric, ticker=ticker):
                 unit, spans = CATALOG[metric]
                 if span not in spans:
@@ -296,23 +363,8 @@ def analyze(ast: Node, view: str = "quarter") -> Analysis:
                     raise FormulaError(f"{metric} has no {what} values", n.pos, n.length,
                                        "Use it without ttm()" if span == "ttm" else
                                        "Wrap it in ttm()", code="span")
-                if ticker:
-                    a.tickers.setdefault(ticker, (n.pos, n.ticker_length))
-                elif a.bare is None:
-                    a.bare = (n.pos, n.length)
-                if len(a.tickers) + (a.bare is not None) > MAX_COMPANIES:
-                    raise FormulaError(f"A formula can use at most {MAX_COMPANIES} companies",
-                                       n.pos, n.length, code="limit")
-                inp = Input(ticker, metric, span, lag)
-                if inp not in index:
-                    if len(index) >= MAX_INPUTS:
-                        raise FormulaError(f"A formula can read at most {MAX_INPUTS} series",
-                                           n.pos, n.length, code="limit")
-                    index[inp] = len(a.inputs)
-                    a.inputs.append(inp)
-                a.input_of[id(n)] = index[inp]
                 shape = DISPLAY.get(metric, PERCENT) if unit in ("ratio", "pure") else None
-                return _Value(UNITS[unit], shape=shape)
+                return _input(n, Input(ticker, metric, span, lag), UNITS[unit], shape)
             case Lag(expr=e, quarters=q):
                 if lag + q > MAX_LAG_QUARTERS:
                     raise FormulaError(f"Lags add up to more than {MAX_LAG_QUARTERS} quarters",
@@ -333,6 +385,23 @@ def analyze(ast: Node, view: str = "quarter") -> Analysis:
             case BinOp(left=left, right=right):
                 return _combine(n, walk(left, span, lag), walk(right, span, lag))
         raise TypeError(n)
+
+    def _input(n: Ref, inp: Input, dims: tuple[int, int], shape: str | None) -> _Value:
+        if inp.ticker:
+            a.tickers.setdefault(inp.ticker, (n.pos, n.ticker_length))
+        elif a.bare is None:
+            a.bare = (n.pos, n.length)
+        if len(a.tickers) + (a.bare is not None) > MAX_COMPANIES:
+            raise FormulaError(f"A formula can use at most {MAX_COMPANIES} companies",
+                               n.pos, n.length, code="limit")
+        if inp not in index:
+            if len(index) >= MAX_INPUTS:
+                raise FormulaError(f"A formula can read at most {MAX_INPUTS} series",
+                                   n.pos, n.length, code="limit")
+            index[inp] = len(a.inputs)
+            a.inputs.append(inp)
+        a.input_of[id(n)] = index[inp]
+        return _Value(dims, shape=shape)
 
     value = walk(ast, view, 0)
     if value.const:

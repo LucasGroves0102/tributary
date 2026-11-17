@@ -94,10 +94,17 @@ export interface ScreenFilters {
   sort?: string;
   /** 0-based page of PAGE_SIZE rows */
   page?: number;
+  /** the user's own metrics as columns (B2d): workspace item ids, at most MAX_METRICS */
+  metric?: string[];
 }
 
 const KEYS = ["q", "industry", "sic", "sector", "sector_industry", "band", "growth", "margin", "fye",
   "exchange", "filer", "issue", "mine", "sort", "page"] as const;
+/** own metrics a screen evaluates (query-api screener.MAX_METRICS) */
+export const MAX_METRICS = 5;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** an own metric's column key: m_<item id without dashes> */
+const METRIC_KEY = /^m_[0-9a-f]{32}$/;
 
 function text(v: string | null, max = 100): string | undefined {
   const t = v?.trim();
@@ -133,8 +140,9 @@ export function parseScreen(query: string): ScreenFilters {
       : undefined,
     issue: checkName(p.get("issue")) ? p.get("issue")! : undefined,
     mine: p.get("mine") === "1" ? true : undefined,
-    sort: SORTS.has((p.get("sort") ?? "").replace(/^-/, "")) ? p.get("sort")! : undefined,
+    sort: sortable((p.get("sort") ?? "").replace(/^-/, "")) ? p.get("sort")! : undefined,
     page: int(p.get("page"), 1, 10000),
+    metric: [...new Set(p.getAll("metric").map((m) => m.toLowerCase()).filter((m) => UUID.test(m)))].slice(0, MAX_METRICS),
   };
   return clean(f);
 }
@@ -149,6 +157,7 @@ export function clean(f: ScreenFilters): ScreenFilters {
     if (k === "page" && v === 0) continue;
     (out as Record<string, unknown>)[k] = v;
   }
+  if (f.metric?.length) out.metric = [...f.metric];
   return out;
 }
 
@@ -160,6 +169,7 @@ export function screenQuery(f: ScreenFilters): string {
     const v = c[k];
     if (v !== undefined) p.set(k, v === true ? "1" : String(v));
   }
+  for (const m of c.metric ?? []) p.append("metric", m);
   return p.toString();
 }
 
@@ -186,8 +196,9 @@ export function countWords(f: ScreenFilters): string {
   return f.q || f.issue ? "" : " with figures in these columns";
 }
 
-/** Whether the screener sorts on this key (saved screens and URLs take only these). */
-export const sortable = (key: string) => SORTS.has(key);
+/** Whether the screener sorts on this key (saved screens and URLs take only these): a value column,
+ * a metadata sort, or an own metric's column (B2d). */
+export const sortable = (key: string) => SORTS.has(key) || METRIC_KEY.test(key);
 
 /** /v1/screener query parameters for a screen, reading these value columns. */
 export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMNS.map((c) => c.key)): Params {
@@ -212,6 +223,8 @@ export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMN
   if (f.filer) p.filer_category = [f.filer];
   if (f.issue) p.issue = f.issue;
   if (f.mine) p.access = "financials";
+  // own metrics: the API adds their columns (m_<id>) after these
+  if (f.metric?.length) p.metric = f.metric;
   return p;
 }
 

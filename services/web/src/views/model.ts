@@ -95,7 +95,8 @@ export function sameColumns(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((k, i) => k === b[i]);
 }
 
-export type ColumnKind = "usd" | "pct" | "growth" | "x" | "shares" | "eps";
+/** num: a plain number (an own metric that reads as one, B2d: stores, days) */
+export type ColumnKind = "usd" | "pct" | "growth" | "x" | "shares" | "eps" | "num";
 
 /** A value column as tables show it: header label and period, long name, how values read. */
 export interface ColumnSpec {
@@ -166,6 +167,12 @@ export function formatColumn(kind: ColumnKind, v: number): string {
     case "shares": {
       const abs = Math.abs(v);
       return abs >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : abs >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v.toFixed(0);
+    }
+    case "num": {
+      // four significant figures at most, like every figure (web CLAUDE.md "Numbers")
+      const abs = Math.abs(v);
+      return abs >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : abs >= 1e6 ? `${(v / 1e6).toFixed(2)}M`
+        : abs >= 1e4 ? Math.round(v).toLocaleString("en-US") : String(Number(v.toPrecision(4)));
     }
   }
 }

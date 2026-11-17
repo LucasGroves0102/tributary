@@ -35,6 +35,8 @@ from pydantic import (
     model_validator,
 )
 
+from query_api.formula import FormulaError, parse
+
 MAX_WORKSPACES = 50
 MAX_ITEMS_PER_WORKSPACE = 100
 MAX_ITEMS = 500  # per user, across workspaces
@@ -58,9 +60,11 @@ Step = Literal["business", "numbers", "earnings", "changes", "peers", "model", "
                "monitor"]
 WORKSPACE_NAME = 100
 ITEM_NAME = 120
-# what users save (009 adds thesis and model); reports (005) only the agent writes
-KINDS = ("chart", "comps", "screen", "thesis", "model")
-Kind = Literal["chart", "comps", "screen", "thesis", "model"]
+# what users save (009 adds thesis and model, app 022 metric); reports (005) only the agent writes
+KINDS = ("chart", "comps", "screen", "thesis", "model", "metric")
+Kind = Literal["chart", "comps", "screen", "thesis", "model", "metric"]
+MAX_METRICS = 20  # own metrics (B2d) per user, across workspaces
+MAX_SCREEN_METRICS = 5  # a saved screen's own-metric columns (screener.MAX_METRICS)
 REPORT = "report"
 LARGE = ("report", "thesis")  # kinds whose state the workspace listing leaves out
 # a save over a thesis or a model keeps the version it replaced (app DB 014, item_versions; models
@@ -70,6 +74,7 @@ MAX_VERSIONS = 30
 
 CIK = r"^\d{10}$"
 ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
+UUID_TEXT = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 _TEXT_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")  # text keeps newlines and tabs
 
@@ -227,7 +232,12 @@ class ScreenState(_Strict):
     filer: Literal["large_accelerated", "accelerated", "non_accelerated"] | None = None
     issue: str | None = Field(default=None, pattern=r"^[a-z_]{1,64}$")
     mine: bool | None = None
-    sort: str | None = Field(default=None, pattern=rf"^-?({'|'.join(SCREEN_SORTS)})$")
+    sort: str | None = Field(default=None,
+                             pattern=rf"^-?({'|'.join(SCREEN_SORTS)}|m_[0-9a-f]{{32}})$")
+    # B2d: the user's own metrics as columns (item ids, the screener's `metric`); sort may name
+    # one (m_<id without dashes>)
+    metric: list[Annotated[str, Field(pattern=UUID_TEXT)]] | None = Field(
+        default=None, min_length=1, max_length=MAX_SCREEN_METRICS)
 
 
 def clean_text(value: str, what: str) -> str:
@@ -369,9 +379,34 @@ class ProjectState(_Strict):
         return self
 
 
+class MetricState(_Strict):
+    """An own metric (B2d, app migration 022): a formula over Tributary's metrics and the
+    user's own data (mine.<dataset>.<field>), the view it reads in (a screener column: the
+    latest quarter or trailing twelve months) and how a dimensionless one reads. It must parse;
+    names are checked when it's read (a dataset can be deleted later)."""
+    formula: str = Field(min_length=1, max_length=500)
+    view: Literal["quarter", "ttm"] = "ttm"
+    display: Literal["percent", "multiple", "number"] | None = None
+    description: str | None = Field(default=None, max_length=500)
+
+    @field_validator("formula")
+    @classmethod
+    def _parses(cls, v: str) -> str:
+        try:
+            parse(v)
+        except FormulaError as e:
+            raise ValueError(f"formula: {e.message} (at {e.pos})") from None
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def _description(cls, v: str | None) -> str | None:
+        return None if v is None or not v.strip() else clean_text(v, "description")
+
+
 STATES: dict[str, type[BaseModel]] = {"chart": ChartState, "comps": CompsState,
                                       "screen": ScreenState, "thesis": ThesisState,
-                                      "model": ModelState}
+                                      "model": ModelState, "metric": MetricState}
 
 
 class StateError(ValueError):
@@ -552,9 +587,11 @@ class AppWorkspaces:
             src = cur.fetchone()
             if src is None:
                 return None
-            cur.execute("SELECT count(*) AS n FROM workspace_items"
+            cur.execute("SELECT count(*) AS n, count(*) FILTER (WHERE kind = 'metric') AS metrics"
+                        " FROM workspace_items"
                         " WHERE workspace_id = %s AND user_id = %s", (workspace_id, user_id))
-            self._room(cur, user_id, workspaces=1, items=_one(cur)["n"])
+            copied = _one(cur)
+            self._room(cur, user_id, workspaces=1, items=copied["n"], metrics=copied["metrics"])
             cur.execute("INSERT INTO workspaces (user_id, name, project, created_at,"
                         "                        updated_at)"
                         " VALUES (%s, %s, %s, statement_timestamp(), statement_timestamp())"
@@ -581,7 +618,8 @@ class AppWorkspaces:
         with self._tx(user_id, lock=True) as cur:
             if not self._owns(cur, user_id, workspace_id):
                 return None
-            self._room(cur, user_id, items=1, workspace_id=workspace_id)
+            self._room(cur, user_id, items=1, workspace_id=workspace_id,
+                       metrics=int(kind == "metric"))
             return self._insert_item(cur, user_id, workspace_id, kind, name, state)
 
     def get(self, user_id: str, workspace_id: str) -> dict | None:
@@ -680,7 +718,8 @@ class AppWorkspaces:
             target = workspace_id or src["workspace_id"]
             if not self._owns(cur, user_id, target):
                 return None
-            self._room(cur, user_id, items=1, workspace_id=target)
+            self._room(cur, user_id, items=1, workspace_id=target,
+                       metrics=int(src["kind"] == "metric"))
             return self._insert_item(cur, user_id, target, src["kind"],
                                      name or copy_name(src["name"], ITEM_NAME), src["state"])
 
@@ -741,13 +780,17 @@ class AppWorkspaces:
         return cur.fetchone() is not None
 
     def _room(self, cur: psycopg.Cursor, user_id: str, *, workspaces: int = 0, items: int = 0,
-              workspace_id: str | None = None) -> None:
+              workspace_id: str | None = None, metrics: int = 0) -> None:
         cur.execute("SELECT (SELECT count(*) FROM workspaces WHERE user_id = %s) AS workspaces,"
                     " (SELECT count(*) FROM workspace_items WHERE user_id = %s) AS items,"
                     " (SELECT count(*) FROM workspace_items WHERE user_id = %s"
-                    "  AND workspace_id = %s) AS here",
-                    (user_id, user_id, user_id, workspace_id))
+                    "  AND workspace_id = %s) AS here,"
+                    " (SELECT count(*) FROM workspace_items WHERE user_id = %s"
+                    "  AND kind = 'metric') AS metrics",
+                    (user_id, user_id, user_id, workspace_id, user_id))
         n = _one(cur)
+        if metrics and n["metrics"] + metrics > MAX_METRICS:
+            raise LimitReached(f"you can save at most {MAX_METRICS} metrics")
         if n["workspaces"] + workspaces > MAX_WORKSPACES:
             raise LimitReached(f"you can have at most {MAX_WORKSPACES} workspaces")
         if n["items"] + items > MAX_ITEMS:

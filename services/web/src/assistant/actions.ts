@@ -98,7 +98,9 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   // and model steps are those pages; the alerts list is about the user's companies, like Home;
   // the portfolio is the user's own and the agent has no part of it: an information page too
   const ctx: UiContext = {
-    page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio" ? "about"
+    // Your data (B2) is the user's own too: nothing of it goes to the assistant
+    page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio"
+      || route.view === "data" ? "about"
       : route.view === "alerts" ? "home"
       : route.view === "analysis" ? (route.step === "thesis" || route.step === "model" ? route.step : "workspace")
       : route.view,

@@ -43,6 +43,12 @@ with its measurements.
   first, and why they changed (a split, another line, the company's restatement). Gold keeps a
   history of itself, built by its own pipeline ([db](db/DESIGN.md#086_financials_knownsql),
   [query-api](services/query-api/README.md#point-in-time)).
+- **Bring your own data.** Upload a CSV of your own figures by company and date (checked before
+  anything is stored, companies matched exactly by ticker or CIK, each row known from its
+  publication date or the upload day); formulas, charts and the company page read it beside
+  Tributary's figures as `mine.<dataset>.<field>`, and saved formulas become screener columns.
+  Owner-only under forced row-level security, never shared or mixed into Tributary's figures
+  ([query-api](services/query-api/README.md#your-data)).
 - **Revenue and segments** by business, geography and product, overlapping members never summed
   ([web](services/web/README.md)).
 - **Earnings and events.** Each release beside the 10-Q, the outlook quoted from the release, its

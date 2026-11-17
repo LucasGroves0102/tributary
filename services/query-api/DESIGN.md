@@ -25,6 +25,7 @@ carry the README's headings, so a README section's "Design notes" link lands on 
 - [Password accounts](#password-accounts)
 - [API keys](#api-keys)
 - [Connect your data](#connect-your-data)
+- [Your data](#your-data)
 - [Tests](#tests)
 - [Filing alerts](#filing-alerts)
 - [Statement callouts](#statement-callouts)
@@ -1086,6 +1087,112 @@ total share count; the response lists them in `share_classes`.
 Outbound: the provider adapters' hosts only (today `api.tiingo.com`) over HTTPS (Helm
 `uses: market-data`). Metric: `tributary_market_data_calls_total{provider,kind,result}`.
 The agent has no price tool: its citation contract has no shape for licensed data.
+
+## Your data
+
+B2 of the core plan: "you bring the data, Tributary brings the analysis and its own data". This
+batch is datasets (B2c) and own metrics (B2d), owner-only. Organisation sharing and own files are
+designed below and come next.
+
+**Storage** (tributary migration 100). `userdata.datasets` (name, title, fields, units, currency,
+`known_from`, counts, `bytes`) and `userdata.rows` (`dataset_id, user_id, company_id, day,
+known_at, vals numeric[]`, PK `(dataset_id, company_id, day, known_at)`), beside gold so formulas,
+the screener and a later SQL workspace (B3a) join them in one query; `userdata.series` is the same
+one value a row for that workspace. Wide rows, not one row a value: the densest file allowed
+(180,000 rows of 48 fields, 8.7M values) is ~100 MB as arrays against ~1 GB as single values, and
+stores in ~7 s end to end (measured locally, the full upload). In every backup: unlike gold, none
+of it can be rebuilt.
+
+**Access.** Forced row-level security on all three tables, policies `TO query_api` keyed on
+`app.user_id` (USING and WITH CHECK), so a session that hasn't named the user reads and writes
+nothing, the owner's login included; a row's foreign key carries the user id, so it can't hang off
+another user's dataset. Every route also filters on the JWT `sub` (or the API key's row). A
+dataset's companies are matched by public identity only, and reading one's own rows needs no tier:
+nothing about Tributary's data is revealed by them. A formula or metric naming a dataset looks it up
+under the caller's RLS only: another user's name reads as "You have no dataset", suggestions come
+only from the caller's names, and names reach SQL only as a bound dataset id and field position.
+Tests: `tests/test_datasets_db.py` (two users through every route, SQL as `query_api`, API key
+scopes, sandboxes, names as SQL) and `test_datasets_csv.py`.
+
+**The file** (`datasets_csv.py`). Read by hand, two passes over the decoded text (a check that
+keeps one small key a row, then the values for storing), so a 20 MB file costs ~150 MB at worst;
+one file at a time per process (`BoundedSemaphore`), and the pod's limit is 512 MiB. A non-number
+in a field refuses the whole file: values are numbers only, so nothing a spreadsheet would run
+(`=cmd`) or a reader would follow is ever stored, and an answer quotes no cell (rows and columns
+only; the web reads the header itself to offer the columns). A publication column is used only
+when the upload names it (a guess would decide what was known when).
+
+**Point in time.** `known_at` = the declared publication date (never after the upload day), else
+the upload day in US Eastern, as B1 dates filings. As of D a row counts from `known_at <= D`, the
+latest version per (company, day) wins. Append mode inserts a row only when it differs from the
+version known before it (numeric equality), so a re-upload of an unchanged file adds no versions and
+a corrected value becomes a later one; replace mode starts the history again (honest, if lossy:
+nothing is ever read before it was known).
+
+**Formulas** (`formula/compile.py`). Dataset inputs are a second branch of `keyed` over
+`userdata.field_points`, which labels each day with gold.financials' own fiscal (from the
+company's fiscal year end) and calendar (`day - 35`) rules: a dataset of period ends lines up with
+Tributary's quarters, fiscal or calendar, and the latest day in a quarter counts (as for gold's
+rows). A field is never summed into a TTM (`ttm()` and the TTM view read it as given). Money is in
+the dataset's currency; `_input_currencies` refuses mixing it with another. A formula with no dataset
+compiles to exactly the SQL it always did.
+
+**Own metrics in the screener** (`screener.py`, "Own metrics"). Evaluated at read time, at most 5 a
+screen: per company, each input's latest reading (078's stored figures through
+`gold.screen_reading`, or as of a day `gold.latest_reading`) or the latest day of the dataset
+field, then the formula over the comparable values (k's rule: no n/m, n/a, old, stale or other
+currency), so a reading that isn't a value never makes one. Sorts and filters take it like any
+column (the ranked stage reads it for every company only when it sorts or filters). No ticker (each
+row is its own company) and no lag (only the latest figures are read). Materialising them is the
+fallback if a sort over the catalog grows slow.
+
+**Limits and why.** The plan's: 20 MB, 200,000 rows x 50 columns a file, 50 datasets and 200 MB
+(of uploads, counted as sent) per user, 10 uploads an hour (plus 20 previews), 20 metrics. Added:
+`USER_DATA_SPACE_MB` (default 4 GB of rows on disk across everyone; past it 507 "no room", a number
+never shown) because the server is one home disk and anyone can sign in with GitHub. Demo
+sandboxes can't upload (a day-long anonymous user, like webhooks); they can save metrics.
+
+**Deleting an account.** Nothing deletes GitHub or password accounts automatically (only sandboxes
+expire, and they hold no datasets). If the owner deletes one, delete its datasets too, as
+`postgres` (or `SET ROLE query_api` with `app.user_id` set to it): `DELETE FROM userdata.datasets
+WHERE user_id = '<id>'` (rows cascade).
+
+### Next: organisation sharing (B2a, designed, not built)
+
+- App DB (a new migration): `uploads (upload_id uuid PK, owner_id → users, kind 'dataset' | 'file',
+  org_shared bool, REPLICA IDENTITY FULL)`, one row per dataset or file, written by the Query API in
+  the dataset's transaction (two databases: the app row first, the userdata row after, a reconcile
+  sweep deleting app rows without data); streamed by CDC (Debezium `table.include.list`).
+- OpenFGA: `type upload` with `owner: [user]`, `shared_org: [organization]`, `define viewer: owner
+  or member from shared_org`; written only by authz-sync from the CDC topic (the model test in
+  `authz/`; `make authz` re-applies the model; nothing by hand).
+- Postgres mirror: `authz.upload_viewers(user_id, upload_id)` written by authz-sync like
+  `user_access`, and `authz.readable_uploads()` (plain SQL, one SELECT, like readable_companies);
+  `userdata.*` policies become `dataset_id IN (SELECT u FROM authz.readable_uploads() u)` for SELECT,
+  owner-only for writes.
+- Routes: every read `require(user, "viewer", "upload:<id>")` first; writes stay owner-only; a shared
+  dataset reads in formulas as `org.<dataset>.<field>` (another namespace, so a member's own names
+  never collide). Adversarial tests: a member reads, an ex-member stops within the propagation
+  bound, a non-member gets the same 404, writes refused.
+- Owner's step on hermes: none beyond the deploy (the model is applied by the existing authz job);
+  CI: the propagation suite gains the share/unshare timing.
+
+### Next: own files (B2b, designed, not built)
+
+- A new `upload-parser` service (its own Deployment, `services/upload-parser`), consuming Kafka
+  `uploads.received` (key: upload id; idempotent on it; at-least-once like every consumer), with
+  CPU, memory and time limits and no egress (a NetworkPolicy allowing only Postgres and Kafka).
+  The Query API stores the original bytes (gzip `bytea STORAGE EXTERNAL`, 20 MB) and an outbox row in
+  one transaction, like documents; the parser sniffs magic bytes (PDF, DOCX, HTML, TXT, MD only),
+  caps pages and characters, guards against zip bombs, extracts text (pypdf, python-docx, the
+  parser's HTML text) and writes `userdata.passages` (offsets + tsvector, GIN) by the filings'
+  passage rule. Search gains `include=mine`; citations verify like filings (a quote inside the
+  stored text); served back only as attachments (octet-stream, CSP sandbox). Shared files are
+  untrusted text for every reader's assistant (prompt injection), like filings.
+- Owner's steps on hermes: a SCRAM user `upload-parser` and its secret (sops), its entry in
+  `deploy/helm/platform/files/kafka-acls.yaml` (read `uploads.received`, its consumer group), the
+  Deployment and NetworkPolicy in the Flux release, and the ToS line on uploaded content. The
+  assistant reading own files is a tool-schema change (replays re-recorded: money): MCP first.
 
 ## Tests
 

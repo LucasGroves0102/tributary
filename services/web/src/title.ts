@@ -43,6 +43,8 @@ function what(route: Route, k: Known): string {
       return "Settings";
     case "alerts":
       return "Alerts";
+    case "data":
+      return "Your data";
     case "portfolio":
       return route.import ? "Import from Fidelity" : route.holdingId ? `${k.holding?.(route.holdingId) ?? "Holding"} · Portfolio` : "Portfolio";
     case "workspace":

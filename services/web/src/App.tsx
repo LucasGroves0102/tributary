@@ -41,6 +41,7 @@ import {
   Search,
   ModelPage,
   PortfolioPage,
+  DataPage,
   Settings,
   Status,
   ThesisPage,
@@ -385,6 +386,8 @@ export function App(props: Props = {}) {
           if (item.kind === "report" || item.kind === "thesis" || item.kind === "model") {
             return go({ view: item.kind, itemId: item.item_id });
           }
+          // an own metric (B2d) lives on Your data, with the user's datasets
+          if (item.kind === "metric") return go({ view: "data" });
           if (item.kind === "chart") {
             keepDraft(`Opened ${item.name}.`);
             setChart(() => restoreChartState(item.state));
@@ -395,6 +398,11 @@ export function App(props: Props = {}) {
     },
     [saved, setChart, keepDraft],
   );
+
+  // the user's own metrics (B2d, Your data): offered as screener columns
+  const ownMetrics = useMemo(() => saved.list.state === "ok"
+    ? saved.list.workspaces.flatMap((w) => w.items.filter((i) => i.kind === "metric").map((i) => ({ item_id: i.item_id, name: i.name })))
+    : null, [saved.list]);
 
   // a thesis or model of an analysis project opens inside the project (its header and steps)
   const inProject = useMemo(() => {
@@ -748,6 +756,7 @@ export function App(props: Props = {}) {
                 }}
                 saveBar={saveBar({ kind: "screen", screen: route.screen ?? {} })}
                 columns={screenCols}
+                ownMetrics={ownMetrics}
                 columnPicker={views.editable ? (
                   <ColumnPicker
                     table="screener"
@@ -847,6 +856,8 @@ export function App(props: Props = {}) {
               <AlertsPage key={user} token={token} />
             ) : route.view === "portfolio" ? (
               <PortfolioPage key={`${user}:${route.import ? "import" : "holdings"}`} token={token} holdingId={route.holdingId} importing={!!route.import} />
+            ) : route.view === "data" ? (
+              <DataPage key={user} token={token} saved={saved.list.state === "unavailable" ? null : saved} />
             ) : route.view === "workspace" ? (
               <WorkspacePage
                 key={`${user}-${route.workspaceId}`}

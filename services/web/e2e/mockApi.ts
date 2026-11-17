@@ -104,7 +104,11 @@ export interface Fake {
   /** the portfolio (query_api/portfolio.py): holdings with their lots, and journal entries */
   holdings: PortfolioHolding[];
   journal: Record<string, unknown>[];
+  /** Your data (query_api/datasets.py): the datasets stored, each with NVDA's rows */
+  datasets: Record<string, unknown>[];
 }
+
+const DATA_LIMITS = { file_bytes: 20 * 2 ** 20, rows: 200000, columns: 50, datasets: 50, user_bytes: 200 * 2 ** 20, requests_per_hour: 30, uploads_per_hour: 10 };
 
 interface PortfolioHolding {
   id: string;
@@ -211,7 +215,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [], datasets: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -486,7 +490,22 @@ export async function mockApi(page: Page): Promise<Fake> {
       const key = sort.replace(/^-/, "");
       const val = (c: Co) => (key === "name" ? c.name : key === "revenue_growth_ttm" ? c.growth : key === "operating_margin_ttm" ? c.margin : c.revenue);
       rows = [...rows].sort((a, b) => (val(a) < val(b) ? -1 : val(a) > val(b) ? 1 : 0) * (sort.startsWith("-") ? -1 : 1));
-      return json({ as_of: "", total: rows.length, limit: 50, offset: 0, sort, columns: [], rows: rows.map(screenerRow) });
+      // the user's own metrics (query_api/screener.py "Own metrics"): a column each, m_<id without dashes>
+      const own = q.getAll("metric").flatMap((id) => {
+        const item = fake.items.get(id);
+        if (!item || item.kind !== "metric") return [];
+        const state = item.state as { formula: string; view?: string };
+        return [{ key: `m_${id.replace(/-/g, "")}`, metric: `m_${id.replace(/-/g, "")}`, span: state.view ?? "ttm", unit: "ratio", balance: false,
+          own: { item_id: id, name: item.name as string, formula: state.formula, display: "number" } }];
+      });
+      return json({ as_of: "", total: rows.length, limit: 50, offset: 0, sort, columns: own, rows: rows.map((c) => {
+        const row = screenerRow(c);
+        for (const o of own) {
+          row.values[o.key] = String(Math.round(c.revenue / 1e8) / 10);
+          (row.sources as Record<string, unknown>)[o.key] = null;
+        }
+        return row;
+      }) });
     }
     m = path.match(/^\/v1\/companies\/(\d{10})\/peers$/);
     if (m) {
@@ -529,7 +548,9 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     m = path.match(/^\/v1\/workspaces\/([^/]+)\/items$/);
     if (m && method === "POST") {
-      const item = { item_id: `i${++seq}`, workspace_id: m[1], kind: body.kind, name: body.name, created_at: now(), updated_at: now(), opened_at: null, state: body.state };
+      // a metric's id goes in the screener's address, which takes UUIDs only
+      const id = body.kind === "metric" ? `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}` : `i${++seq}`;
+      const item = { item_id: id, workspace_id: m[1], kind: body.kind, name: body.name, created_at: now(), updated_at: now(), opened_at: null, state: body.state };
       fake.items.set(item.item_id, item);
       return json(item, 201);
     }
@@ -562,6 +583,35 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
     if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
+    // Your data (query_api/datasets.py): a multipart upload, previewed (dry_run) or stored
+    if (path === "/v1/datasets" && method === "GET") return json({ datasets: fake.datasets, limits: DATA_LIMITS, uploads_allowed: true });
+    if (path === "/v1/datasets" && method === "POST") {
+      const form = req.postData() ?? "";
+      const field = (name: string) => form.match(new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)`))?.[1] ?? "";
+      const published = field("published_column");
+      const answer = { columns: { company: "ticker", date: "date", published: published ? "published" : null }, delimiter: "comma", decimal: ".",
+        suggested: { company_column: "Ticker", date_column: "Date", published_column: null },
+        left_out: { rows: [3], count: 1, companies: 1 }, blank_rows: 0, limits: DATA_LIMITS };
+      // the value columns: the file's header but the company, date and publication columns
+      const header = (form.split('filename="data.csv"')[1]?.split("\r\n\r\n")[1] ?? "").split("\n")[0]!.split(",");
+      const units = Object.fromEntries(field("units").split(",").filter(Boolean).map((p) => p.split(":")));
+      const fields = header.map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_"))
+        .filter((n) => n && !["ticker", "date", published.toLowerCase()].includes(n)).map((name) => ({ name, unit: units[name] ?? "number" }));
+      if (field("dry_run") === "true") {
+        return json({ ...answer, preview: true, name: field("name"), title: field("title"), fields, rows: 1, companies: 1,
+          first_day: "2026-07-26", last_day: "2026-07-26", known_from: published ? "column" : "upload", usage: { datasets: 0, bytes: 0, requests: 1, uploads: 0 } });
+      }
+      const dataset = { dataset_id: `00000000-0000-4000-8000-00000000000${fake.datasets.length + 1}`, name: field("name"), title: field("title"),
+        fields, currency: "USD", known_from: published ? "column" : "upload", rows: 1, values: 1, companies: 1, bytes: form.length, first_day: "2026-07-26",
+        last_day: "2026-07-26", created_at: now(), uploaded_at: now() };
+      fake.datasets.push(dataset);
+      return json({ ...answer, preview: false, dataset, stored: 1, unchanged: 0 });
+    }
+    m = path.match(/^\/v1\/companies\/(\d{10})\/datasets$/);
+    if (m) {
+      return json({ company_id: m[1], datasets: m[1] === NVDA ? fake.datasets.map((d) => ({
+        ...d, rows_here: [{ day: "2026-07-26", known_at: "2026-10-21", values: { stores: "12" } }] })) : [] });
+    }
     // the portfolio and journal (query_api/portfolio.py, journal.py)
     if (path === "/v1/portfolio") return json(portfolioAnswer(fake.holdings));
     m = path.match(/^\/v1\/portfolio\/position\/(\d{10})$/);

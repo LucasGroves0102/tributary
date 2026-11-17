@@ -12,6 +12,7 @@ from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
 from query_api.connections import AppConnections, market_data_from_env
+from query_api.datasets import AppUserData, space_from_env
 from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
 from query_api.password_accounts import AppPasswordAccounts
 from query_api.portfolio import AppPortfolio
@@ -66,6 +67,8 @@ def build_app():
         api_key_limits=Limits.from_env(os.environ),
         # holdings and the decision journal (owner-only; prices only the user's own)
         portfolio=AppPortfolio(app_pool) if app_pool else None,
+        # Your data: datasets beside gold (owner-only; USER_DATA_SPACE_MB caps everyone's)
+        userdata=AppUserData(pool, space_from_env(os.environ)),
     )
 
 

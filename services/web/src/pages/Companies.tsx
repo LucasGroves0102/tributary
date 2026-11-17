@@ -17,6 +17,7 @@ import {
   GROUP_SORT,
   hasValueFilter,
   isEmpty,
+  MAX_METRICS,
   MONTHS,
   PAGE_SIZE,
   screenParams,
@@ -25,14 +26,16 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
+import { metricKey } from "../data/dataset";
 import { paren } from "../format";
 import { FigureText } from "../components/FigureText";
+import { MenuButton } from "../components/MenuButton";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { go, href } from "../route";
 import { useScope } from "../scope";
-import type { Screener, Sectors } from "../types";
+import type { ColumnInfo, Screener, Sectors } from "../types";
 import type { ColumnSpec } from "../views/model";
 import { TableScroll } from "../components/TableScroll";
 
@@ -49,6 +52,20 @@ interface Props {
   columns?: ColumnSpec[];
   /** "Columns" (views/Editors ColumnPicker) */
   columnPicker?: ReactNode;
+  /** the user's own metrics (B2d: saved formulas, Your data), offered as columns; null: none */
+  ownMetrics?: { item_id: string; name: string }[] | null;
+}
+
+/** An own metric's column as the table shows it, from the API's column info (`own`). */
+export function ownColumn(info: ColumnInfo): ColumnSpec {
+  const own = info.own!;
+  const kind: ColumnSpec["kind"] =
+    info.unit === "USD" ? "usd"
+      : info.unit === "USD/shares" ? "eps"
+        : info.unit === "shares" ? "shares"
+          : info.unit === "ratio" ? (own.display === "multiple" ? "x" : own.display === "number" ? "num" : "pct")
+            : "num";
+  return { key: info.key, label: own.name, long: `${own.name} (your metric: ${own.formula})`, period: info.span === "ttm" ? "TTM" : "quarter", kind };
 }
 
 type State =
@@ -62,7 +79,7 @@ type State =
  * bookmarked, shared and undone with Back. In a demo sandbox (scope.ts) it screens only the
  * demo's companies (`access=financials`, the API's own filter), so "only companies I can
  * read" is always on and not offered. */
-export function Companies({ token, screen: asked, watched, onWatch, onChart, saveBar, columns = DEFAULT_SPECS, columnPicker }: Props) {
+export function Companies({ token, screen: asked, watched, onWatch, onChart, saveBar, columns: chosen = DEFAULT_SPECS, columnPicker, ownMetrics = null }: Props) {
   const scope = useScope();
   // in a sandbox the filters shown never include "mine": it is implied
   const screen = useMemo(() => (scope ? { ...asked, mine: undefined } : asked), [scope, asked]);
@@ -71,7 +88,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   const [note, setNote] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [sectorList, setSectorList] = useState<Sectors | null>(null);
-  const columnKeys = columns.map((c) => c.key).join(",");
+  const columnKeys = chosen.map((c) => c.key).join(",");
   const params = useMemo(
     () => screenParams(scope ? { ...screen, mine: true } : screen, columnKeys.split(",")),
     [scope, screen, columnKeys],
@@ -122,7 +139,22 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   };
 
   const data = result.state === "ok" ? result.data : null;
+  // the chosen columns, then the user's own metrics the API evaluated (B2d)
+  const columns = useMemo(() => [...chosen, ...(data?.columns ?? []).filter((c) => c.own).map(ownColumn)], [chosen, data]);
   const rows = useMemo(() => (data ? data.rows.map((r) => screenRow(r, columns)) : []), [data, columns]);
+  const metricIds = screen.metric ?? [];
+  const metricMenu = ownMetrics && ownMetrics.length > 0 ? (
+    <MenuButton label="Your metrics" title={`Your own formulas as columns, up to ${MAX_METRICS} (Your data)`} items={ownMetrics.map((m) => ({
+      label: m.name,
+      checked: metricIds.includes(m.item_id),
+      disabled: !metricIds.includes(m.item_id) && metricIds.length >= MAX_METRICS,
+      onCheckedChange: (on: boolean) => {
+        const next = on ? [...metricIds, m.item_id] : metricIds.filter((id) => id !== m.item_id);
+        const sortGone = !on && (screen.sort ?? "").replace(/^-/, "") === metricKey(m.item_id);
+        set({ metric: next.length ? next : undefined, ...(sortGone ? { sort: undefined } : {}) });
+      },
+    }))} />
+  ) : null;
   const masked = rows.filter((r) => !r.readable).length;
   const total = data?.total ?? null;
 
@@ -148,6 +180,7 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
           {exporting ? "Exporting…" : "Export CSV"}
         </button>
         {columnPicker}
+        {metricMenu}
         {saveBar}
       </div>
       {note && <p className="empty error">{note}</p>}

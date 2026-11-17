@@ -11,6 +11,12 @@ import type {
   ApiKeyCreated,
   ApiKeys,
   ApiKeyScope,
+  CompanyDatasets,
+  Dataset,
+  DatasetProblem,
+  Datasets,
+  DatasetUpload,
+  FieldUnit,
   KeyRoutesDoc,
   AuthProviders,
   PasswordSignedIn,
@@ -329,6 +335,15 @@ export function olderState(state: object): object | null {
     delete out.sort;
     changed = true;
   }
+  // a screen's own metrics (B2d) and a sort on one
+  if ("metric" in out) {
+    delete out.metric;
+    changed = true;
+  }
+  if (typeof out.sort === "string" && /^-?m_[0-9a-f]{32}$/.test(out.sort)) {
+    delete out.sort;
+    changed = true;
+  }
   // a comps table's bank columns (F4): an older API knows only the first eleven
   if (Array.isArray(s.cols) && s.cols.some((c) => !OLDER_COMPARE_COLUMNS.has(c as string))) {
     const kept = (s.cols as string[]).filter((c) => OLDER_COMPARE_COLUMNS.has(c));
@@ -360,7 +375,7 @@ async function tolerantSave<T>(save: (state: object) => Promise<T>, state: objec
   }
 }
 
-export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind, name: string, state: object) =>
+export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind | "metric", name: string, state: object) =>
   tolerantSave((s) => sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state: s }), state);
 
 /** The item with its state, without recording it as opened. */
@@ -1025,3 +1040,55 @@ export const editJournalEntry = (token: string, id: string, body: Partial<Omit<J
 
 export const deleteJournalEntry = (token: string, id: string) =>
   sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/journal/${enc(id)}`);
+
+// --- Your data (B2c, B2d: query_api/datasets.py) ---------------------------------------------------
+
+/** The file was refused as a whole: each problem by row and column (never a cell's text). */
+export class UploadRefused extends ApiError {
+  constructor(
+    message: string,
+    readonly problems: DatasetProblem[],
+    readonly count: number,
+    readonly hint: string | null,
+  ) {
+    super(message, 422);
+  }
+}
+
+/** The user's datasets and the limits; null from an older Query API (the deploy window). */
+export const datasets = (token: string) => orNullOn404(get<Datasets>(token, "/v1/datasets"));
+
+/** Uploads a CSV as multipart/form-data: into a new dataset (`datasetId` unset) or into one of
+ * the user's (`mode` replace or append). `dryRun`: a preview, nothing stored. The file goes only
+ * in this request; the browser keeps nothing. */
+export async function uploadDataset(token: string, file: Blob, fields: Record<string, string>,
+  opts: { datasetId?: string; dryRun?: boolean } = {}): Promise<DatasetUpload> {
+  const form = new FormData();
+  for (const [k, v] of Object.entries(fields)) if (v !== "") form.append(k, v);
+  if (opts.dryRun) form.append("dry_run", "true");
+  form.append("file", file, "data.csv");
+  const path = opts.datasetId ? `/v1/datasets/${enc(opts.datasetId)}/upload` : "/v1/datasets";
+  const r = await fetch(url(path, {}), { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+  if (r.status === 422) {
+    const body = await r.json().catch(() => ({}));
+    if (body.code === "file" && Array.isArray(body.errors)) {
+      throw new UploadRefused(String(body.detail ?? "The file can't be read as a dataset"), body.errors as DatasetProblem[],
+        Number(body.count ?? body.errors.length), typeof body.hint === "string" ? body.hint : null);
+    }
+    throw new ApiError(typeof body.detail === "string" ? body.detail : noDetail(r.status, r.statusText), 422);
+  }
+  return json<DatasetUpload>(r);
+}
+
+export const changeDataset = (token: string, datasetId: string, body: { title?: string; units?: Record<string, FieldUnit>; currency?: string }) =>
+  sendJson<Dataset>(token, "PATCH", `/v1/datasets/${enc(datasetId)}`, body);
+
+/** Deletes a dataset and its rows (sign-in only; a 404 means it's gone already). */
+export async function deleteDataset(token: string, datasetId: string): Promise<void> {
+  const r = await fetch(url(`/v1/datasets/${enc(datasetId)}`, {}), { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok && r.status !== 404) await json(r);
+}
+
+/** The company page's "Your data": null from an older Query API. */
+export const companyDatasets = (token: string, companyId: string, asOf?: string) =>
+  orNullOn404(get<CompanyDatasets>(token, `/v1/companies/${companyId}/datasets`, asOf ? { as_of: asOf } : {}));

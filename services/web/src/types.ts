@@ -228,8 +228,99 @@ export type UiAction = { label: string } & (
 export type SavedKind = "chart" | "comps" | "screen";
 /** What users write on their own pages: a thesis (Markdown) and a revenue model (app DB 009). */
 export type WrittenKind = "thesis" | "model";
-/** Every item kind: reports are written by the assistant (agent-api /v1/reports). */
-export type ItemKind = SavedKind | WrittenKind | "report";
+/** Every item kind: reports are written by the assistant (agent-api /v1/reports); a metric is
+ * the user's own saved formula (B2d, app DB 022), kept on Your data. */
+export type ItemKind = SavedKind | WrittenKind | "report" | "metric";
+
+/** An own metric's state (query-api workspaces.py MetricState). */
+export interface MetricState {
+  formula: string;
+  view?: "quarter" | "ttm";
+  display?: "percent" | "multiple" | "number";
+  description?: string;
+}
+
+/** A dataset field's unit (query-api datasets_csv.UNITS): how a formula reads it. */
+export type FieldUnit = "number" | "ratio" | "money" | "shares" | "per_share";
+
+/** One of the user's own datasets (Query API /v1/datasets, B2c): only they can read it. */
+export interface Dataset {
+  dataset_id: string;
+  /** formulas read it as mine.<name>.<field> */
+  name: string;
+  title: string;
+  fields: { name: string; unit: FieldUnit }[];
+  currency: string;
+  /** "column": each row's own publication date; "upload": known from the day it was uploaded */
+  known_from: "column" | "upload";
+  rows: number;
+  values: number;
+  companies: number;
+  bytes: number;
+  first_day: string | null;
+  last_day: string | null;
+  created_at: string;
+  uploaded_at: string;
+}
+
+export interface DatasetLimits {
+  file_bytes: number;
+  rows: number;
+  columns: number;
+  datasets: number;
+  user_bytes: number;
+  requests_per_hour: number;
+  uploads_per_hour: number;
+}
+
+export interface Datasets {
+  datasets: Dataset[];
+  limits: DatasetLimits;
+  /** false for a demo sandbox: uploads need a permanent account */
+  uploads_allowed: boolean;
+}
+
+/** A problem with an uploaded file: where (spreadsheet row, 1-based column), never the cell. */
+export interface DatasetProblem {
+  code: string;
+  message: string;
+  row: number | null;
+  column: number | null;
+}
+
+/** What an upload says besides the dataset: the columns used, rows left out by number. */
+interface UploadAnswer {
+  columns: { company: string; date: string; published: string | null };
+  suggested: { company_column: string; date_column: string; published_column: string | null };
+  delimiter: "comma" | "semicolon" | "tab";
+  decimal: "." | ",";
+  /** rows whose company matched no ticker or CIK: left out, never guessed */
+  left_out: { rows: number[]; count: number; companies: number };
+  blank_rows: number;
+  limits: DatasetLimits;
+}
+
+export type DatasetUpload =
+  | (UploadAnswer & {
+      preview: true;
+      name: string;
+      title: string;
+      fields: { name: string; unit: FieldUnit }[];
+      rows: number;
+      companies: number;
+      first_day: string;
+      last_day: string;
+      known_from: "column" | "upload";
+      usage: { datasets: number; bytes: number; requests: number; uploads: number };
+    })
+  | (UploadAnswer & { preview: false; dataset: Dataset; stored: number; unchanged: number });
+
+/** The company page's "Your data": each of the user's datasets with rows for the company. */
+export interface CompanyDatasets {
+  company_id: string;
+  known_on?: string;
+  datasets: (Dataset & { rows_here: { day: string; known_at: string; values: Record<string, string | null> }[] })[];
+}
 
 /** "Check my thesis" (agent-api thesis_check.py; stored by the Query API, thesis_checks.py,
  * app DB 010). Numbers in `stats` are ratios; a year's growth and margin are percent as typed.
@@ -874,6 +965,8 @@ export interface ColumnInfo {
   unit: string;
   /** a point in time: its _ttm column is the same number as its _q one */
   balance?: boolean;
+  /** one of the user's own metrics (B2d: the screener's `metric`): column key m_<item id> */
+  own?: { item_id: string; name: string; formula: string; display: "percent" | "multiple" | "number" | null };
 }
 
 /** How to read a screener value (migration 035): not_applicable and not_meaningful give a reason,
@@ -1035,6 +1128,9 @@ export interface FormulaInput {
   span: "quarter" | "ttm";
   lag_quarters: number;
   unit: string;
+  /** the user's own dataset this input reads (mine.<dataset>.<field>; B2c) */
+  dataset?: string;
+  dataset_id?: string;
 }
 
 export type FormulaValidation =
@@ -1056,15 +1152,17 @@ export interface FormulaPoint {
     period_start: string | null;
     period_end: string;
     value: string;
-    value_source: "reported" | "derived";
+    /** "yours": the user's own data (B2c): no filing (`citation` null), the day it was known */
+    value_source: "reported" | "derived" | "yours";
     citation: {
       accession_no: string;
       form: string;
       filed: string;
       source_accessions: string[] | null;
       filing_url: string | null;
-    };
-    freshness: { filed: string; ingested_at: string };
+    } | null;
+    freshness?: { filed: string; ingested_at: string };
+    known_at?: string;
   }[];
   source_accessions: string[];
 }

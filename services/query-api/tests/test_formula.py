@@ -6,7 +6,83 @@ from decimal import Decimal
 import pytest
 
 from query_api.formula import FormulaError, analyze, compile_formula, parse, to_dict
+from query_api.formula.check import DatasetInfo
 from query_api.formula.grammar import MAX_DEPTH, MAX_LENGTH, BinOp, Call, Lag, Neg, Num, Ref
+
+
+def _stores() -> dict[str, DatasetInfo]:
+    """The caller's own dataset (B2c), as query_api.datasets reads it for a formula."""
+    return {"stores": DatasetInfo("00000000-0000-4000-8000-000000000001", "stores",
+                                  ("count", "sales", "share"), ("number", "money", "ratio"))}
+
+
+def test_mine_refs_parse_by_how_many_names():
+    ast = parse("mine.Stores.Count")
+    assert isinstance(ast, Ref)
+    assert (ast.dataset, ast.metric, ast.ticker) == ("stores", "count", None)
+    assert ast.key == "mine.stores.count" and ast.dataset_pos == 5 and ast.metric_pos == 12
+    ast = parse("nvda.mine.stores.count")
+    assert isinstance(ast, Ref)
+    assert (ast.ticker, ast.dataset, ast.ticker_length) == ("NVDA", "stores", 4)
+    assert to_dict(parse("mine.stores.count"))["dataset"] == "stores"
+    assert "dataset" not in to_dict(parse("KO.revenue"))
+    # two names are always TICKER.metric: a company whose ticker is MINE stays reachable
+    two = parse("MINE.revenue")
+    assert isinstance(two, Ref) and two.ticker == "MINE" and two.dataset is None
+    for bad in ("a.b.c", "KO.revenue.x", "a.b.mine.c", "mine.stores.", "mine..x"):
+        with pytest.raises(FormulaError):
+            parse(bad)
+    with pytest.raises(FormulaError, match="Unexpected '.'"):
+        parse("a.mine.b.c.d")
+
+
+def test_mine_refs_take_their_units_and_never_a_ttm():
+    a = analyze(parse("revenue / mine.stores.count"), "ttm", _stores())
+    assert a.unit == "USD" and [i.ref for i in a.inputs] == ["ttm(revenue)", "mine.stores.count"]
+    assert a.inputs[1].span == "quarter" and a.datasets["stores"].dataset_id.endswith("1")
+    share = analyze(parse("mine.stores.share"), "quarter", _stores())
+    assert (share.unit, share.display) == ("ratio", "percent")
+    count = analyze(parse("mine.stores.count[-4q]"), "quarter", _stores())
+    assert (count.unit, count.display) == ("ratio", "number")
+    assert count.inputs[0].ref == "mine.stores.count[-4q]"
+    assert analyze(parse("mine.stores.sales - revenue"), "quarter", _stores()).unit == "USD"
+    with pytest.raises(FormulaError, match="Can't subtract"):
+        analyze(parse("mine.stores.count - revenue"), "quarter", _stores())
+
+
+def test_unknown_datasets_and_fields_suggest_only_the_callers_own():
+    with pytest.raises(FormulaError) as e:
+        analyze(parse("mine.stores.cuont"), "quarter", _stores())
+    assert (e.value.code, e.value.hint) == ("unknown_field", "Did you mean count?")
+    with pytest.raises(FormulaError) as e:
+        analyze(parse("mine.stroes.count"), "quarter", _stores())
+    assert (e.value.code, e.value.hint) == ("unknown_dataset", "Did you mean stores?")
+    with pytest.raises(FormulaError) as e:
+        analyze(parse("mine.stores.count"), "quarter", None)
+    assert e.value.code == "unknown_dataset" and "stores" not in (e.value.hint or "")
+    # every unknown name at once, a dataset's beside a metric's
+    with pytest.raises(FormulaError) as e:
+        analyze(parse("mine.x.y + revnue"), "quarter", _stores())
+    assert {p.code for p in e.value.all()} == {"unknown_dataset", "unknown_metric"}
+
+
+def test_a_formula_with_your_data_binds_its_dataset_and_field_by_id_and_position():
+    ast = parse("revenue / mine.stores.count")
+    a = analyze(ast, "quarter", _stores())
+    c = compile_formula(ast, a, {None: "0000320193"}, "fiscal")
+    assert "userdata.field_points(l.dataset_id, l.company_id, l.position" in c.sql
+    assert "stores" not in c.sql and "mine." not in c.sql
+    assert "00000000-0000-4000-8000-000000000001" in c.params
+    assert c.sql.count("%s") == len(c.params)
+    only = parse("mine.stores.sales")
+    c = compile_formula(only, analyze(only, "quarter", _stores()), {None: "0000320193"},
+                        "calendar")
+    assert "gold.financials" not in c.sql and c.alignment == "calendar"
+    assert "USD" in c.params  # money in the dataset's own currency
+    # a formula without your data compiles as it always did
+    plain = parse("revenue")
+    assert "userdata" not in compile_formula(plain, analyze(plain), {None: "0000320193"},
+                                             "fiscal").sql
 
 
 def error(src: str, view: str = "quarter") -> FormulaError:

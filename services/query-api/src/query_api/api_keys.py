@@ -123,6 +123,11 @@ READ_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/v1/workspace-items/{item_id}"),
     ("GET", "/v1/workspace-items/{item_id}/versions"),
     ("GET", "/v1/workspace-items/{item_id}/versions/{version_id}"),
+    # B2c: the user's own datasets (owner-only)
+    ("GET", "/v1/datasets"),
+    ("GET", "/v1/datasets/{dataset_id}"),
+    ("GET", "/v1/datasets/{dataset_id}/rows"),
+    ("GET", "/v1/companies/{company_id}/datasets"),
 })
 WRITE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("PUT", "/v1/watchlist/{company_id}"),
@@ -133,6 +138,10 @@ WRITE_ROUTES: frozenset[tuple[str, str]] = frozenset({
     ("POST", "/v1/workspaces/{workspace_id}/items"),
     ("PUT", "/v1/workspace-items/{item_id}"),
     ("POST", "/v1/workspace-items/{item_id}/duplicate"),
+    # B2c: uploading and changing the user's own datasets (deleting one stays sign-in only)
+    ("POST", "/v1/datasets"),
+    ("POST", "/v1/datasets/{dataset_id}/upload"),
+    ("PATCH", "/v1/datasets/{dataset_id}"),
 })
 KEY_ROUTES: dict[tuple[str, str], Scope] = {
     **{r: "read" for r in READ_ROUTES}, **{r: "write" for r in WRITE_ROUTES}}

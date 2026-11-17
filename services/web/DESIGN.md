@@ -1238,6 +1238,35 @@ a correction); journal text renders as plain text (`pre-wrap`), never Markdown; 
 24 hours offers only Correct, which writes a new entry shown under it. The assistant gets nothing
 of it: the page is "about" to agent-api (`uiContext`) and suggests nothing.
 
+## Your data
+
+`#/data` (`data/DataPage.tsx`, `data/dataset.ts`; query-api README "Your data"), in the left nav
+(g d). Four folios: **Datasets** (each with its formula name `mine.<name>`, fields with their units
+in the hover, counts, days, how its rows are dated; More: upload a newer file, delete after a
+confirm, which can't be undone), **Upload**, **Metrics**, **How it reads**.
+
+Upload: the browser reads only the file's first 64 KB, to list the header's columns (`headerOf`,
+`guessColumns`: the company and date columns by their usual names, a publication date only
+suggested, never chosen for the user). The user names the formula name, the three columns, each
+value column's unit and the money's currency. Check it posts the file as a preview (`dry_run`):
+what's shown is the API's answer (rows, companies, days, the rows left out by number, how rows are
+dated) or each problem by row and column, never a cell (the server quotes none either). Store
+sends it again for real. The file never goes to storage, a URL or a log. A demo sandbox sees why
+it can't upload. `simplify` and the column names twin query-api `datasets_csv.py` (pre-fill only).
+
+Metrics: a name, a formula (checked by `/v1/formulas/validate` before saving, with a placeholder
+company: it reads no data) and the view it reads in; saved as a workspace item of kind `metric`
+into "Your metrics" (made on first use). Screen with it opens Companies with `?metric=<id>`;
+Companies' "Your metrics" menu adds or removes up to five, and their columns come from the API's
+column info (`own`: name, formula, display; `ownColumn` words the kind, `num` for a plain number).
+A metric opened from the sidebar goes to this page.
+
+The company page's Overview ends with **Your data** (`company/YourData.tsx`) when the user has rows
+for the company: each dataset's latest days, values in their field's unit and currency
+(`fieldValue`), the day each was known in its hover, never a seal. Charts draw `mine.` inputs like
+any (`chart/series.ts` skips their sources: no filing). Nothing of it reaches the assistant (the
+page is "about" to agent-api).
+
 ## Finding a company
 
 Finding a company (`components/CompanySearch.tsx`): one server-backed combobox everywhere a
@@ -1477,4 +1506,7 @@ keys yet (the rest of the page is static). Data trust, part 2: an older API send
 tags-only wording); nothing new is requested. Portfolio: `/v1/portfolio` and the journal answering
 404 say the portfolio isn't available yet, the company page's holding line asks
 `/v1/portfolio/position` and shows nothing on a 404, and the bell counts `reviews_due` only when
-the unread answer has it.
+the unread answer has it. Your data: `/v1/datasets` answering 404 says it isn't available on this
+server yet; the company page's Your data panel asks `/v1/companies/{id}/datasets` and shows nothing
+on a 404; a saved screen refused for its own metrics (`metric`, or a sort on an `m_` column) is
+saved again without them; the screener sends `metric` only when the user chose one.

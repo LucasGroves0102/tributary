@@ -13,6 +13,7 @@ dependencies = [
     "prometheus-client>=0.20",
     "tributary-telemetry",
     "tzdata",  # zoneinfo data for America/New_York on slim images
+    "python-multipart>=0.0.20",  # dataset uploads (query_api.datasets: multipart/form-data)
 ]
 
 [project.optional-dependencies]

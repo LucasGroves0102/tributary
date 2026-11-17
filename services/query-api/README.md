@@ -77,7 +77,7 @@ tokens: `make token USER=alice`.
 | `GET /v1/data-notes?limit=&company_id=` | financials (every company covered) | the newest notes across the caller's companies, or up to 50 named ones |
 | `POST /v1/formulas/validate` | token | AST, unit and inputs, or errors with positions ([Formulas](#formulas)) |
 | `POST /v1/formulas/evaluate` | financials, every company in the formula | series; each point cites every input's filing |
-| `GET /v1/screener?columns=&where=&...&format=` | token | companies with a figure in these columns: metadata + latest values where permitted, each with how to read it ([Screener](#screener)) |
+| `GET /v1/screener?columns=&where=&...&metric=&format=` | token | companies with a figure in these columns: metadata + latest values where permitted, each with how to read it ([Screener](#screener)); `metric`: up to 5 of the caller's own metrics as columns ([Your data](#your-data)) |
 | `GET /v1/screener/columns` | | column keys, filer categories, size bands |
 | `GET /v1/watchlist?columns=&sort=&format=` | token, app DB | the caller's watchlist: metadata, last report, next expected filing, values where permitted |
 | `PUT` / `DELETE /v1/watchlist/{id}` | token, app DB | add / remove a company (grants nothing) |
@@ -127,6 +127,12 @@ app DB; [Portfolio](#portfolio)):
 | `GET /v1/portfolio/journal?company_id=&symbol=&limit=` | token | entries newest first: `kept`, `editable_until`, `corrects` |
 | `POST /v1/portfolio/journal` | token | `{company_id \| symbol, kind, why, sell_rules?, red_line_ids?, confidence?, decided_on?, corrects?}` |
 | `PATCH` / `DELETE /v1/portfolio/journal/{entry}` | token | within 24 hours of writing it; after, 409 (add a correction) |
+| `GET /v1/datasets` | token | the caller's datasets (fields and units, currency, counts, days, `known_from`), the limits, `uploads_allowed` ([Your data](#your-data)) |
+| `POST /v1/datasets` | token, not a demo sandbox; key: write | multipart: `file` (CSV) and `name`, optionally `title`, `company_column`, `date_column`, `published_column`, `units`, `currency`, `decimal`, `dry_run`; 422 `file` with problems by row and column; 409 at a limit or a taken name; 429 per hour; 507 when everyone's space is full |
+| `POST /v1/datasets/{id}/upload` | the same | a later file into one: `mode` replace (default) or append (same fields; unchanged rows skipped) |
+| `GET /v1/datasets/{id}`, `PATCH`, `DELETE` | token (DELETE sign-in only) | one dataset; its `title`, `units`, `currency`; delete it and its rows. Another user's is the same 404 |
+| `GET /v1/datasets/{id}/rows?company_id=&from=&to=&as_of=&versions=&limit=&offset=` | token | rows by company, newest day first, exact values by field; as known at the end of `as_of`, or every version |
+| `GET /v1/companies/{id}/datasets?as_of=` | token | the caller's datasets with rows for this company and their latest 12 days (the company page's Your data) |
 
 Saved work, preferences and the routes only agent-api calls (all owner-only, app DB):
 
@@ -203,8 +209,9 @@ Chart layers can be formulas (`formula/`; the grammar is in `grammar.py`'s docst
 `{"formula", "default_company", "basis", "view", "from", "to"}`. Units are checked, a
 dimensionless result says how it reads (`display`: percent, multiple or number), and inputs in
 two currencies are refused (422 `currency`). The compiled SQL holds no user input. An unknown
-ticker and an unreadable one give the same error. Grammar limits, alignment, n/m points and
-error shapes: [DESIGN.md](DESIGN.md#formulas).
+ticker and an unreadable one give the same error. `mine.<dataset>.<field>` (or
+`NVDA.mine.<dataset>.<field>`) reads the caller's own data ([Your data](#your-data)). Grammar
+limits, alignment, n/m points and error shapes: [DESIGN.md](DESIGN.md#formulas).
 
 ## Screener
 
@@ -477,6 +484,43 @@ Open holdings join the filing alerts' follows (source `portfolio`); a review fal
 held company files a 10-K or 10-Q after the holding was added and after the last `review` entry,
 and `GET /v1/alerts/unread` counts it (`reviews_due`). No API key reaches any of it (not in
 `KEY_ROUTES`), so neither does the MCP server; agent-api has no tool for it.
+
+## Your data
+
+A user's own time series by company and date, beside Tributary's figures (`datasets.py` and
+`datasets_csv.py`, their docstrings are the rules; tributary migration 100, schema `userdata`; app
+migration 022 for own metrics). Owner-only: forced row-level security keyed on `app.user_id` and a
+`user_id` filter on every statement; another user's dataset or metric is the same 404 or "You have
+no dataset". Nothing here grants anything, and none of it is mixed into Tributary's figures, the
+status page or anyone else's answers.
+
+- **Upload** a CSV (multipart `file`, preview with `dry_run=true`): a company column (a ticker or
+  CIK, matched exactly through `silver.resolve_company`; a row that matches nothing is left out and
+  listed by row number, never guessed), a date column (ISO) and columns of numbers. A file with a
+  non-number in a field (`=cmd` included) is refused whole, each problem by row and column, never
+  quoting a cell. `units` say how each field reads (number, ratio, money, shares, per_share);
+  money is in the dataset's `currency`, never converted.
+- **Point in time**: a row is known from its declared `published_column` date, else from the
+  upload day (US Eastern); as of a day only rows known by its end are read. `mode=append` keeps
+  revisions as versions and skips rows that didn't change.
+- **Formulas** read `mine.<dataset>.<field>` by bound ids (dataset id, field position): a date is a
+  period end, keyed into quarters by gold's own fiscal and calendar rules; inputs carry
+  `value_source: "yours"` and `known_at` instead of a citation.
+- **Own metrics** (a workspace item of kind `metric`: a formula, a view, at most 20 per user) are
+  screener columns `m_<id>` (`?metric=`, at most 5): evaluated at read time over each company's
+  latest figures (078's stored readings) and the latest day of the datasets they read, sortable and
+  filterable, blank (with the input's reading) where an input doesn't read as a value. No ticker or
+  lag in a column metric.
+- **Limits**: 20 MB, 200,000 rows and 50 columns a file; 50 datasets and 200 MB of uploads per
+  user; 30 requests (10 stored) an hour; one file read at a time per process; demo sandboxes can't
+  upload. API keys: reads with `read`, uploads with `write`, delete is sign-in only; the MCP server
+  reads them (`list_my_datasets`, `read_my_dataset`); agent-api has no tool.
+
+| Env | |
+|---|---|
+| `USER_DATA_SPACE_MB` | every user's rows on disk at most (default 4096); past it uploads answer 507 |
+
+Design, limits' reasons, organisation sharing and own files (next): [DESIGN.md](DESIGN.md#your-data).
 
 ## Statement callouts
 

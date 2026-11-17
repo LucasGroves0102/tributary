@@ -5,10 +5,13 @@
     unary   := '-' unary | postfix
     postfix := primary ('[' '-' INT ('q' | 'y') ']')?
     primary := NUMBER | ref | FUNC '(' expr ')' | '(' expr ')'
-    ref     := METRIC | TICKER '.' METRIC
+    ref     := METRIC | TICKER '.' METRIC | mine | TICKER '.' mine
+    mine    := 'mine' '.' DATASET '.' FIELD      (the caller's own data, B2c: check.py)
     FUNC    := ttm | abs
 
 Positions are 0-based character offsets into the source; `length` is the span to underline.
+A ref of two names is always TICKER.METRIC (a company with the ticker MINE stays reachable);
+`mine` starts a ref only as the first of three names or the second of four.
 """
 
 import re
@@ -69,10 +72,17 @@ class Num(Node):
 
 @dataclass(frozen=True)
 class Ref(Node):
-    metric: str               # lower case
+    metric: str               # lower case; a dataset's field when `dataset` is set
     ticker: str | None        # upper case; None = the default company
     metric_pos: int
     ticker_length: int = 0    # the ticker starts at pos
+    dataset: str | None = None  # lower case: mine.<dataset>.<metric>, the caller's own data
+    dataset_pos: int = 0
+
+    @property
+    def key(self) -> str:
+        """What the ref reads, without its company: "revenue" or "mine.stores.count"."""
+        return f"mine.{self.dataset}.{self.metric}" if self.dataset else self.metric
 
 
 @dataclass(frozen=True)
@@ -265,18 +275,37 @@ class _Parser:
                 self.depth -= 1
                 return self.node(Call(tok.pos, close.pos + 1 - tok.pos, name, arg))
             if self.peek().kind == ".":
-                self.next()
-                m = self.next()
-                if m.kind != "id":
-                    raise FormulaError(f"Expected a metric after '{tok.text}.'", m.pos,
-                                       len(m.text))
-                return self.node(Ref(tok.pos, self.end_of(m) - tok.pos, m.text.lower(),
-                                     tok.text.upper(), m.pos, len(tok.text)))
+                parts = [tok]
+                while self.peek().kind == "." and len(parts) < 4:
+                    self.next()
+                    m = self.next()
+                    if m.kind != "id":
+                        raise FormulaError(f"Expected a metric after '{parts[-1].text}.'",
+                                           m.pos, len(m.text))
+                    parts.append(m)
+                if len(parts) == 2:
+                    m = parts[1]
+                    return self.node(Ref(tok.pos, self.end_of(m) - tok.pos, m.text.lower(),
+                                         tok.text.upper(), m.pos, len(tok.text)))
+                return self.node(self.mine(parts))
             return self.node(Ref(tok.pos, len(tok.text), name, None, tok.pos))
         if tok.kind == "eof":
             raise FormulaError("Formula ends too early", tok.pos, 1,
                                "Add a metric or number after the operator")
         raise FormulaError(f"Unexpected '{tok.text}'", tok.pos)
+
+    def mine(self, parts: list[Token]) -> Ref:
+        """mine.<dataset>.<field> or TICKER.mine.<dataset>.<field>: the caller's own data."""
+        first, last = parts[0], parts[-1]
+        at = 1 if len(parts) == 4 else 0
+        if parts[at].text.lower() != "mine":
+            raise FormulaError("Too many names in a row", first.pos,
+                               self.end_of(last) - first.pos,
+                               "Write TICKER.metric, or mine.dataset.field for your own data")
+        ticker = first.text.upper() if at else None
+        dataset = parts[at + 1]
+        return Ref(first.pos, self.end_of(last) - first.pos, last.text.lower(), ticker,
+                   last.pos, len(first.text) if ticker else 0, dataset.text.lower(), dataset.pos)
 
 
 def to_dict(n: Node) -> dict:
@@ -285,8 +314,9 @@ def to_dict(n: Node) -> dict:
     match n:
         case Num(value=v):
             return {"type": "number", "value": str(v), **span}
-        case Ref(metric=m, ticker=t):
-            return {"type": "ref", "ticker": t, "metric": m, **span}
+        case Ref(metric=m, ticker=t, dataset=d):
+            return {"type": "ref", "ticker": t, "metric": m, **({"dataset": d} if d else {}),
+                    **span}
         case Lag(expr=e, quarters=q):
             return {"type": "lag", "quarters": q, "expr": to_dict(e), **span}
         case Call(name=name, arg=a):

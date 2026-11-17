@@ -18,6 +18,7 @@ OpenFGA keeps its own `openfga` database, migrated by OpenFGA itself.
 | `gold` | what the Query API serves, with provenance (FR6): `quarterly_financials`, `derived_financials` (TTM and computed metrics), `financials` / `latest_financials` (views), `filing_sections` (view), `segment_financials` (view `segments`), `section_search`, `section_diffs`, `section_changes`, `business_profiles`, `business_peers`, `business_mentions` | `gold.refresh_financials`, `gold.refresh_segments`, `gold.refresh_section_search`, parser-index, parser-peers |
 | `authz` | `user_access` (private grants: user, company, tier), `user_tiers` (each user's plan tiers), `public_access` (public catalog: company, tier); `readable_companies(tier)`, the read rule every policy uses | authz-sync |
 | `ops` | freshness and pipeline-health views for Grafana, the ops exporter and the public status page; the data-quality findings; the shared SEC rate limit; the document crawl's queue; the section index's checkpoint; daily completeness; doc-fetcher's outbox and insider queue | the services named per migration below |
+| `userdata` | a user's own data (migration 100): `datasets`, `rows` (by company, day and when known), `uploads` (the hourly limit), `series` (view); owner-only, forced RLS on `app.user_id`, nothing grants access; in every backup (it can't be rebuilt) | the Query API, as the user |
 
 Transforms are SQL functions (`silver.refresh_financial_facts`, `gold.refresh_quarterly_financials`,
 `gold.refresh_derived_financials`, `silver.refresh_company_metadata`, ...: [transforms/](transforms/README.md)
@@ -180,3 +181,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`085_point_in_time_pipeline.sql`](DESIGN.md#085_point_in_time_pipelinesql): gold's pipeline as pure functions of a knowledge date (`p_as_of`); the same rows.
 - [`086_financials_known.sql`](DESIGN.md#086_financials_knownsql): gold's history of itself (`gold.financials_known`): every version of every row, from the filing that first stated it; the 'known' catch-up kind.
 - [`087_point_in_time_reads.sql`](DESIGN.md#087_point_in_time_readssql): reading gold as of a day: `gold.financials_at`, the single-company read, the readings' probes with `p_as_of`, restatements.
+- [`100_userdata.sql`](DESIGN.md#100_userdatasql): Bring your own data: the schema `userdata` (a user's own datasets, their rows by company, day and when known, the upload log), owner-only under forced RLS, in every backup.
