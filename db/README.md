@@ -172,3 +172,4 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`082_sector_hvac_controls.sql`](DESIGN.md#082_sector_hvac_controlssql): SIC 3822 (Trane) in Industrials with the HVAC makers.
 - [`083_gross_sales_revenue.sql`](DESIGN.md#083_gross_sales_revenuesql): a trading venue's gross sales read as not-meaningful revenue (Bullish).
 - [`084_net_sales_gross_margin.sql`](DESIGN.md#084_net_sales_gross_marginsql): Walmart's and Costco's net sales, and their gross margin on them.
+- [`085_point_in_time_pipeline.sql`](DESIGN.md#085_point_in_time_pipelinesql): gold's pipeline as pure functions of a knowledge date (`p_as_of`); the same rows.

@@ -18,10 +18,10 @@
 SET LOCAL lock_timeout = '30s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: revenue_fallbacks_080.sql,
--- screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql,
--- rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql,
--- currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql,
+-- nothing, unless every newer backout has run (newest first: point_in_time_085.sql,
+-- revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql,
+-- revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql,
+-- banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql,
 -- filers_debt_050.sql, kpis_049.sql, bank_metrics_048.sql, interest_expense_043.sql) and this one
 -- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
@@ -34,7 +34,9 @@ BEGIN
         ('gold.amount_currency_of(text)', NULL),
         ('gold.annual_per_share(text,integer)', '7c5af423f8d31e10da7db51ee87018b3'),
         ('gold.best_facts(text[])', '62873ad55ef4c2f947442d18f9604f27'),
+        ('gold.best_facts(text[],date)', NULL),
         ('gold.companies_for_ciks(text[])', '71eb935f94130a3bfba07359561a5c8f'),
+        ('gold.derived_rows(text[],date,gold.quarter_row[])', NULL),
         ('gold.figure_facts(text,text,date)', '44aa5118a18f693837d60aaa72b243d4'),
         ('gold.filing_figures(text,text)', '29ad18c630f986e62b947fa423f2566a'),
         ('gold.latest_reading(text,text,text,text,date)', '2b1ce5dae3700a2524e6eed6466f2903'),
@@ -42,6 +44,7 @@ BEGIN
         ('gold.not_computed(text,text)', NULL),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', 'f314a4ec94a8dcb54f6644bc0933a6e4'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', NULL),
+        ('gold.quarterly_rows(text[],date)', NULL),
         ('gold.refresh_derived_financials(text[])', '67d01d71c8798a7bcffb691d9f26bf67'),
         ('gold.refresh_financials(text[])', '127cb472ccd41e6cc6d6768bfb1935a0'),
         ('gold.refresh_quarterly_financials(text[])', '6105303527f3d13c7b5f3e559467945f'),
@@ -49,6 +52,7 @@ BEGIN
         ('gold.screen_company(text)', '476ff18b646bc1ce48eb45d1980cac51'),
         ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', 'd89336966fbcc1d5b3b7ddafa8e5432c'),
         ('gold.usable_facts(text[])', 'd8acff13ecc467822ff38e15b6fd8b9b'),
+        ('gold.usable_facts(text[],date)', NULL),
         ('ops.check_financials(text[])', '40644268e3fce350dde68de157bacd60'),
         ('silver.refresh_filing_facts(text[])', '2f5e5eeefb1edf917bfb879e7071190d'),
         ('silver.refresh_financial_facts(text[])', 'b407aac7dbda2938ba7ebed789e3f2e3')
@@ -62,7 +66,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql, kpis_049.sql, bank_metrics_048.sql, interest_expense_043.sql');
+                'changed.', w.fn, 'point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql, filers_debt_050.sql, kpis_049.sql, bank_metrics_048.sql, interest_expense_043.sql');
         END IF;
     END LOOP;
 END

@@ -18,7 +18,7 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: none, this is the newest) and this one
+-- nothing, unless every newer backout has run (newest first: point_in_time_085.sql) and this one
 -- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
@@ -30,14 +30,17 @@ BEGIN
         ('gold.amount_currency_of(text)', '6d18237414dd02bfe4078cac3f7b429e'),
         ('gold.annual_per_share(text,integer)', '663430e80a6341f8a0e4227e1491e657'),
         ('gold.best_facts(text[])', '805280aad1147c74d415ea8cc33ba846'),
+        ('gold.best_facts(text[],date)', NULL),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
+        ('gold.derived_rows(text[],date,gold.quarter_row[])', NULL),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
         ('gold.latest_reading(text,text,text,text,date)', '097ab17641e6893f4284b9d08c621637'),
         ('gold.not_applicable_metrics(text,text)', '31aa1cba6092282684aaf6b699539359'),
         ('gold.not_computed(text,text)', 'a1d6b45f36a10d029335de6f30893f96'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
-        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '9f4c2cd4aeaefa663263efb806700f5d'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '81ab67cd9d086d5c9184ffb843304748'),
+        ('gold.quarterly_rows(text[],date)', NULL),
         ('gold.refresh_derived_financials(text[])', '6e52ee6444dc46cca8bbd52de1a6983e'),
         ('gold.refresh_financials(text[])', '4bd8545d1e9cf94fa665cdee21294039'),
         ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
@@ -45,6 +48,7 @@ BEGIN
         ('gold.screen_company(text)', 'd0ab770fb304683145115aeb8dcee30d'),
         ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', 'f110e0894f0dff22b6fb8fe0423313fe'),
         ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
+        ('gold.usable_facts(text[],date)', NULL),
         ('ops.check_financials(text[])', 'a8a94bf23f986a93f3f61c8fc5f35461'),
         ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
         ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2')
@@ -58,7 +62,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'none, this is the newest');
+                'changed.', w.fn, 'point_in_time_085.sql');
         END IF;
     END LOOP;
 END

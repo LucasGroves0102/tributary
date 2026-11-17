@@ -25,6 +25,16 @@ _spec.loader.exec_module(guards)
 # What each file must put back: the function's body as an older migration created it (None: the
 # function is gone). Independent of the guards, which are measured from the files themselves.
 RESTORES = {
+    "point_in_time_085.sql": {
+        "gold.usable_facts(text[])": "056_ifrs_currencies.sql",
+        "gold.best_facts(text[])": "080_revenue_industry_tags.sql",
+        "gold.refresh_quarterly_financials(text[])": "043_interest_expense_sign.sql",
+        "gold.refresh_derived_financials(text[])": "084_net_sales_gross_margin.sql",
+        "gold.usable_facts(text[],date)": None,
+        "gold.best_facts(text[],date)": None,
+        "gold.quarterly_rows(text[],date)": None,
+        "gold.derived_rows(text[],date,gold.quarter_row[])": None,
+    },
     "revenue_fallbacks_080.sql": {"gold.best_facts(text[])": "077_net_income_one_line.sql"},
     "screener_figures_078.sql": {
         "gold.latest_reading(text,text,text,text,date)": "069_readings_not_computed_stale.sql",

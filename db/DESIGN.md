@@ -954,3 +954,37 @@ cost of revenue) / net sales for every period with both, its inputs saying so; g
 computed. Walmart's quarter to Jul 2026 reads 25.4%, Costco's FY2026 11.1%. Reaches hermes like 073: the
 filing-facts job's extras pass reads both companies' stored documents and rebuilds their gold; no
 rules_version bump.
+
+### 085_point_in_time_pipeline.sql
+
+Point in time, part 1 (B1): gold's pipeline as pure functions of a knowledge date, so the rows gold
+believed on any past day can be computed by the very rules that build gold today. `gold.usable_facts`
+and `gold.best_facts` take `p_as_of` (facts filed by the end of that day; NULL: every fact): the
+filter sits in usable_facts' `facts` CTE, so the currency, borrowing, balance and debt rules see only
+what was filed by then. `filed` is the same for every fact of an accession (no exception on the
+golden set), so a filing is all in or all out. The bodies of 043's quarters and 084's derived rows
+became `gold.quarterly_rows(ids, p_as_of)` and `gold.derived_rows(ids, p_as_of, p_quarters)`; the
+writers are DELETE + INSERT from them, and refresh_quarterly_financials still returns the series' rows.
+
+Where a statement read back rows an earlier one had inserted, it reads a CTE of them, and the reads by
+key that had used gold's primary keys became sort passes (a CTE has no index and the planner
+estimates it at one row, so a join on it can turn into a scan per row: the first draft's derived step
+was 2.3x slower on the golden set and quadratic in a batch):
+- 043's gross profit: the quarter's revenue, cost, operating income, SG&A and R&D side by side by one
+  GROUP BY; its "no gross profit line overlapping by more than 7 days" by one window: a series' lines
+  overlap by 7 days at most and last 79-120 days, so none lies inside another and only the first
+  ending on or after the quarter's start + 7 can overlap it.
+- 040's sum of a stated year's quarters: those ending by its end + 7 less those starting before its
+  start - 7 (a quarter of at most 120 days starting that early ends before the year does), two
+  running sums; `in_series` a window over the same rows.
+- 063's two stated years within 7 days and "no TTM sum within 7 days": one window over the years and
+  the sums.
+- 040's latest short-term investments in the two years before a period and the TTM interest expense
+  at it: windows over the inputs `periods` is built from (end and value as text: the latest sorts last).
+
+Equal row for row. Locally: the golden reference set (97 companies) built at 084 and at 085:
+gold.quarterly_financials (24,252 rows), gold.derived_financials (22,384), ops.quality_findings (342)
+and gold.screen_figures (7,811) identical, EXCEPT both ways, every column but refreshed_at. Cost: the
+golden set's batches of 25 build in 0.42 s (quarters) and 0.45 s (derived) against 0.42 s and 0.42 s at
+084. 077's two correlated subqueries stay: per company they scan a handful of rows (its ProfitLoss
+years), and a replay runs per company (086).
