@@ -56,9 +56,15 @@ def detail_text(detail: Any) -> str:
     return text[:DETAIL_CHARS]
 
 
-def refusal(status: int, detail: str, retry_after: str | None) -> ApiError:
-    """The message a model gets for a Query API status."""
+def refusal(status: int, detail: str, retry_after: str | None,
+            app_token: bool = False) -> ApiError:
+    """The message a model gets for a Query API status (`app_token`: the caller connected
+    Tributary as an app, OAuth, rather than with an API key)."""
     said = f": {detail}" if detail else ""
+    if status == 401 and app_token:
+        return ApiError("Tributary refused this connection (it expired or was disconnected). "
+                        "Tell the user to connect Tributary again from their app.", status,
+                        "refused_key")
     if status == 401:
         return ApiError("Tributary refused the API key (unknown, expired or revoked). Tell the "
                         "user to make a new key in Tributary's Settings, API keys, and update "
@@ -119,7 +125,8 @@ class QueryApi:
             detail = detail_text(r.json().get("detail", ""))
         except (ValueError, AttributeError):
             detail = ""
-        raise refusal(r.status_code, detail, r.headers.get("retry-after"))
+        raise refusal(r.status_code, detail, r.headers.get("retry-after"),
+                      app_token=caller.authorization.startswith("Bearer tro_"))
 
     async def get(self, caller: Caller, path: str, params: dict[str, Any] | None = None) -> Any:
         return await self.request(caller, "GET", path, params=params)

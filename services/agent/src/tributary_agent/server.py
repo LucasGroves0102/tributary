@@ -40,6 +40,8 @@ from tributary_telemetry.http import forward_request_id, instrument, request_id_
 log = logging.getLogger("tributary_agent")
 # a personal API key (Query API api_keys.py): refused here, the assistant needs a sign-in
 API_KEY_PREFIX = "trb_"
+# a connected app's access or refresh token (Query API oauth.py): refused here too
+APP_TOKEN_PREFIXES = ("tro_", "trr_")
 
 
 class Turn(BaseModel):
@@ -268,6 +270,11 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             # a personal API key (Query API api_keys.py) never runs the assistant: it would
             # spend the user's questions from a script; sign in for that
             raise HTTPException(403, "API keys can't use the assistant: sign in to Tributary")
+        if creds.credentials.startswith(APP_TOKEN_PREFIXES):
+            # a connected app (Claude, ChatGPT) reads through the MCP server, never the
+            # assistant: it would spend the user's questions without them
+            raise HTTPException(403, "connected apps can't use the assistant: sign in to "
+                                     "Tributary")
         return creds.credentials
 
     def client_ip(request: Request) -> str:
