@@ -11,9 +11,11 @@ from query_api.api_keys import AppApiKeys, Limits
 from query_api.app import create_app
 from query_api.auth import check_secret
 from query_api.authorizer import FgaAuthorizer
+from query_api.client_metadata import HttpsDocumentFetcher
 from query_api.connections import AppConnections, market_data_from_env
 from query_api.datasets import AppUserData, space_from_env
 from query_api.github import AppAccounts, GitHubConfig, HttpGitHub
+from query_api.oauth import AppOAuth, OAuthConfig
 from query_api.password_accounts import AppPasswordAccounts
 from query_api.portfolio import AppPortfolio
 from query_api.providers import PROVIDERS
@@ -38,6 +40,10 @@ def build_app():
     github_config = GitHubConfig.from_env(os.environ)  # None unless both GITHUB_CLIENT_* set
     if github_config and app_pool is None:
         raise RuntimeError("GITHUB_CLIENT_ID needs APP_DATABASE_URL")
+    # connected apps (MCP OAuth): off unless OAUTH_ISSUER is set (malformed: fails at start)
+    oauth_config = OAuthConfig.from_env(os.environ)
+    if oauth_config and app_pool is None:
+        raise RuntimeError("OAUTH_ISSUER needs APP_DATABASE_URL")
     # Connect your data: off unless DATA_CONNECTIONS_KEY is set (malformed: fails at start)
     provider_http = httpx.Client(timeout=20, headers={"User-Agent": "Tributary"})
     market_data = market_data_from_env(
@@ -72,6 +78,10 @@ def build_app():
         userdata=AppUserData(pool, space_from_env(os.environ)),
         # saved screens that alert (the alerts job checks them; the routes save and list them)
         watches=AppWatches(app_pool) if app_pool else None,
+        # connected apps: the OAuth authorization server for the MCP server (query_api/oauth.py)
+        oauth=AppOAuth(app_pool) if oauth_config and app_pool else None,
+        oauth_config=oauth_config,
+        client_documents=HttpsDocumentFetcher() if oauth_config else None,
     )
 
 

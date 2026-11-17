@@ -445,7 +445,16 @@ class KeyAuth:
         return use.user_id
 
 
-def rate_headers(use: KeyUse, limits: Limits) -> dict[str, str]:
+class Remaining(Protocol):
+    """What the X-RateLimit-* headers say: a key's use (KeyUse) or a connected app's
+    (oauth.TokenUse)."""
+    @property
+    def minute_left(self) -> int: ...
+    @property
+    def day_left(self) -> int: ...
+
+
+def rate_headers(use: Remaining, limits: Limits) -> dict[str, str]:
     return {"X-RateLimit-Limit-Minute": str(limits.per_minute),
             "X-RateLimit-Remaining-Minute": str(use.minute_left),
             "X-RateLimit-Limit-Day": str(limits.per_day),

@@ -450,10 +450,11 @@ def every_signed_in_route(app):
                 yield m, r.path
 
 
-def test_every_other_signed_in_route_refuses_a_write_key(roomy, token):
+def test_every_other_signed_in_route_refuses_a_write_key(token):
     """Default deny: a route that isn't in KEY_ROUTES (one added after this list, too) refuses
-    every key before the route runs, whatever its path parameters."""
-    client, *_ = roomy
+    every key before the route runs, whatever its path parameters. (More routes than a minute's
+    default limit: limits high enough not to matter.)"""
+    client, *_ = make_world(Limits(per_minute=100_000, per_day=1_000_000))
     key = make_key(client, token, scopes=("read", "write"))["key"]
     routes = set(every_signed_in_route(client.app))
     assert len(routes) > len(KEY_ROUTES)
