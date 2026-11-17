@@ -314,6 +314,47 @@ def test_a_value_merely_behind_says_so_and_still_counts(conn, token):
     assert row_of(body, "Stale Co")["readings"]["operating_margin_ttm"]["status"] == "behind"
 
 
+VENUE, MINER, MAKER = "9200000010", "9200000011", "9200000012"
+
+
+def gross_sales(conn):
+    """083: a venue booking gross crypto sales (Bullish's 2025: $244.81B, cost $244.73B), a
+    miner at the same SIC at a gross loss, and a maker with a thin margin outside those SICs."""
+    for cid, name, sic, cost in ((VENUE, "Venue Co", "6199", 244_733_087_000),
+                                 (MINER, "Miner Co", "6199", 300_000_000_000),
+                                 (MAKER, "Maker Co", "3674", 244_000_000_000)):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
+                     " VALUES (%s, %s, %s, %s)", (cid, name, cid, sic))
+        conn.execute("INSERT INTO authz.public_access (company_id, tier)"
+                     " VALUES (%s, 'financials')", (cid,))
+        reported(conn, cid, "revenue", LATEST, 61_202_846_750)
+        reported(conn, cid, "cost_of_revenue", LATEST, cost // 4)
+        derived(conn, cid, "revenue", LATEST, 244_811_387_000, {"quarters": []}, unit="USD")
+        derived(conn, cid, "cost_of_revenue", LATEST, cost, {"quarters": []}, unit="USD")
+
+
+def test_gross_sales_at_a_trading_venue_read_not_meaningful(conn, token):
+    """Riley 42: Bullish ranked among the largest US companies on gross crypto sales."""
+    gross_sales(conn)
+    body = screen(conn, token, columns=["revenue_ttm", "revenue_q"], sort="-revenue_ttm")
+    assert set(names(body)[:2]) == {"Maker Co", "Miner Co"}  # equal revenue
+    venue = row_of(body, "Venue Co")
+    for key in ("revenue_ttm", "revenue_q"):
+        assert venue["readings"][key]["status"] == "not_meaningful"
+        assert venue["readings"][key]["reason"].startswith("cost of revenue is over 95% of revenue")
+    assert Decimal(str(venue["values"]["revenue_ttm"])) == 244_811_387_000  # the figure stays
+    assert names(body).index("Venue Co") > names(body).index("Normal Co")
+    # a gross loss is revenue earned; a maker's thin margin isn't a venue's
+    assert row_of(body, "Miner Co")["readings"] == row_of(body, "Maker Co")["readings"] == {}
+    # no size band, so no band filter
+    assert "Venue Co" not in names(screen(conn, token, columns=["revenue_ttm"],
+                                          revenue_band="gte100b", sort="name"))
+    # the statements show it as filed: /financials rows carry no cost to compare
+    rows = api(conn).get(f"/v1/companies/{VENUE}/financials", headers=token(USER),
+                         params={"metrics": ["revenue"], "readings": "true"}).json()["rows"]
+    assert rows and all(r.get("not_meaningful") is None for r in rows)
+
+
 def test_a_bank_reads_not_applicable_with_or_without_a_figure(conn, token):
     body = screen(
         conn,
@@ -874,6 +915,8 @@ def test_the_screener_reads_a_bases_currency_in_its_own_plan(conn, sort, generic
         plan = explain(cur, compiled.sql, compiled.params, generic)
         cur.execute("RESET ROLE")
     assert "gold.latest_reading" not in plan and "amount_currency" not in plan, plan
+    # 083's helpers inline too
+    assert "gross_sales_sic" not in plan and "with_cost" not in plan, plan
 
 
 def annual_fact(
