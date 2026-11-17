@@ -36,7 +36,7 @@ BEGIN
         ('gold.not_applicable_metrics(text,text)', '31aa1cba6092282684aaf6b699539359'),
         ('gold.not_computed(text,text)', 'a1d6b45f36a10d029335de6f30893f96'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
-        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '81ab67cd9d086d5c9184ffb843304748'),
+        ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '9f4c2cd4aeaefa663263efb806700f5d'),
         ('gold.refresh_derived_financials(text[])', '6e52ee6444dc46cca8bbd52de1a6983e'),
         ('gold.refresh_financials(text[])', '127cb472ccd41e6cc6d6768bfb1935a0'),
         ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
