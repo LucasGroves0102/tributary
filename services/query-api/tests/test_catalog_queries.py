@@ -15,10 +15,12 @@ from fastapi.testclient import TestClient
 from query_api.app import create_app
 from query_api.authorizer import Access, Readable
 from query_api.shapes import newest_windows
+from query_api.sql_workspace import Result
 from query_api.store import SearchTooBroad
 
 from .conftest import SECRET
 from .test_api import NVDA, TSLA
+from .test_sql_workspace import FakeUsage
 
 CATALOG = frozenset(f"{i:010d}" for i in range(1, 6034)) | {NVDA, TSLA}
 OUTSIDE = "9000000009"  # not in CATALOG
@@ -56,12 +58,16 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/screener?where=revenue_ttm:gte:1&as_of=2024-06-30",
           "/v1/search?q=supply+chain&as_of=2024-06-30",
           # the portfolio: the caller's own holdings' companies only
-          "/v1/portfolio"]
+          "/v1/portfolio",
+          # B3a: the SQL workspace's schema browser (catalog names only)
+          "/v1/sql/schema"]
 # POST routes: path, body
 POSTS = [(f"/v1/companies/{NVDA}/model",
           {"companyId": NVDA, "historyYears": 8, "ytd": True,
            "assumptions": [{"growth": 30, "margin": 55}, {"growth": 20, "margin": 50}],
-           "price": {"value": 180, "date": "2026-11-06"}})]
+           "price": {"value": 180, "date": "2026-11-06"}}),
+         # B3a: a query names no company; RLS alone decides (the user's id is the only input)
+         ("/v1/sql", {"sql": "SELECT company_id, value FROM financials"})]
 MODEL_INPUTS = Path(__file__).parent / "fixtures" / "model" / "nvda.json"
 
 
@@ -90,6 +96,9 @@ class RecordingStore:
             self.calls.append((name, args, kwargs))
             return getattr(self, f"answer_{name}", lambda *_: [])(*args)
         return call
+
+    def answer_run_sql(self, user_id, checked, limits):
+        return Result([{"name": "n", "type": "number"}], [[1]], None, 1.0, 0.01, [])
 
     def answer_screen(self, user_id, compiled, known_on=None):
         self.calls.append(("screen.params", (compiled.params,), {}))
@@ -232,7 +241,8 @@ def app(authorizer=None) -> Any:
     store: Any = RecordingStore()
     watchlists: Any = Watchlist()
     c: Any = TestClient(create_app(authorizer or Open(), store, SECRET, watchlists=watchlists,
-                                   today=lambda: TODAY, portfolio=Portfolio()))  # type: ignore
+                                   today=lambda: TODAY, portfolio=Portfolio(),  # type: ignore
+                                   sql_usage=FakeUsage()))
     c.store = store
     return c
 

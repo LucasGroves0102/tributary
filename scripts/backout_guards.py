@@ -28,6 +28,7 @@ BACKOUT = ROOT / "db" / "backout"
 
 # Newest first: the order they run in. Undoing one migration means running every file before it too.
 CHAIN = [
+    "sql_workspace_105.sql",
     "point_in_time_085.sql",
     "revenue_fallbacks_080.sql",
     "screener_figures_078.sql",
@@ -57,7 +58,7 @@ INDEPENDENT = [name for group in INDEPENDENT_CHAINS for name in group]
 
 START = "-- guard (scripts/backout_guards.py writes it"
 END = "-- end guard"
-SCHEMAS = ("gold", "silver", "ops", "authz")
+SCHEMAS = ("gold", "silver", "ops", "authz", "workspace")
 
 
 def strip_guard(sql: str) -> str:

@@ -18,9 +18,9 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: point_in_time_085.sql,
--- revenue_fallbacks_080.sql) and this one hasn't, and unless the login owns the functions (the
--- migrate login; header).
+-- nothing, unless every newer backout has run (newest first: sql_workspace_105.sql,
+-- point_in_time_085.sql, revenue_fallbacks_080.sql) and this one hasn't, and unless the login owns
+-- the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -78,7 +78,10 @@ BEGIN
         ('ops.company_rule_version(text)', '60744ba7ead2e38d3dc3791e5630df38'),
         ('ops.rebuild_soon(text[])', 'c5a3427c2fac8f4cfdddb3ad14021fd7'),
         ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
-        ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2')
+        ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2'),
+        ('workspace.financials_at(date)', NULL),
+        ('workspace.reading(text,text,text)', NULL),
+        ('workspace.restatements(text,date)', NULL)
     ) v(fn, want) LOOP
         SELECT pg_get_userbyid(p.proowner) INTO fn_owner FROM pg_proc p WHERE p.oid = w.id;
         IF fn_owner IS NOT NULL AND fn_owner <> current_user THEN
@@ -89,7 +92,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'point_in_time_085.sql, revenue_fallbacks_080.sql');
+                'changed.', w.fn, 'sql_workspace_105.sql, point_in_time_085.sql, revenue_fallbacks_080.sql');
         END IF;
     END LOOP;
 END

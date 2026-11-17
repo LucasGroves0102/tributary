@@ -60,6 +60,8 @@ from query_api.sandbox import (
 from query_api.screener import MetricColumn, ScreenError, metric_column, metric_datasets
 from query_api.shapes import filing_url
 from query_api.shapes import period as _period
+from query_api.sql_workspace import Limits as SqlLimits
+from query_api.sql_workspace import SqlUsage, add_sql_routes
 from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
 from query_api.text_kpis import add_text_kpi_routes
@@ -89,6 +91,7 @@ DEMO_TOKEN_TTL = 8 * 3600
 CATALOG_TTL_SECONDS = 60.0
 SANDBOX_OFF = SandboxConfig()
 KEY_LIMITS = Limits()  # 60 a minute, 10,000 a day per key
+SQL_LIMITS = SqlLimits()  # the SQL workspace (sql_workspace.Limits)
 
 PERMISSION_CHECKS = Counter("tributary_permission_checks_total",
                             "OpenFGA checks by tier (list: readable companies) and result "
@@ -138,7 +141,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                api_keys: ApiKeys | None = None,
                api_key_limits: Limits = KEY_LIMITS,
                portfolio: AppPortfolio | None = None,
-               userdata: UserData | None = None) -> FastAPI:
+               userdata: UserData | None = None,
+               sql_usage: SqlUsage | None = None,
+               sql_limits: SqlLimits = SQL_LIMITS) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -162,7 +167,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     portfolio: holdings and the decision journal (query_api.portfolio, query_api.journal; None:
     those routes answer 503); values use market_data's prices only when it is on.
     userdata: the caller's own datasets (query_api.datasets; None: those routes answer 503 and
-    a formula naming mine.<dataset>.<field> too)."""
+    a formula naming mine.<dataset>.<field> too).
+    sql_usage, sql_limits: the SQL workspace's daily budget in the app database and its limits
+    (query_api.sql_workspace; no sql_usage: POST /v1/sql answers 503)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -318,6 +325,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                      resolver=webhook_resolver, clock=now,
                      reviews_due=reviews_due if portfolio is not None else None)
     add_status_routes(app, store=store, clock=now)
+    add_sql_routes(app, store=store, usage=sql_usage, current_user=current_user,
+                   access_of=access_of, limits=sql_limits, utcnow=now, monotonic=monotonic)
     add_dataset_routes(app, data=userdata, current_user=current_user,
                        today=today or today_eastern)
     add_api_key_routes(app, keys=api_keys, current_user=current_user, limits=api_key_limits,

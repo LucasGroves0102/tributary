@@ -25,6 +25,11 @@ _spec.loader.exec_module(guards)
 # What each file must put back: the function's body as an older migration created it (None: the
 # function is gone). Independent of the guards, which are measured from the files themselves.
 RESTORES = {
+    "sql_workspace_105.sql": {  # the SQL workspace's functions dropped with its schema
+        "workspace.financials_at(date)": None,
+        "workspace.restatements(text,date)": None,
+        "workspace.reading(text,text,text)": None,
+    },
     "point_in_time_085.sql": {
         "gold.usable_facts(text[])": "056_ifrs_currencies.sql",
         "gold.best_facts(text[])": "080_revenue_industry_tags.sql",

@@ -115,3 +115,25 @@ def test_an_api_keys_hash_is_unique_and_it_goes_with_the_user(conn):
     conn.execute("DELETE FROM users WHERE user_id = 't-user'")
     assert conn.execute("SELECT count(*) FROM api_keys WHERE user_id = 't-user'"
                         ).fetchone()[0] == 0
+
+
+def test_sql_usage_is_owner_only_and_not_streamed(conn):
+    """B3a (app 023): the SQL workspace's seconds per user per day grant nothing."""
+    rls, forced, identity = conn.execute(
+        "SELECT relrowsecurity, relforcerowsecurity, relreplident FROM pg_class"
+        " WHERE oid = 'sql_usage'::regclass").fetchone()
+    assert (rls, forced, identity) == (True, True, "d")
+    connector = Path(__file__).parents[2] / "streaming" / "debezium" / "app-connector.json"
+    assert "sql_usage" not in json.loads(connector.read_text())["table.include.list"]
+
+
+def test_a_notebook_is_saved_work_up_to_64_kib(conn):
+    conn.execute("INSERT INTO workspaces (workspace_id, user_id, name)"
+                 " VALUES ('00000000-0000-0000-0000-00000000000a', 't-user', 'W')")
+    insert = ("INSERT INTO workspace_items (workspace_id, user_id, kind, name, state)"
+              " VALUES ('00000000-0000-0000-0000-00000000000a', 't-user', 'notebook', 'N', %s)")
+    conn.execute(insert, (json.dumps({"cells": [{"id": "a", "kind": "sql",
+                                                 "sql": "x" * 60_000}]}),))
+    with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+        conn.execute(insert, (json.dumps({"cells": [{"id": "a", "kind": "sql",
+                                                     "sql": "x" * 66_000}]}),))

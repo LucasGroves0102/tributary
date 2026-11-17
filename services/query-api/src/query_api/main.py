@@ -18,6 +18,8 @@ from query_api.password_accounts import AppPasswordAccounts
 from query_api.portfolio import AppPortfolio
 from query_api.providers import PROVIDERS
 from query_api.sandbox import AppSandboxes, SandboxConfig
+from query_api.sql_workspace import AppSqlUsage
+from query_api.sql_workspace import Limits as SqlLimits
 from query_api.store import Store
 from query_api.thesis_checks import AppThesisChecks
 from query_api.views import AppViews
@@ -69,6 +71,10 @@ def build_app():
         portfolio=AppPortfolio(app_pool) if app_pool else None,
         # Your data: datasets beside gold (owner-only; USER_DATA_SPACE_MB caps everyone's)
         userdata=AppUserData(pool, space_from_env(os.environ)),
+        # the SQL workspace (B3a): seconds per user per day in the app database; limits from
+        # SQL_MAX_COST / SQL_SECONDS_PER_DAY
+        sql_usage=AppSqlUsage(app_pool) if app_pool else None,
+        sql_limits=SqlLimits.from_env(os.environ),
     )
 
 

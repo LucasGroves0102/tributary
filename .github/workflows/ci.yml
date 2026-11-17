@@ -61,6 +61,9 @@ jobs:
           CREATE ROLE query_api NOLOGIN;
           CREATE ROLE ops_reader NOLOGIN;
           CREATE ROLE sec_limiter NOLOGIN;
+          CREATE ROLE workspace_reader NOLOGIN;
+          GRANT workspace_reader TO query_api WITH INHERIT FALSE, SET TRUE;
+          GRANT SET ON PARAMETER temp_file_limit TO query_api;
           GRANT query_api TO migrator;
           ALTER DATABASE tributary OWNER TO migrator;
           ALTER DATABASE app OWNER TO migrator;

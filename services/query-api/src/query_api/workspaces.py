@@ -49,6 +49,11 @@ MAX_THESIS_BYTES = 120_000  # a thesis state as compact UTF-8 JSON (the table al
 MAX_MODEL_YEARS = 10
 MAX_NOTE = 500
 MAX_MODEL_BYTES = 60_000  # a model state as compact UTF-8 JSON (the table allows 65536, 015)
+# a notebook (B3a, app 023): cells of SQL, text and charts; the table allows 65536 like a model
+MAX_NOTEBOOK_BYTES = 60_000
+MAX_NOTEBOOK_CELLS = 50
+MAX_CELL_TEXT = 20_000  # characters of SQL (sql_guard.MAX_SQL_CHARS) or Markdown
+MAX_CHART_SERIES = 6
 MAX_ADJUSTMENTS = 20
 MAX_ADJUSTMENT_NAME = 80
 MAX_PROJECT_PEERS = 20  # like a comps set (CompsState.peers)
@@ -60,9 +65,10 @@ Step = Literal["business", "numbers", "earnings", "changes", "peers", "model", "
                "monitor"]
 WORKSPACE_NAME = 100
 ITEM_NAME = 120
-# what users save (009 adds thesis and model, app 022 metric); reports (005) only the agent writes
-KINDS = ("chart", "comps", "screen", "thesis", "model", "metric")
-Kind = Literal["chart", "comps", "screen", "thesis", "model", "metric"]
+# what users save (009 adds thesis and model, app 022 metric, app 023 notebook); reports (005)
+# only the agent writes
+KINDS = ("chart", "comps", "screen", "thesis", "model", "metric", "notebook")
+Kind = Literal["chart", "comps", "screen", "thesis", "model", "metric", "notebook"]
 MAX_METRICS = 20  # own metrics (B2d) per user, across workspaces
 MAX_SCREEN_METRICS = 5  # a saved screen's own-metric columns (screener.MAX_METRICS)
 REPORT = "report"
@@ -404,9 +410,69 @@ class MetricState(_Strict):
         return None if v is None or not v.strip() else clean_text(v, "description")
 
 
+CELL_ID = r"^[a-z0-9]{1,16}$"
+COLUMN_NAME = 63  # Postgres' identifier length
+
+
+class NotebookChart(_Strict):
+    """A chart over a SQL cell's result (web notebook/chart.ts): x one column, y up to six
+    numeric columns, drawn as lines or bars. Columns are names the result may or may not have
+    when run again (the web says so); nothing of the result is stored."""
+    source: str = Field(pattern=CELL_ID)
+    type: Literal["line", "bar"] = "line"
+    x: str = Field(min_length=1, max_length=COLUMN_NAME)
+    y: list[Annotated[str, Field(min_length=1, max_length=COLUMN_NAME)]] = Field(
+        min_length=1, max_length=MAX_CHART_SERIES)
+    title: str | None = Field(default=None, max_length=ITEM_NAME)
+
+    @model_validator(mode="after")
+    def _no_control(self) -> NotebookChart:
+        if any(_CONTROL.search(v) for v in (self.x, *self.y, self.title or "")):
+            raise ValueError("a chart's names contain control characters")
+        return self
+
+
+class NotebookCell(_Strict):
+    """One cell: `sql` (a query POST /v1/sql runs), `text` (the user's Markdown) or `chart`."""
+    id: str = Field(pattern=CELL_ID)
+    kind: Literal["sql", "text", "chart"]
+    sql: str | None = Field(default=None, max_length=MAX_CELL_TEXT)
+    text: str | None = Field(default=None, max_length=MAX_CELL_TEXT)
+    chart: NotebookChart | None = None
+
+    @model_validator(mode="after")
+    def _one_body(self) -> NotebookCell:
+        bodies = {"sql": self.sql, "text": self.text, "chart": self.chart}
+        if bodies[self.kind] is None or any(v is not None for k, v in bodies.items()
+                                            if k != self.kind):
+            raise ValueError(f"a {self.kind} cell has {self.kind} and nothing else")
+        for v in (self.sql, self.text):
+            if v is not None:
+                clean_text(v, "a cell")
+        return self
+
+
+class NotebookState(_Strict):
+    """A notebook (B3a, app migration 023): ordered cells, run one at a time through
+    POST /v1/sql as whoever opens it. Results are never stored."""
+    cells: list[NotebookCell] = Field(default_factory=list, max_length=MAX_NOTEBOOK_CELLS)
+
+    @model_validator(mode="after")
+    def _cells(self) -> NotebookState:
+        ids = [c.id for c in self.cells]
+        if len(set(ids)) != len(ids):
+            raise ValueError("cell ids repeat")
+        queries = {c.id for c in self.cells if c.kind == "sql"}
+        for c in self.cells:
+            if c.chart is not None and c.chart.source not in queries:
+                raise ValueError("a chart cell's source is a SQL cell of the notebook")
+        return self
+
+
 STATES: dict[str, type[BaseModel]] = {"chart": ChartState, "comps": CompsState,
                                       "screen": ScreenState, "thesis": ThesisState,
-                                      "model": ModelState, "metric": MetricState}
+                                      "model": ModelState, "metric": MetricState,
+                                      "notebook": NotebookState}
 
 
 class StateError(ValueError):
@@ -423,7 +489,7 @@ def validate_state(kind: str, raw: Any) -> dict:
     except ValueError as e:  # pydantic's ValidationError is a ValueError
         raise StateError(str(e)) from None
     cap = (MAX_THESIS_BYTES if kind == "thesis" else MAX_MODEL_BYTES if kind == "model"
-           else MAX_STATE_BYTES)
+           else MAX_NOTEBOOK_BYTES if kind == "notebook" else MAX_STATE_BYTES)
     if len(json.dumps(state, separators=(",", ":"), ensure_ascii=False).encode()) > cap:
         raise StateError(f"state is larger than {cap} bytes")
     return state

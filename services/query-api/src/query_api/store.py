@@ -13,8 +13,12 @@ import psycopg
 from psycopg.pq import TransactionStatus
 from psycopg.rows import dict_row
 
+from query_api import sql_workspace
 from query_api.formula import Compiled
 from query_api.screener import Compiled as Screen
+from query_api.sql_guard import Checked as SqlChecked
+from query_api.sql_workspace import Limits as SqlLimits
+from query_api.sql_workspace import Result as SqlResult
 
 # Every query: SET LOCAL ROLE doesn't apply the role's own settings (those apply at login), so
 # a timeout on query_api would never reach these sessions. Search sets its own, longer one.
@@ -146,6 +150,16 @@ class Store:
                 + " ORDER BY r.ordinality LIMIT %(limit)s",
                 {"q": q, "only": only, "limit": limit})
             return cur.fetchall()
+
+    def run_sql(self, user_id: str, checked: SqlChecked, limits: SqlLimits) -> SqlResult:
+        """POST /v1/sql (B3a): one checked SELECT as `user_id`, read only, as workspace_reader
+        under row-level security, within the limits (sql_workspace.run)."""
+        return sql_workspace.run(self._pool, user_id, checked, limits)
+
+    def sql_schema(self) -> list[dict]:
+        """The workspace views' and functions' names, columns and descriptions (catalog only)."""
+        with self._session("") as cur:
+            return sql_workspace.schema_rows(cur)
 
     def catalog_companies(self, user_id: str) -> frozenset[str]:
         """The public catalog's company ids while it is public (authz.public_access, written by

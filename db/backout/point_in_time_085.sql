@@ -22,7 +22,7 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: none, this is the newest) and this one
+-- nothing, unless every newer backout has run (newest first: sql_workspace_105.sql) and this one
 -- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
@@ -81,7 +81,10 @@ BEGIN
         ('ops.company_rule_version(text)', 'c42c4ab6b3199df8659901cfcff470c4'),
         ('ops.rebuild_soon(text[])', '9426fba21e20547353faa6ed8bc0824e'),
         ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
-        ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2')
+        ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2'),
+        ('workspace.financials_at(date)', NULL),
+        ('workspace.reading(text,text,text)', NULL),
+        ('workspace.restatements(text,date)', NULL)
     ) v(fn, want) LOOP
         SELECT pg_get_userbyid(p.proowner) INTO fn_owner FROM pg_proc p WHERE p.oid = w.id;
         IF fn_owner IS NOT NULL AND fn_owner <> current_user THEN
@@ -92,7 +95,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'none, this is the newest');
+                'changed.', w.fn, 'sql_workspace_105.sql');
         END IF;
     END LOOP;
 END

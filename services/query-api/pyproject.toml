@@ -14,6 +14,7 @@ dependencies = [
     "tributary-telemetry",
     "tzdata",  # zoneinfo data for America/New_York on slim images
     "python-multipart>=0.0.20",  # dataset uploads (query_api.datasets: multipart/form-data)
+    "pglast==6.17",  # SQL workspace (sql_guard): libpg_query 16, Postgres 16's grammar
 ]
 
 [project.optional-dependencies]
