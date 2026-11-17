@@ -171,9 +171,10 @@ facts. A run:
    `libs/sec`'s shared limit (`SEC_CALLER_CLASS`, batch); the instance is stored gzip-compressed in
    `bronze.filing_instances` and never fetched again.
 3. **Extras**: the stored documents of companies with their own tags (`silver.metric_tags.company_id`:
-   NVIDIA's capex extension tag), member sums (`silver.member_sums`: Ford's and GM's debt filed only
-   by segment) or member picks (`silver.member_picks`, migration 073: JPMorgan's, Bank of America's
-   and Wells Fargo's CET1 ratio, filed only per approach and entity), not read yet, or projected
+   NVIDIA's capex extension tag, Walmart's net sales, 084), member sums (`silver.member_sums`: Ford's
+   and GM's debt filed only by segment) or member picks (`silver.member_picks`, migration 073:
+   JPMorgan's, Bank of America's and Wells Fargo's CET1 ratio, filed only per approach and entity;
+   084: Costco's net sales, filed only by product), not read yet, or projected
    before the company's newest pick (`added_at`): a new pick reads the history on the next daily run.
 4. `--accessions A,B`: these filings whatever they are, fetching the instance when no document is
    stored (history before the document crawl: NVIDIA's FY2018 and FY2020 10-Ks).

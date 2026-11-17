@@ -192,7 +192,7 @@ export function keyStats(row: ScreenerRow): KeyStat[] {
 export const COMPUTED_FROM: Record<string, string> = {
   revenue_growth: "revenue over the twelve months against the twelve months a year earlier",
   net_income_growth: "net income over the twelve months against the twelve months a year earlier",
-  gross_margin: "gross profit ÷ revenue",
+  gross_margin: "gross profit ÷ revenue; at a retailer whose revenue includes membership and other income and whose net sales are read apart, on net sales: (net sales − cost of revenue) ÷ net sales",
   operating_margin: "operating income ÷ revenue",
   net_margin: "net income ÷ revenue",
   fcf_margin: "free cash flow ÷ revenue",

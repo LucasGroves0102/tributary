@@ -28,7 +28,7 @@ export const INPUT_ROLES: Record<string, [string, string][]> = {
   net_debt: [["long_term_debt", "+"], ["long_term_debt_current", "+"], ["cash", "-"], ["short_term_investments", "-"]],
   cash_and_investments: [["cash", "+"], ["short_term_investments", "+"]],
   free_cash_flow: [["operating_cash_flow", "+"], ["capex", "-"]],
-  gross_margin: [["gross_profit", "numerator"], ["revenue", "denominator"]],
+  gross_margin: [["gross_profit", "numerator"], ["revenue", "denominator"], ["net_sales", "+"], ["cost_of_revenue", "-"]],
   operating_margin: [["operating_income", "numerator"], ["revenue", "denominator"]],
   net_margin: [["net_income", "numerator"], ["revenue", "denominator"]],
   fcf_margin: [["operating_cash_flow", "numerator"], ["capex", "numerator"], ["revenue", "denominator"]],

@@ -67,6 +67,8 @@ CATALOG: dict[str, tuple[str, tuple[str, ...]]] = {
     "change_in_cash": ("USD", BOTH), "cash_and_restricted_cash": ("USD", BOTH),
     "contract_liabilities_current": ("USD", BOTH), "contract_liabilities": ("USD", BOTH),
     "remaining_performance_obligations": ("USD", BOTH), "accounts_payable": ("USD", BOTH),
+    # 084: net sales read apart from revenue (Walmart, Costco: membership and other income)
+    "net_sales": ("USD", BOTH),
     # derived
     "gross_margin": ("ratio", BOTH), "operating_margin": ("ratio", BOTH),
     "net_margin": ("ratio", BOTH), "free_cash_flow": ("USD", BOTH),
