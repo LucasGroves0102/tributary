@@ -46,7 +46,7 @@ written for a model.
 | `get_events_since_report` | `GET /v1/companies/{id}/events` | filings |
 | `get_insider_filings` | `GET /v1/companies/{id}/insiders` | filings |
 | `get_peers` | `GET /v1/companies/{id}/peers` | financials |
-| `screen_companies` | `GET /v1/screener` (a comparison with `company_ids`) | values: financials |
+| `screen_companies` | `GET /v1/screener` (a comparison with `company_ids`; `metrics`: the user's own as columns) | values: financials |
 | `get_restatements` | `GET /v1/companies/{id}/restatements` | financials |
 | `list_metrics` | `GET /v1/metrics` + `GET /v1/screener/columns` | public |
 | `list_sectors` | `GET /v1/sectors` | any |
@@ -56,6 +56,8 @@ written for a model.
 | `list_workspaces` | `GET /v1/workspaces` | own |
 | `get_workspace` | `GET /v1/workspaces/{id}` | own |
 | `get_workspace_item` | `GET /v1/workspace-items/{id}` | own |
+| `list_my_datasets` | `GET /v1/datasets` (the user's own uploaded data) | own |
+| `read_my_dataset` | `GET /v1/datasets/{id}/rows` (`as_of`, `versions`) | own |
 | `verify_figures` | per company `GET .../financials` (quarter and TTM) and `GET .../annual-per-share`; per named section `GET .../sections/{key}` | financials, filings |
 
 `as_of` (a past day) on `get_financials`, `screen_companies`, `list_filings`, `read_section`,

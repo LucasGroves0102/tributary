@@ -59,6 +59,7 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 | `#/thesis/<id>`, `#/model/<id>` | a thesis (Write view, Check my thesis, Revisit) and a model | [Theses and models](DESIGN.md#theses-and-models) |
 | `#/alerts` | filing alerts | [Filing alerts](DESIGN.md#filing-alerts) |
 | `#/portfolio[/<holding>]`, `#/portfolio/import` | your holdings on your own prices, a holding's buys, sales and journal, the Fidelity import | [Portfolio](DESIGN.md#portfolio) |
+| `#/data` | Your data: your datasets (CSV upload, checked before storing), your metrics (saved formulas, screener columns) | [Your data](DESIGN.md#your-data) |
 | `#/settings` | filing alerts, Connect your data (when on), API keys | [Price](DESIGN.md#price-connect-your-data), [API keys](DESIGN.md#api-keys-and-using-the-api) |
 | `#/about` | what Tributary covers and doesn't | [Screens](DESIGN.md#screens-hash-routes) |
 | `#/status` | Data status: freshness, completeness, quality checks by what they mean for a reader, filing-section checks, recorded suites; public | [Screens](DESIGN.md#screens-hash-routes) |
@@ -192,7 +193,9 @@ a report, storing a thesis check: browsers read those through the item routes); 
 ID, and passes Cloudflare's `CF-Connecting-IP` to both APIs as `X-Client-IP` (agent-api's per-IP
 limit, the Query API's sandbox creation and password attempt limits). `location = /mcp` proxies to
 the MCP server with the Authorization header untouched, no buffering, a 300 s read timeout,
-`Cache-Control: no-store` and the security headers; nothing else of that service is routed. `deploy/headers.conf` sets CSP, HSTS, nosniff,
+`Cache-Control: no-store` and the security headers; nothing else of that service is routed. A
+dataset upload (`POST /api/query/v1/datasets` and `.../{id}/upload`, exact paths) is the one Query
+API body allowed past nginx's 1 MB default: 21 MB and a 120 s read. `deploy/headers.conf` sets CSP, HSTS, nosniff,
 Referrer-Policy and Permissions-Policy on every response. On k3s only the `cloudflared`
 namespace can reach it. The page itself goes out with `Cache-Control: no-transform`, so Cloudflare
 serves it as built: its Web Analytics "automatic setup" injected a beacon script from

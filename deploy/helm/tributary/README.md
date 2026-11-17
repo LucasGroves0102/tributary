@@ -55,7 +55,7 @@ with the Flux release's overrides:
 | `doc-crawler` | doc-fetcher (`doc-crawler`) | 1 (chart default 0) | the document crawl (below) → bronze, `documents.backfill` |
 | `parser-backfill` | parser-rs | 1 (chart default 0) | `documents.backfill` → `silver.filing_sections` |
 | `authz-sync` | authz-sync | 1 | the app database's CDC topics → OpenFGA tuples and the `authz` tables |
-| `query-api` | query-api | 1 | the Query API, port 8000 |
+| `query-api` | query-api | 1 | the Query API, port 8000 (`USER_DATA_SPACE_MB`: every user's uploaded rows on disk at most; 512 Mi for a 20 MB upload read in memory) |
 | `agent-api` | agent (`agent-api`) | 1 | the assistant, port 8001 |
 | `mcp-server` | mcp-server | 1 (chart default 0) | the MCP server for users' own AI models (`/mcp` through `web`), port 8002 ([below](#mcp-server)) |
 | `web` | web | 1 | nginx with the built web app, port 8080; the tunnel's only target |

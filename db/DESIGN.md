@@ -1074,3 +1074,15 @@ page as of the day (two statements with their originals, ratios, per-share) 0.06
 company's history is behind the rules). gold.company_confidence (074) read tributary.today with a bare
 cast: an as-of session sets it locally, and a pooled connection then reads '' (never NULL again), so the
 next screen on that connection failed; it reads it through nullif now, as gold.is_stale does.
+
+### 100_userdata.sql
+
+Bring your own data (B2c): the schema `userdata` beside gold, a user's own datasets (`datasets`,
+`rows`: one row per company, day and `known_at`, values as a `numeric[]` in the fields' order) and
+the hourly upload log (`uploads`). Forced row-level security for `query_api` keyed on `app.user_id`
+(USING and WITH CHECK): a session that hasn't named the user reads and writes nothing, the owner's
+included; the composite foreign key keeps a row under its own user's dataset. `field_points` labels a
+day with gold.financials' fiscal and calendar rules (014) for formulas; `series` is one value a row
+for a later SQL workspace. Wide rows: the densest 20 MB file allowed (180,000 rows of 48 fields) is
+~100 MB stored against ~1 GB one value a row, and stores in ~7 s (measured locally). In every
+backup (nothing here can be rebuilt). Query API side: services/query-api DESIGN.md "Your data".
