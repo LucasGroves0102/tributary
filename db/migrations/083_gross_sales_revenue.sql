@@ -5,13 +5,13 @@
 -- peers' sizes; the figure itself stays on the company's statements.
 --
 -- The rule, in gold.not_meaningful (057's body, one branch marked "083"): revenue whose cost of
--- revenue at the same period end is over 95% of it and not over 100% (a gross margin under 5%, not a
+-- revenue at the same period end is over 97% of it and not over 100% (a gross margin under 3%, not a
 -- gross loss), at SIC 6199 (finance services) or 6200-6299 (security and commodity brokers, dealers
 -- and exchanges): gold.gross_sales_sic. Measured on hermes (2026-11-17, read-only, the screener's
--- stored TTM figures; 269 companies with revenue at those SICs): over 95% and at most 100%, Bullish
--- 99.97%, SOS 98.5%, The9 98.3% (CNY), eToro 98.2%, Coincheck 97.1% (JPY) and Cango 95.9% (a
--- bitcoin miner in its first year: the one that reads as a business margin, kept as approved);
--- Coincheck's quarters 95.9-97.3%. Fifteen more at those SICs have cost over 100% of revenue,
+-- stored TTM figures; 269 companies with revenue at those SICs): over 97% and at most 100%, Bullish
+-- 99.97%, SOS 98.5%, The9 98.3% (CNY), eToro 98.2% and Coincheck 97.1% (JPY). 97%, not the 95%
+-- first proposed (the owner, 2026-11-17): Cango, a bitcoin miner in its first year at 95.9%, earns
+-- its revenue; Coincheck's quarters run 95.9-97.3%. Fifteen more at those SICs have cost over 100% of revenue,
 -- miners and micro-caps at a gross loss (BGIN 212%, Keel 195%, BTC Digital 123%): their revenue is
 -- what they earn, so the rule stops at 100%. Not at other financial SICs: real estate's home
 -- sellers (Opendoor 92.5%, Linkhome 96.0%) and insurance agents (Cheche 94.7%, in CNY) sell what
@@ -66,9 +66,9 @@ LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$
         -- 083: gross sales of traded assets; cost_of_revenue is in the inputs only where revenue
         -- can be that (gold.gross_sales_sic), from the readers (header)
         WHEN p_metric = 'revenue' THEN CASE
-            WHEN p_value > 0 AND (p_inputs->>'cost_of_revenue')::numeric > 0.95 * p_value
+            WHEN p_value > 0 AND (p_inputs->>'cost_of_revenue')::numeric > 0.97 * p_value
                  AND (p_inputs->>'cost_of_revenue')::numeric <= p_value
-                THEN 'cost of revenue is over 95% of revenue: a trading venue or dealer counts the '
+                THEN 'cost of revenue is over 97% of revenue: a trading venue or dealer counts the '
                      'full value of the assets it sells as revenue, not what it earns on them, so '
                      'it isn''t compared with other companies'' revenue'
         END

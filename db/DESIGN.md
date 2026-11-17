@@ -935,10 +935,10 @@ Health Care. A SIC range can't hold one company apart.
 
 A trading venue's gross sales as revenue (Riley 42: Bullish, $244.81B against $244.73B of cost, ranked
 among the largest US companies). Revenue reads `not_meaningful` when its cost of revenue at the same
-period end is over 95% of it and at most 100% (a gross loss is revenue earned: 15 miners and micro-caps
+period end is over 97% of it and at most 100% (a gross loss is revenue earned: 15 miners and micro-caps
 at 6199), at SIC 6199 or 62xx (`gold.gross_sales_sic`; real estate's home sellers and insurance agents
 measured and left out). On hermes: Bullish, SOS, eToro, The9 and Coincheck (the last two in another
-currency, which reads first) and Cango, a miner at 95.9%. gold.reading takes inputs, not probes, so
+currency, which reads first); 97%, the owner's, spares Cango, a miner at 95.9%. gold.reading takes inputs, not probes, so
 gold.latest_reading and gold.screen_reading add the cost (live, or the stored figure of the same span)
 to revenue's inputs (`gold.with_cost`) behind a one-time filter; nothing stored changes. Peers count it
 as an unknown size; the statements show the revenue as filed.
