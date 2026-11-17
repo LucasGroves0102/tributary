@@ -369,11 +369,14 @@ $$;
 -- 4. What the screener reads ----------------------------------------------------------------------
 
 -- The company's latest period and stored inputs (cached), or its latest period read live
--- (gold.latest_period) when it has no row or is past `until`. One row.
+-- (gold.latest_period) when it has no row or is past `until`. One row. The live read is a CASE
+-- branch, so it runs only for such a company: as a gated LATERAL the planner made the gate a join
+-- filter and read gold.latest_period for every company (8,532 cold pages on a catalog-sized copy).
 CREATE FUNCTION gold.screen_company(p_company_id text)
 RETURNS TABLE (latest date, equity numeric, currency text, recent boolean, cached boolean)
 LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
-    SELECT CASE WHEN s.company_id IS NOT NULL THEN s.latest ELSE p.latest END,
+    SELECT CASE WHEN s.company_id IS NOT NULL THEN s.latest
+                ELSE (SELECT l.latest FROM gold.latest_period(p_company_id) l) END,
            s.equity, s.currency, s.recent, s.company_id IS NOT NULL
     FROM (SELECT 1) one
     LEFT JOIN LATERAL (
@@ -381,9 +384,6 @@ LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
         FROM gold.screen_companies s
         WHERE s.company_id = p_company_id AND (s.until IS NULL OR s.until > current_date)
     ) s ON true
-    LEFT JOIN LATERAL (
-        SELECT l.latest FROM gold.latest_period(p_company_id) l WHERE s.company_id IS NULL
-    ) p ON true
 $$;
 
 -- gold.latest_reading's row: from the stored figure through gold.reading when the company is cached

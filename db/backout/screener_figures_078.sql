@@ -42,7 +42,7 @@ BEGIN
         ('gold.refresh_financials(text[])', '4bd8545d1e9cf94fa665cdee21294039'),
         ('gold.refresh_quarterly_financials(text[])', '84ce53d8fc3987c84012b4360b69fed4'),
         ('gold.screen_backlog()', '972441f449f03e3d8fa36a9748610e85'),
-        ('gold.screen_company(text)', '0a1ced360954c76e65de53bdc10a1db7'),
+        ('gold.screen_company(text)', 'd0ab770fb304683145115aeb8dcee30d'),
         ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', '36559c2a4edf1cbb2a2c76e6e3d1fe37'),
         ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
         ('ops.check_financials(text[])', 'a8a94bf23f986a93f3f61c8fc5f35461'),
