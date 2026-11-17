@@ -10,7 +10,17 @@ const gap = (kind: string, cause: string, reason: CoverageGap["reason"], detail:
 describe("coverage notes", () => {
   it.each([
     [gap("history_short", "revenue_tag", "fixable", { revenue_from: "2017-03-31", figures_from: "2009-06-30" }),
-      "Revenue starts in 2017", "Revenue before 2017 is filed under a tag Tributary doesn't read as revenue yet (a sales line for goods or services alone, or Church & Dwight's own tag); the filings have it. Its other figures go back to 2009."],
+      "Revenue starts in 2017", "Revenue before 2017 isn't under a revenue tag Tributary reads: an industry line it doesn't take as the total, Church & Dwight's own tag, or no revenue yet. Its other figures go back to 2009."],
+    [gap("history_short", "revenue_yearly", "not_in_sec_data", { revenue_from: "2018-03-31", revenue_years_from: "2012-12-31", figures_from: "2011-03-31" }),
+      "Quarterly revenue starts in 2018", "Church & Dwight's 10-Ks give its revenue for the year from 2012, but its 10-Qs don't tag the quarters' revenue"],
+    [gap("history_short", "revenue_excise", "not_in_sec_data", { revenue_from: "2017-07-31", figures_from: "2009-07-31" }),
+      "Revenue starts in 2017", "Before 2017, Church & Dwight's filings tag its sales before excise taxes as revenue and its net sales under its own tag"],
+    [gap("history_short", "revenue_predecessor", "out_of_scope", { revenue_from: "2017-07-01", figures_from: "2009-06-30" }),
+      "Revenue starts in 2017", "this registration's filings are those of the company Church & Dwight combined with"],
+    [gap("metric_missing", "trust", "out_of_scope", { metrics: [{ metric: "operating_cash_flow", last: "2013-12-31" }] }),
+      "A trust's statements", "is a commodity trust: it states its net assets, not the balance-sheet totals and cash flows Tributary reads, so there is no operating cash flow after Dec 31, 2013."],
+    [gap("metric_missing", "partners_capital", "fixable", { metrics: [{ metric: "stockholders_equity", last: "2015-12-31" }] }),
+      "Equity as partners' capital", "files its equity as partners' or members' capital"],
     [gap("no_figures", "bank_regulator", "not_in_sec_data"),
       "Reports to its bank regulator", "files its annual and quarterly reports with its banking regulator, not the SEC"],
     [gap("re_registration", "unlinked", "fixable", { moved_on: "2021-04-20", form: "8-K12B", figures_from: "2020-05-02" }),

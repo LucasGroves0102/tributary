@@ -114,6 +114,73 @@ def test_a_core_metric_missing_lately(listed):
     assert found(listed)[(NVDA, "metric_missing")][:2] == ("not_read", "fixable")
 
 
+def shift_back(conn, company_id, metric, days=1095):
+    conn.execute("UPDATE gold.quarterly_financials SET period_start = period_start - %s,"
+                 " period_end = period_end - %s WHERE company_id = %s AND metric = %s",
+                 (days, days, company_id, metric))
+    conn.execute("DELETE FROM gold.derived_financials WHERE company_id = %s AND metric = %s",
+                 (company_id, metric))
+
+
+def test_a_metric_missing_says_whose_gap(listed):
+    """081: a sum's part in silver (a biotech's net interest income) isn't the line gold dropped;
+    a commodity trust has no such statements; a partnership's equity is its partners' capital."""
+    shift_back(listed, NVDA, "revenue")
+    listed.execute("DELETE FROM silver.financial_facts WHERE cik = %s AND metric = 'revenue'",
+                   (NVDA,))
+    listed.execute(
+        "INSERT INTO silver.financial_facts (cik, metric, tag, unit, period_start, period_end,"
+        " value, accession_no, form, filed) VALUES (%s, 'revenue', 'InterestIncomeExpenseNet',"
+        " 'USD', '2026-04-01', '2026-06-30', 5000000, 'x', '10-Q', '2026-08-01')", (NVDA,))
+    assert found(listed)[(NVDA, "metric_missing")][:2] == ("not_read", "fixable")
+    listed.execute("UPDATE silver.companies SET sic = '6221' WHERE company_id = %s", (NVDA,))
+    assert found(listed)[(NVDA, "metric_missing")][:2] == ("trust", "out_of_scope")
+
+    # equity that stopped three years before the rest (the fixture has none: copy its assets back)
+    listed.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+        " value, unit, value_source, source_tag, accession_no, form, filed, source_accessions,"
+        " ingested_at, refreshed_at) SELECT company_id, 'stockholders_equity', period_start,"
+        " period_end - 1095, value, unit, value_source, source_tag, accession_no, form, filed,"
+        " source_accessions, ingested_at, refreshed_at FROM gold.quarterly_financials"
+        " WHERE company_id = %s AND metric = 'total_assets'", (COST,))
+    assert found(listed)[(COST, "metric_missing")][:2] == ("not_read", "fixable")
+    listed.execute("UPDATE silver.companies SET name = 'Some Pipeline Partners LP'"
+                   " WHERE company_id = %s", (COST,))
+    assert found(listed)[(COST, "metric_missing")][:2] == ("partners_capital", "fixable")
+
+
+def test_revenue_read_for_years_before_its_quarters(listed):
+    """081: the 10-Ks' years give revenue long before the first quarter of it: the 10-Qs don't tag
+    it (not in the SEC's data); without those years it stays revenue_tag."""
+    (ni_first,) = listed.execute(
+        "SELECT min(period_end) FROM gold.quarterly_financials"
+        " WHERE company_id = %s AND metric = 'net_income'", (COST,)).fetchone()
+    filing(listed, COST, "0000909832-99-000003", "10-K", ni_first + timedelta(days=60))
+    listed.execute("DELETE FROM gold.quarterly_financials WHERE company_id = %s"
+                   " AND metric = 'revenue' AND period_end < %s",
+                   (COST, ni_first + timedelta(days=450)))
+    listed.execute(
+        "UPDATE gold.derived_financials SET period_start = %s, period_end = %s"
+        " WHERE (company_id, span, metric, period_end) = (SELECT company_id, span, metric,"
+        " min(period_end) FROM gold.derived_financials WHERE company_id = %s AND span = 'ttm'"
+        " AND metric = 'revenue' GROUP BY 1, 2, 3)",
+        (ni_first - timedelta(days=364), ni_first, COST))
+    cause, reason, detail = found(listed)[(COST, "history_short")]
+    assert (cause, reason) == ("revenue_yearly", "not_in_sec_data")
+    assert detail["revenue_years_from"] == str(ni_first)
+    listed.execute("DELETE FROM gold.derived_financials WHERE company_id = %s"
+                   " AND metric = 'revenue'", (COST,))
+    assert found(listed)[(COST, "history_short")][:2] == ("revenue_tag", "fixable")
+    # 080's exclusions say why: sales before excise taxes, a predecessor's filings
+    listed.execute("INSERT INTO silver.industry_total_exclusions (company_id, tag, cause)"
+                   " VALUES (%s, 'SalesRevenueGoodsNet', 'excise')", (COST,))
+    assert found(listed)[(COST, "history_short")][:2] == ("revenue_excise", "not_in_sec_data")
+    listed.execute("UPDATE silver.industry_total_exclusions SET cause = 'predecessor'"
+                   " WHERE company_id = %s", (COST,))
+    assert found(listed)[(COST, "history_short")][:2] == ("revenue_predecessor", "out_of_scope")
+
+
 def test_documents_and_statements_in_an_exhibit(listed):
     filing(listed, JPM, "0000019617-24-000001", "10-K", TODAY - timedelta(days=200))
     filing(listed, JPM, "0000019617-24-000002", "10-Q", TODAY - timedelta(days=100))

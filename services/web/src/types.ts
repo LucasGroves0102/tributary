@@ -1388,6 +1388,8 @@ export interface CoverageGap {
   detail: {
     figures_from?: string;
     revenue_from?: string;
+    /** revenue_yearly (081): the first year the 10-Ks give revenue for */
+    revenue_years_from?: string;
     first_xbrl_report?: string;
     moved_on?: string;
     form?: string;

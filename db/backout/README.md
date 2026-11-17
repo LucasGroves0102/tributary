@@ -8,6 +8,7 @@ in the order they run ([Order](#order)), the two independent ones last.
 
 | File | Undoes | Then |
 |---|---|---|
+| [`revenue_fallbacks_080.sql`](revenue_fallbacks_080.sql) | 080: `gold.best_facts` back to 077's body (a revenue tag under a fifth of an industry total believed again: Conagra's FY2012-2016 Revenues of $1.6-1.7B), revenue's industry tags (`RealEstateRevenueNet`, `SalesRevenueGoodsNet`, `SalesRevenueServicesNet`) and total assets' `LiabilitiesAndStockholdersEquity` removed with their silver facts (revenue history starting late again at those companies). Tested: 080 then this, the function equal to 077's | `financials-rebuild` job |
 | [`screener_figures_078.sql`](screener_figures_078.sql) | 078: `gold.latest_reading` back to 069's body (the same readings, its rules inline again), `gold.refresh_financials` to 071's, `gold.financials_coverage` to 017's view; the screener reads live (`gold.screen_company`/`screen_reading` live only, the backlog empty, both tables emptied: the cold first request as slow as before). Same signatures: no other image needed. Tested: 078 then this, both functions equal to 069's and 071's | none |
 | [`net_income_077.sql`](net_income_077.sql) | 077: `gold.best_facts` back to 064's body (a year tagged ProfitLoss reads NetIncomeLoss again where later comparatives tag it: PNC's 2025 TTM 7,015), net income's last fallback tag (`NetIncomeLossAvailableToCommonStockholdersBasic`) and its silver facts removed (Booking without net income after 2015 again). Tested: 077 then this, the function equal to 064's | `financials-rebuild` job |
 | [`readings_069.sql`](readings_069.sql) | 069: `gold.latest_reading` back to 061's body, `gold.not_computed` dropped (no `not_computed` reading: Walmart's gross margin a bare blank again; no `stale`: a company whose latest period is long past sorts with current figures again). Same signature: no other image needed. Tested: 069 then this, the function equal to 061's | none |
@@ -33,22 +34,23 @@ in the order they run ([Order](#order)), the two independent ones last.
 Newest first, always. To undo a migration, run every file above it in this list first, then it, and
 the rebuild its row names once, after the last file:
 
-1. `screener_figures_078.sql`
-2. `net_income_077.sql`
-3. `readings_069.sql`
-4. `revenue_part_064.sql`
-5. `rebuild_speed_063.sql`
-6. `currency_speed_061.sql`
-7. `annual_currency_060.sql`
-8. `banks_058.sql`
-9. `currency_readings_057.sql`
-10. `ifrs_currencies_056.sql`
-11. `filing_xbrl_facts_055.sql`
-12. `filers_debt_050.sql`
-13. `kpis_049.sql`
-14. `bank_metrics_048.sql`
-15. `interest_expense_043.sql`
-16. `gold_rules_038_041.sql`
+1. `revenue_fallbacks_080.sql`
+2. `screener_figures_078.sql`
+3. `net_income_077.sql`
+4. `readings_069.sql`
+5. `revenue_part_064.sql`
+6. `rebuild_speed_063.sql`
+7. `currency_speed_061.sql`
+8. `annual_currency_060.sql`
+9. `banks_058.sql`
+10. `currency_readings_057.sql`
+11. `ifrs_currencies_056.sql`
+12. `filing_xbrl_facts_055.sql`
+13. `filers_debt_050.sql`
+14. `kpis_049.sql`
+15. `bank_metrics_048.sql`
+16. `interest_expense_043.sql`
+17. `gold_rules_038_041.sql`
 
 072's and 074's checks (`ops.check_financials`, `ops.check_segments`) and 073's
 `silver.refresh_filing_facts` have no file: the guards expect 074's, 072's and 073's bodies,

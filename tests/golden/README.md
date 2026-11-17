@@ -117,7 +117,10 @@ A third gap, closed by migration 038. Its row was `absent` until then, written t
    payload in bronze on hermes (fetched from the SEC 2026-10-19), with `trim_facts.py`'s own window:
    Nvidia's `DebtSecuritiesCurrent` and `EquitySecuritiesFvNi`, two facts each. No other fixture
    changed; a test that needs another new tag's facts adds them the same way. 077 added Booking's
-   `NetIncomeLossAvailableToCommonStockholdersBasic` (26 facts) to its reference fixture.
+   `NetIncomeLossAvailableToCommonStockholdersBasic` (26 facts) to its reference fixture; 080
+   `LiabilitiesAndStockholdersEquity` to every reference fixture (1,900 facts, each fixture's own
+   window; total assets must still read `Assets`). 080's revenue industry tags have no facts in the
+   fixtures' years (2024-2026): test_gold_selection.py has their cases.
 
 ## Reference set
 
