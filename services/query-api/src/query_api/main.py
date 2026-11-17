@@ -21,6 +21,7 @@ from query_api.sandbox import AppSandboxes, SandboxConfig
 from query_api.store import Store
 from query_api.thesis_checks import AppThesisChecks
 from query_api.views import AppViews
+from query_api.watches import AppWatches
 from query_api.watchlist import AppWatchlists
 from query_api.workspaces import AppWorkspaces
 from tributary_authz import FgaClient
@@ -69,6 +70,8 @@ def build_app():
         portfolio=AppPortfolio(app_pool) if app_pool else None,
         # Your data: datasets beside gold (owner-only; USER_DATA_SPACE_MB caps everyone's)
         userdata=AppUserData(pool, space_from_env(os.environ)),
+        # saved screens that alert (the alerts job checks them; the routes save and list them)
+        watches=AppWatches(app_pool) if app_pool else None,
     )
 
 

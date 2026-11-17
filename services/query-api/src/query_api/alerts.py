@@ -332,9 +332,9 @@ NOTIFICATION_COLUMNS = ("notification_id::text, company_id, accession_no, form, 
                         " items, sources, status, detail, created_at, ready_at, read_at")
 WEBHOOK_COLUMNS = ("webhook_id::text, url, format, enabled, created_at, rotated_at, stalls,"
                    " stalled_until")
-DELIVERY_COLUMNS = ("delivery_id::text, webhook_id::text, notification_id::text, status, attempts,"
-                    " next_attempt_at, last_attempt_at, last_status, last_error, created_at,"
-                    " delivered_at")
+DELIVERY_COLUMNS = ("delivery_id::text, webhook_id::text, notification_id::text,"
+                    " screen_alert_id::text, status, attempts, next_attempt_at, last_attempt_at,"
+                    " last_status, last_error, created_at, delivered_at")
 # a failed delivery is tried again after these waits, then given up (the job runs every 10 min)
 BACKOFF = (timedelta(minutes=5), timedelta(minutes=30), timedelta(hours=2), timedelta(hours=6))
 # a webhook whose sends stall (alert_job.STALLED, REFUSED) is left out of sends this long after its
@@ -429,10 +429,13 @@ class AppAlerts:
 
     def unread(self, user_id: str) -> dict:
         with self._tx(user_id) as cur:
+            # with the user's screen alerts (watches.py, app migration 024)
             cur.execute("SELECT count(*) FILTER (WHERE read_at IS NULL) AS unread,"
-                        "       max(created_at) AS latest"
-                        " FROM notifications WHERE user_id = %s AND status <> 'skipped'",
-                        (user_id,))
+                        "       max(created_at) AS latest FROM ("
+                        " SELECT read_at, created_at FROM notifications"
+                        " WHERE user_id = %(u)s AND status <> 'skipped'"
+                        " UNION ALL SELECT read_at, created_at FROM screen_alerts"
+                        " WHERE user_id = %(u)s) n", {"u": user_id})
             row = cur.fetchone() or {"unread": 0, "latest": None}
             # the user's row is written only when it changes or hourly (app migration 018): the
             # last run, when it checked every user it planned, is a newer look for them too
@@ -444,13 +447,22 @@ class AppAlerts:
             return {**row, "last_check": cur.fetchone()}
 
     def mark_read(self, user_id: str, ids: list[str] | None, company_id: str | None) -> int:
+        """Filing notifications and, unless one company's are asked for, screen alerts (024):
+        these ids, or all."""
         with self._tx(user_id) as cur:
             cur.execute("UPDATE notifications SET read_at = statement_timestamp()"
                         " WHERE user_id = %(u)s AND read_at IS NULL AND status <> 'skipped'"
                         "   AND (%(ids)s::uuid[] IS NULL OR notification_id = ANY(%(ids)s::uuid[]))"
                         "   AND (%(c)s::text IS NULL OR company_id = %(c)s)",
                         {"u": user_id, "ids": ids, "c": company_id})
-            return cur.rowcount
+            n = cur.rowcount
+            if company_id is None:
+                cur.execute("UPDATE screen_alerts SET read_at = statement_timestamp()"
+                            " WHERE user_id = %(u)s AND read_at IS NULL"
+                            "   AND (%(ids)s::uuid[] IS NULL OR alert_id = ANY(%(ids)s::uuid[]))",
+                            {"u": user_id, "ids": ids})
+                n += cur.rowcount
+            return n
 
     # red lines
     def red_lines(self, user_id: str, company_id: str | None) -> list[dict]:
@@ -672,23 +684,28 @@ class AppAlerts:
 
     def due(self, user_id: str, at: datetime, limit: int = 10) -> list[dict]:
         """Deliveries to make now, with their webhook (URL, format, salt, stalls) and
-        notification. Taken in turns across the user's webhooks (each one's oldest first, then
-        each one's second, ...), so one webhook's backlog can't fill the batch while another
-        waits; a webhook stalled until later (017) is left out."""
+        notification, or screen alert (`screen_alert_id`, app migration 024: the notification's
+        columns are then NULL). Taken in turns across the user's webhooks (each one's oldest
+        first, then each one's second, ...), so one webhook's backlog can't fill the batch while
+        another waits; a webhook stalled until later (017) is left out."""
         with self._tx(user_id) as cur:
             cur.execute(
                 "SELECT * FROM ("
                 " SELECT d.delivery_id::text, d.attempts, w.webhook_id::text, w.url, w.format,"
                 "        w.secret_salt, w.stalls, n.notification_id::text, n.company_id,"
                 "        n.accession_no, n.form, n.filed, n.period_end, n.items, n.sources,"
-                "        n.detail, d.next_attempt_at,"
+                "        n.detail, d.next_attempt_at, s.alert_id::text AS screen_alert_id,"
+                "        s.item_id::text AS screen_item_id, s.name, s.detail AS screen_detail,"
                 "        row_number() OVER (PARTITION BY d.webhook_id"
                 "                           ORDER BY d.next_attempt_at, d.delivery_id) AS turn"
                 " FROM webhook_deliveries d"
                 " JOIN webhooks w ON w.webhook_id = d.webhook_id AND w.user_id = d.user_id"
-                " JOIN notifications n ON n.notification_id = d.notification_id"
+                " LEFT JOIN notifications n ON n.notification_id = d.notification_id"
                 "   AND n.user_id = d.user_id"
+                " LEFT JOIN screen_alerts s ON s.alert_id = d.screen_alert_id"
+                "   AND s.user_id = d.user_id"
                 " WHERE d.user_id = %(u)s AND d.status = 'pending' AND d.next_attempt_at <= %(at)s"
+                "   AND (n.notification_id IS NOT NULL OR s.alert_id IS NOT NULL)"
                 "   AND w.user_id = %(u)s AND w.enabled"
                 "   AND (w.stalled_until IS NULL OR w.stalled_until <= %(at)s)"
                 ") t ORDER BY turn, next_attempt_at, delivery_id LIMIT %(n)s",
@@ -740,7 +757,8 @@ class AppAlerts:
                         (user_id, before))
             n = cur.rowcount
             cur.execute("DELETE FROM webhook_deliveries WHERE user_id = %s"
-                        " AND notification_id IS NULL AND created_at < %s", (user_id, before))
+                        " AND notification_id IS NULL AND screen_alert_id IS NULL"
+                        " AND created_at < %s", (user_id, before))
             return n
 
 
@@ -777,8 +795,12 @@ def webhook_out(w: dict) -> dict:
 
 
 def delivery_out(d: dict) -> dict:
+    screen = d.get("screen_alert_id")
     return {"id": d["delivery_id"], "webhook_id": d["webhook_id"],
-            "notification_id": d["notification_id"], "test": d["notification_id"] is None,
+            "notification_id": d["notification_id"],
+            "test": d["notification_id"] is None and screen is None,
+            # additive (app migration 024): a watched screen's alert
+            **({"screen_alert_id": screen} if screen else {}),
             "status": d["status"], "attempts": d["attempts"],
             "next_attempt_at": d["next_attempt_at"] if d["status"] == "pending" else None,
             "last_attempt_at": d["last_attempt_at"], "last_status": d["last_status"],

@@ -1,5 +1,6 @@
 """Layer 1: OpenFGA. Every data request is checked here before any query runs."""
 
+from collections.abc import Callable
 from typing import NamedTuple, Protocol
 
 import httpx
@@ -43,6 +44,18 @@ class Readable(dict[str, set[str]]):
         if tier in self.public:
             return None
         return sorted(c for c, tiers in self.items() if tier in tiers)
+
+
+def readable_from(access: Access, catalog: Callable[[], frozenset[str]]) -> Readable:
+    """company_id → tiers, for every company a user can read: with the catalog public, every
+    catalog company (`catalog()`: its ids, read only then) plus the user's private grants; closed,
+    what layer 1 listed. The Query API's readable() and the alerts job's watches (watch_job.py)."""
+    if not access.public:
+        return Readable(access.listed)
+    out = {c: set(access.public) for c in catalog()}
+    for c, tiers in access.listed.items():
+        out.setdefault(c, set()).update(tiers)
+    return Readable(out, access.public)
 
 
 class Authorizer(Protocol):

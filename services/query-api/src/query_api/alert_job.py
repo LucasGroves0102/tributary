@@ -41,6 +41,8 @@ A run:
    Email only with a provider configured AND a verified address for the user
    (query_api/alert_email.py: neither exists yet, so none is sent): one digest of the alerts that
    became ready.
+   Screen alerts (watched screens, watch_job.py: made between step 3 and this one) go out the
+   same way, as event `screen`, their companies only while the user can still read them.
 5. alert_checks (the Monitor step's last check) only when it changes (filings_through moved,
    notifications were made or became ready) or is CHECK_EVERY old, so an idle user's row isn't
    rewritten every ten minutes; notifications older than KEEP_DAYS deleted. Once every user is
@@ -80,6 +82,10 @@ from query_api.alerts import (
     red_line_points,
 )
 from query_api.shapes import filing_url
+from query_api.watch_job import run_watches
+from query_api.watches import AppWatches, listed, screen_links, visible
+from query_api.watches import event as screen_event
+from query_api.watches import message as screen_message
 from query_api.webhooks import HttpsSender, Sender, body_of, headers, webhook_secret
 
 log = logging.getLogger("query_api.alert_job")
@@ -115,6 +121,12 @@ class Report:
     deferred: int = 0
     stalled: int = 0
     errors: int = 0
+    # watched screens (watch_job.py); their errors don't fail the Job (one user's screen
+    # failing isn't everything being down)
+    screens_checked: int = 0
+    screen_alerts: int = 0
+    screens_deferred: int = 0
+    screen_errors: int = 0
 
 
 def links(app_url: str, n: dict) -> dict[str, str]:
@@ -229,32 +241,52 @@ def deliver(alerts: AppAlerts, store: Any, sender: Sender, user_id: str, *, jwt_
     due = alerts.due(user_id, at, SENDS_PER_USER)
     if not due:
         return 0, 0, 0
-    ids = sorted({d["company_id"] for d in due})
-    names = store.profiles(user_id, ids)
-    tickers = store.tickers(user_id, ids)
+    ids = sorted({d["company_id"] for d in due if d.get("company_id")}
+                 | {c for d in due if d.get("screen_alert_id")
+                    for c in listed(d.get("screen_detail") or {})})
+    names = store.profiles(user_id, ids) if ids else {}
+    tickers = store.tickers(user_id, ids) if ids else {}
     ok = failed = 0
     stalled: set[str] = set()
     cleared: set[str] = set()
     readable: dict[str, bool] = {}
+
+    def reads(cid: str) -> bool:  # layer 1 at send time, once per company per run
+        if cid not in readable:
+            readable[cid] = can(user_id, "financials", cid)
+        return readable[cid]
+
+    def company_of(cid: str) -> dict:
+        name = (names.get(cid) or {}).get("name") or cid
+        return {"company_id": cid, "name": name, "ticker": (tickers.get(cid) or [None])[0]}
+
+    def label_of(cid: str) -> str:
+        c = company_of(cid)
+        return f"{c['name']} ({c['ticker']})" if c["ticker"] else c["name"]
+
     for d in due:
         if d["webhook_id"] in stalled or not until():
             continue
-        cid = d["company_id"]
-        detail = d.get("detail") or {}
-        if detail.get("figures") or detail.get("red_lines"):
-            if cid not in readable:
-                readable[cid] = can(user_id, "financials", cid)
-            if not readable[cid]:
+        secret = webhook_secret(jwt_secret, d["webhook_id"], bytes(d["secret_salt"]))
+        if d.get("screen_alert_id"):  # a watched screen's alert (watches.py)
+            alert = {"screen_alert_id": d["screen_alert_id"], "item_id": d["screen_item_id"],
+                     "screen_item_id": d["screen_item_id"], "name": d["name"],
+                     "detail": visible(d.get("screen_detail") or {}, reads)}
+            link = screen_links(app_url, d["screen_item_id"])
+            body = body_of(d["format"], screen_event(alert, company_of, link, app_url, at),
+                           screen_message(alert, label_of, link))
+            kind = "screen"
+        else:
+            cid = d["company_id"]
+            detail = d.get("detail") or {}
+            if (detail.get("figures") or detail.get("red_lines")) and not reads(cid):
                 d = {**d, "detail": {**detail, "figures": None, "red_lines": [],
                                      "figures_status": "no_access"}}
-        name = (names.get(cid) or {}).get("name") or cid
-        ticker = (tickers.get(cid) or [None])[0]
-        company = {"company_id": cid, "name": name, "ticker": ticker}
-        label = f"{name} ({ticker})" if ticker else name
-        link = links(app_url, d)
-        secret = webhook_secret(jwt_secret, d["webhook_id"], bytes(d["secret_salt"]))
-        body = body_of(d["format"], event(d, company, link, at), message(d, label, link))
-        sent = sender.send(d["url"], body, headers(secret, d["delivery_id"], "filing", body))
+            link = links(app_url, d)
+            body = body_of(d["format"], event(d, company_of(cid), link, at),
+                           message(d, label_of(cid), link))
+            kind = "filing"
+        sent = sender.send(d["url"], body, headers(secret, d["delivery_id"], kind, body))
         alerts.record(user_id, [(d["delivery_id"], d["attempts"], sent)], at)
         if sent.error in STALLED or sent.error in REFUSED:
             stalled.add(d["webhook_id"])
@@ -299,7 +331,12 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
         users: list[str] | None = None, email: EmailProvider | None = None,
         recipients: Callable[[str], str | None] = no_recipients,
         monotonic: Callable[[], float] = time.monotonic,
-        shuffle: Callable[[list[str]], None] = random.shuffle) -> Report:
+        shuffle: Callable[[list[str]], None] = random.shuffle,
+        watches: AppWatches | None = None, access: Callable[[str], Any] | None = None,
+        item: Callable[[str, str], dict | None] | None = None,
+        datasets: Callable[[str, list[str]], dict] | None = None) -> Report:
+    """One run (module docstring). With `watches` (and the owner's `access`, `item` and
+    `datasets` lookups), the watched screens' pass (watch_job.py) runs before the sends."""
     report = Report()
     today = now.astimezone(ET).date()
     since = today - timedelta(days=LOOKBACK_DAYS)
@@ -363,6 +400,14 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
         alerts.ran(now, complete=report.errors == 0 and report.deferred == 0)
     except Exception as e:  # "last checked" then reads each user's own row, at most an hour old
         log.warning("alerts: the run wasn't recorded: %s", type(e).__name__)
+    # watched screens, each as its owner, once the nightly figures land (watch_job.py)
+    if watches is not None and access is not None and item is not None:
+        w = run_watches(watches=watches, store=store, access=access, item=item,
+                        datasets=datasets, users=order, now=now, app_url=app_url,
+                        make_until=make_until, email=email, recipients=recipients,
+                        monotonic=monotonic)
+        report.screens_checked, report.screen_alerts = w.checked, w.alerts
+        report.screens_deferred, report.screen_errors = w.deferred, w.errors
     # sending last, in a random order, each user a fair share of the budget (docstring, step 4)
     senders = [u for u, p in plans.items() if p["webhooks"]]
     shuffle(senders)
@@ -392,7 +437,9 @@ def main() -> None:
 
     from query_api.auth import check_secret
     from query_api.authorizer import FgaAuthorizer
+    from query_api.datasets import AppUserData
     from query_api.store import Store
+    from query_api.workspaces import AppWorkspaces
     from tributary_authz import FgaClient
     from tributary_telemetry import configure_logging
 
@@ -400,18 +447,24 @@ def main() -> None:
     pool = ConnectionPool(os.environ["DATABASE_URL"], min_size=1, max_size=2, open=True)
     app_pool = ConnectionPool(os.environ["APP_DATABASE_URL"], min_size=1, max_size=2, open=True)
     authorizer = FgaAuthorizer(FgaClient.from_env())
+    userdata = AppUserData(pool)
     try:
         report = run(alerts=AppAlerts(app_pool), store=Store(pool), can=authorizer.can,
                      sender=HttpsSender(),
                      jwt_secret=check_secret(os.environ["QUERY_API_JWT_SECRET"]),
                      now=datetime.now(UTC),
                      app_url=os.environ.get("PUBLIC_APP_URL", DEFAULT_APP_URL).rstrip("/"),
-                     email=email_from_env(os.environ))
+                     email=email_from_env(os.environ),
+                     # watched screens: each as its owner (OpenFGA, their items, their data)
+                     watches=AppWatches(app_pool), access=authorizer.access,
+                     item=AppWorkspaces(app_pool).item,
+                     datasets=lambda user, names: userdata.catalog(user, names))
     finally:
         pool.close()
         app_pool.close()
-    log.info("alerts run: %d users, %d new, %d ready, %d delivered, %d failed, %d errors",
-             report.users, report.created, report.ready, report.delivered, report.failed,
+    log.info("alerts run: %d users, %d new, %d ready, %d screens checked, %d screen alerts,"
+             " %d delivered, %d failed, %d errors", report.users, report.created, report.ready,
+             report.screens_checked, report.screen_alerts, report.delivered, report.failed,
              report.errors, extra=asdict(report))
     # every user failing means something is down (the database, OpenFGA): fail the Job
     sys.exit(1 if report.errors and report.errors >= max(report.users, 1) else 0)

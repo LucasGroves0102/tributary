@@ -225,6 +225,9 @@ class Screen:
     offset: int = 0
     as_of: date | None = None              # gold as it stood at the end of that day (087)
     metrics: dict[str, MetricColumn] = field(default_factory=dict)  # own metrics by column key
+    # hide_blank over these columns instead of `columns` (None: `columns`): a watched screen
+    # (watches.py) reads its lines' columns too without changing which companies it lists
+    blank_columns: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -446,11 +449,12 @@ def _has_value(columns: list[str], granted: list[str] | None, params: dict) -> s
     return f"({test})" if granted is None else f"(c.company_id <> ALL(%(granted)s) OR {test})"
 
 
-def _has_metric_value(s: Screen, granted: list[str] | None, params: dict) -> str:
+def _has_metric_value(s: Screen, granted: list[str] | None, params: dict,
+                      columns: list[str]) -> str:
     """hide_blank with own metrics: a value in a plain column, in one of the metrics' inputs of
     Tributary's figures, or a row of one of the datasets they read (the caller's own, RLS)."""
-    keys = [k for k in s.columns if k in COLUMNS]
-    for k in s.columns:
+    keys = [k for k in columns if k in COLUMNS]
+    for k in columns:
         for inp in s.metrics[k].inputs if k in s.metrics else ():
             if inp.metric is not None:
                 keys.append(f"{inp.metric}_{SPAN_SUFFIX[inp.span or 'ttm']}")
@@ -459,7 +463,7 @@ def _has_metric_value(s: Screen, granted: list[str] | None, params: dict) -> str
     if keys:
         tests.append(_has_value_at(keys, None, params) if s.as_of is not None
                      else _has_value(keys, None, params))
-    datasets = sorted({inp.dataset_id for k in s.columns if k in s.metrics
+    datasets = sorted({inp.dataset_id for k in columns if k in s.metrics
                        for inp in s.metrics[k].inputs if inp.dataset_id})
     if datasets:
         params["has_data"] = datasets
@@ -511,11 +515,12 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                     " WHERE s.company_id = c.company_id),"
                     " (SELECT true FROM gold.financials_coverage v"
                     " WHERE v.company_id = c.company_id LIMIT 1), false)")
+    blank = s.columns if s.blank_columns is None else s.blank_columns
     if s.hide_blank and s.metrics:
-        meta.append(_has_metric_value(s, granted, params))
+        meta.append(_has_metric_value(s, granted, params, blank))
     elif s.hide_blank:
-        meta.append(_has_value_at(s.columns, granted, params) if at
-                    else _has_value(s.columns, granted, params))
+        meta.append(_has_value_at(blank, granted, params) if at
+                    else _has_value(blank, granted, params))
     if s.company_ids is not None:
         meta.append("c.company_id = ANY(%(ids)s)")
         params["ids"] = s.company_ids
