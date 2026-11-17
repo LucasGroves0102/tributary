@@ -87,9 +87,9 @@ export const SCENARIOS = ["bear", "base", "bull"] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 export const SCENARIO_LABELS: Record<Scenario, string> = { bear: "Bear", base: "Base", bull: "Bull" };
 /** How the Query API starts a new bear / bull case from the base case (worded on the page; the
- * numbers come from the run's preview): half the growth, at least 5 points; a fifth of the
- * margin, at least 3. */
-export const SCENARIO_SPREAD = { growth: { share: 0.5, min: 5 }, margin: { share: 0.2, min: 3 } } as const;
+ * numbers come from the run's preview): half the growth, at least 5 points; a quarter of the
+ * margin (x0.75 and x1.25 of a positive one, Riley 35), no minimum. */
+export const SCENARIO_SPREAD = { growth: { share: 0.5, min: 5 }, margin: { share: 0.25, min: 0 } } as const;
 /** the most growth a default fades toward, percent (worded on the page; the API applies it) */
 export const LONG_RUN_GROWTH_CAP = 5;
 

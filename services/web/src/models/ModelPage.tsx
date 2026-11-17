@@ -475,7 +475,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
             <p>
               No {caseLabel} case yet. A bear and a bull case sit beside your base case: the same years, your numbers for
               what happens if it goes worse or better. Each starts from the base case {sel === "bear" ? "minus" : "plus"} half
-              its growth (at least 5 points) and a fifth of its margin (at least 3), with the base case's other rates: the
+              its growth (at least 5 points) and a quarter of its margin, with the base case's other rates: the
               table below shows the {caseLabel} case as it would start. The thesis check reads the base case only.
             </p>
             <button className="btn primary" onClick={addCases} disabled={pending || !ok?.cases.bear?.years.length}

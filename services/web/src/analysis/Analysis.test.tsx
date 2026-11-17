@@ -429,7 +429,7 @@ it("adds bear and bull cases to the project's model, switches between them and s
   expect(put.body.state).toEqual({
     companyId: NVDA, historyYears: 8,
     assumptions: [{ growth: 10, margin: 20 }, { growth: 10, margin: 20 }],
-    scenarios: { bear: [{ growth: -2, margin: 16 }, { growth: 5, margin: 16 }], bull: [{ growth: 15, margin: 24 }, { growth: 15, margin: 24 }] },
+    scenarios: { bear: [{ growth: -2, margin: 15 }, { growth: 5, margin: 15 }], bull: [{ growth: 15, margin: 25 }, { growth: 15, margin: 25 }] },
   });
 });
 

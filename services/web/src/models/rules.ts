@@ -71,7 +71,7 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
   if (selected !== "base") {
     out.push({
       key: "spread",
-      text: `The ${selected} case starts from the base case's defaults, each year's growth ${selected === "bear" ? "down" : "up"} by half (at least ${SCENARIO_SPREAD.growth.min} points) and its margin by a fifth (at least ${SCENARIO_SPREAD.margin.min}). `
+      text: `The ${selected} case starts from the base case's defaults, each year's growth ${selected === "bear" ? "down" : "up"} by half (at least ${SCENARIO_SPREAD.growth.min} points) and its margin by a quarter of itself (a positive margin x${selected === "bear" ? 1 - SCENARIO_SPREAD.margin.share : 1 + SCENARIO_SPREAD.margin.share}). `
         + "Its FCF margin follows its own operating margin: the base case's FCF margin that year, moved by the gap between the two cases' operating margins after tax.",
     });
   }
