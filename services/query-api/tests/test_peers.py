@@ -48,13 +48,34 @@ def test_size_counts_only_where_both_revenues_are_readable():
 def test_a_revenue_in_another_currency_is_an_unknown_size_not_a_small_one():
     """057: Store.peer_facts gives no value for a yuan revenue (056: never compared with
     dollars); it was read as the $10M floor, a 38% cut beside a $100B target. Unknown is x1."""
-    big = Decimal("1e11")
+    mid = Decimal("4e8")  # 2% of it is under the $10M floor: no candidate is under the size floor
     yuan = cand(OTHER, sim=0.14, revenue=None, readable=True, size_unknown=True)
     tiny = cand(TINY, sim=0.14, revenue=None, readable=True)
-    ranked = P.rank("3674", big, [yuan, tiny])
+    ranked = P.rank("3674", mid, [yuan, tiny])
     assert [c.company_id for c in ranked] == [OTHER, TINY]
     assert ranked[0].score == pytest.approx(0.14 * 1.15)
-    assert ranked[1].score == pytest.approx(0.14 * 1.15 / (1 + 0.3 * 4))
+    assert ranked[1].score == pytest.approx(0.14 * 1.15 / (1 + 0.3 * 1.60206), 1e-4)
+    # beside a $100B target the $10M floor is under 2% of it: the unknown size stays
+    assert [c.company_id for c in P.rank("3674", Decimal("1e11"), [yuan, tiny])] == [OTHER]
+
+
+def test_peers_under_two_percent_of_the_targets_revenue_are_no_peers():
+    """Riley 27: GSI Technology ($25M) and Ambarella ($418M) among NVIDIA's ($303B) peers."""
+    nvda = Decimal("303e9")
+    gsit = cand("GSIT", sim=0.3, revenue=Decimal("25e6"), readable=True)
+    amba = cand("AMBA", sim=0.3, revenue=Decimal("418e6"), readable=True)
+    crwv = cand("CRWV", sim=0.1, revenue=Decimal("9.9e9"), readable=True)
+    edge = cand("EDGE", sim=0.1, revenue=nvda * P.SIZE_MIN_SHARE, readable=True)  # 2% exactly
+    named = cand("NAMED", sim=0.1, revenue=Decimal("1e9"), readable=True, named_by_target=True)
+    unread = cand("UNREAD", sim=0.1, revenue=None, readable=False)  # no oracle: never dropped
+    unknown = cand("UNKNOWN", sim=0.1, revenue=None, readable=True, size_unknown=True)
+    ranked = P.rank("3674", nvda, [gsit, amba, crwv, edge, named, unread, unknown])
+    assert {c.company_id for c in ranked} == {"CRWV", "EDGE", "UNREAD", "UNKNOWN"}
+    # the target's own size unknown: nobody is too small
+    assert len(P.rank("3674", None, [gsit, amba, crwv])) == 3
+    # a small target ($80M) keeps a pre-revenue candidate: 2% of it is under the $10M floor
+    assert P.too_small(Decimal("80e6"), None, True) is False
+    assert P.too_small(nvda, None, True) and not P.too_small(nvda, None, False)
 
 
 def test_competitors_named_lift_a_peer_and_shells_never_appear():
@@ -62,11 +83,13 @@ def test_competitors_named_lift_a_peer_and_shells_never_appear():
         cand(AMD, sim=0.12, named_by_target=True, revenue=Decimal("4e10"), readable=True),
         cand(OTHER, sim=0.14, revenue=Decimal("1e11"), readable=True),
         cand(SHELL, sic="6770", sim=0.5),
-        cand(TINY, sim=0.12, revenue=Decimal("1e6"), readable=True)])
-    assert [c.company_id for c in ranked] == [AMD, OTHER, TINY]
+        cand(TINY, sim=0.12, revenue=Decimal("1e6"), readable=True)])  # under the size floor
+    assert [c.company_id for c in ranked] == [AMD, OTHER]
     assert ranked[0].score == pytest.approx(0.12 * 1.15 / (1 + 0.3 * 0.39794) + P.NAMED, 1e-4)
     assert ranked[1].score == pytest.approx(0.14 * 1.15)  # same size, not named
-    assert ranked[2].score == pytest.approx(0.12 * 1.15 / (1 + 0.3 * 4))  # floored at $10M
+    tiny = P.rank("3674", Decimal("3e8"), [cand(TINY, sim=0.12, revenue=Decimal("1e6"),
+                                                readable=True)])
+    assert tiny[0].score == pytest.approx(0.12 * 1.15 / (1 + 0.3 * 1.477121), 1e-4)  # $10M floor
     # a shell's peers may be shells
     assert [c.company_id for c in P.rank("6770", None, [cand(SHELL, sic="6770")])] == [SHELL]
 

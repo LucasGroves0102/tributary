@@ -433,7 +433,8 @@ in the Overview's ledger (no seal), with the last figure on file, its period and
 (analyst test 4: Deckers' 2014 net debt, Eaton's 2019 and Johnson Controls' 2016 operating margins
 read as current). One merely behind shows its date and still counts. Migration 069 adds two readings:
 **n/a** for a figure Tributary computes none of for the company's industry, the API's reason in the hover
-(Walmart's and Costco's gross margin: revenue includes membership fees; AT&T's and Verizon's: network
+(other warehouse clubs' and variety stores' gross margin: revenue includes membership fees; Walmart and
+Costco read net sales apart and have one, on net sales, since 084; AT&T's and Verizon's: network
 costs outside cost of revenue; also the Ratios table's blank row, from `/financials`' `not_computed`), and
 *stale*, a company whose latest period is long past (a quarterly filer's 270 days, an annual filer's 500):
 its figure shows with its date but leaves sorts, filters and medians (Aphoenity's Sep 2024 margin topped
@@ -723,7 +724,10 @@ sentence in the reader), the same industry and a similar size. Above the table, 
 distinctive terms. The columns are the answer's: a bank is compared on a bank's lines. Each median says
 how many of the peers it uses ("3 of 4"), and its hover why the others are left out, in the blanks
 vocabulary (not reported, not applicable, not meaningful or not reported since an earlier period,
-metadata only). Compare's medians do the same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
+metadata only). A peer with TTM revenue under 1% of the target's stays in the table but leaves every
+median, high and low, its cells and the median's hover saying so (`MEDIAN_MIN_SIZE`, Riley 26: GSI
+Technology's -100.8% moved NVIDIA's median); the table reads revenue for it even when the column isn't
+shown. Compare's medians do the same. Adding a peer on Compare asks `/peers/check` first: a company with no figures to compare isn't
 added, and the page says why (Birkenstock files 20-F annual reports as a foreign private issuer, under
 IFRS; a company whose XBRL hasn't arrived yet; a fund with no annual report). A bank target's comps open
 on a bank's columns (net interest income, efficiency ratio, provision, loans, deposits, ROE, net margin)
@@ -1049,7 +1053,7 @@ on the folder changed last. Never just the first workspace.
   years scroll. The page's longer explanations (how the model works, one-offs, how the multiples are worked
   out) are one sentence each with the rest behind a closed "How this works". **Bear / base / bull**: a switch picks the case being edited; "Add bear and bull cases"
   copies the run's preview of them (the base case moved by half its growth, at least 5 points, and
-  a fifth of its margin, at least 3; the rates the user set; a case's default FCF margin follows its
+  a quarter of its margin, x0.75 and x1.25 of a positive one; the rates the user set; a case's default FCF margin follows its
   own operating margin, the API's rule worded in the case's rules line), and waits for the run of the latest
   numbers so a case never starts from stale ones. Before they're added, a bear or bull tab shows
   that case's preview beside base; a case whose numbers don't parse keeps its last valid ones

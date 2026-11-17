@@ -60,6 +60,9 @@ describe("the URL", () => {
       sort: "name",
       limit: 2,
     });
+    // revenue is read even when not shown: each company's size for the median's floor
+    expect(compareParams({ target: NVDA, peers: [AAPL], cols: ["net_margin_ttm"] }).columns)
+      .toEqual(["net_margin_ttm", "revenue_ttm", "revenue_q"]);
   });
 });
 
@@ -101,7 +104,7 @@ describe("the table", () => {
     const stats = peerStats(rows, s.cols);
     // peers: TSLA (no values) and AAPL; NVDA is the target and doesn't count
     // n of N: one of the two peers (TSLA is metadata only, and says so)
-    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, of: 2, high: 0.3, low: 0.3, banks: 0, unusable: 0, currency: 0, unreported: 0, masked: 1 });
+    expect(stats.operating_margin_ttm).toEqual({ median: 0.3, n: 1, of: 2, high: 0.3, low: 0.3, banks: 0, unusable: 0, currency: 0, unreported: 0, masked: 1, small: 0 });
     expect(countText(stats.operating_margin_ttm!)).toBe("1 of 2");
     expect(medianTitle(stats.operating_margin_ttm!)).toBe(
       "Median of 1 of 2 peers' values; the target is excluded. Left out: 1 metadata only (your plan doesn't cover its financials).");
@@ -203,6 +206,42 @@ describe("what can't be compared", () => {
     expect(medianTitle(stats.revenue_ttm!)).toContain("1 in another currency");
     expect(stats.operating_margin_ttm).toMatchObject({ n: 2, currency: 0 });
     expect(sortRows(rows, { key: "revenue_ttm", desc: true })[0]!.companyId).not.toBe(AAPL);
+  });
+});
+
+describe("a peer too small beside the target (Riley 26)", () => {
+  const GSIT = "0001126741";
+  const peer = (id: string, name: string, revenue: string, margin: string, over: Partial<ScreenerRow> = {}): ScreenerRow => ({
+    ...row(entry({ company_id: id, name, tickers: [name] })),
+    access: ["financials"],
+    values: { revenue_ttm: revenue, operating_margin_ttm: margin },
+    ...over,
+  });
+  const nvda = peer(NVDA, "NVDA", "303000000000", "0.62");
+  const s = { target: NVDA, peers: [AAPL, KO, GSIT], cols: ["operating_margin_ttm"] };
+
+  it("leaves a peer under 1% of the target's revenue out of the median, high and low, and says so", () => {
+    const rows = compareRows(s, [nvda, peer(AAPL, "AAPL", "400000000000", "0.31"),
+      peer(KO, "KO", "3100000000", "0.29"), peer(GSIT, "GSIT", "25000000", "-1.008")]);
+    expect(rows.map((r) => r.small)).toEqual([false, false, false, true]); // KO: just over 1%
+    const gsit = rows.find((r) => r.companyId === GSIT)!.cells.operating_margin_ttm!;
+    expect(gsit.value).toBe(-1.008); // shown as it is
+    expect(gsit.title).toContain("Left out of the peer median: revenue under 1% of the target's.");
+    const stats = peerStats(rows, s.cols).operating_margin_ttm!;
+    expect(stats).toMatchObject({ median: 0.3, n: 2, of: 3, low: 0.29, small: 1 });
+    expect(medianTitle(stats)).toBe("Median of 2 of 3 peers' values; the target is excluded. "
+      + "Left out: 1 with revenue under 1% of the target's (too small to compare).");
+  });
+
+  it("needs both sizes: a target or a peer without a current revenue keeps every peer", () => {
+    const blank = compareRows(s, [{ ...nvda, values: { operating_margin_ttm: "0.62" } },
+      peer(GSIT, "GSIT", "25000000", "-1.008")]);
+    expect(peerStats(blank, s.cols).operating_margin_ttm).toMatchObject({ n: 1, small: 0 });
+    const nm = peer(GSIT, "GSIT", "25000000", "-1.008",
+      { readings: { revenue_ttm: { status: "not_meaningful", reason: "gross sales" } } });
+    expect(compareRows(s, [nvda, nm]).find((r) => r.companyId === GSIT)!.small).toBe(false);
+    const masked = peer(GSIT, "GSIT", "25000000", "-1.008", { access: [] });
+    expect(compareRows(s, [nvda, masked]).find((r) => r.companyId === GSIT)!.small).toBe(false);
   });
 });
 

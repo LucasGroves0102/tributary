@@ -361,9 +361,9 @@ class Store:
     def peer_facts(self, user_id: str, company_ids: list[str],
                    granted: list[str] | None) -> dict[str, dict]:
         """company_id -> sic, sector, filer category, and TTM revenue read like Store.peers (only
-        for `granted`; None: RLS alone), and whether that revenue is in another currency (then no
-        value: its size is unknown, not small). For at most a page of candidates, never the
-        catalog."""
+        for `granted`; None: RLS alone), and whether that revenue's size is unknown: in another
+        currency (057) or not meaningful (083: gross sales); then no value, and not small. For at
+        most a page of candidates, never the catalog."""
         gate = "" if granted is None else "WHERE c.company_id = ANY(%(granted)s)"
         with self._session(user_id) as cur:
             cur.execute(
@@ -371,13 +371,14 @@ class Store:
                 SELECT c.company_id, c.sic, s.sector, s.industry AS sector_industry,
                        gold.filer_category(c.filer_categories) AS filer_category,
                        r.value AS revenue,
-                       coalesce(r.other_currency, false) AS revenue_other_currency
+                       coalesce(r.size_unknown, false) AS revenue_size_unknown
                 FROM silver.companies c
                 LEFT JOIN silver.sic_sectors s ON c.sic BETWEEN s.sic_from AND s.sic_to
                 LEFT JOIN LATERAL (
                     SELECT CASE WHEN x.status IS NULL OR x.status = 'behind'
                                 THEN x.value END AS value,
-                           x.status = 'other_currency' AS other_currency  -- 056/057
+                           -- 056/057: another currency; 083: gross sales
+                           x.status IN ('other_currency', 'not_meaningful') AS size_unknown
                     FROM gold.latest_period(c.company_id) lp
                     CROSS JOIN LATERAL gold.latest_reading(c.company_id, 'ttm', 'revenue',
                                                            c.sic, lp.latest) x
