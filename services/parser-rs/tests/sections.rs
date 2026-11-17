@@ -773,14 +773,17 @@ fn twenty_f_items_and_whole_documents() {
         "</body></html>",
     );
     let sections = parse(raw.as_bytes(), "20-F").unwrap();
-    assert_eq!(keys(&sections), ["1", "3", "3.D", "4", "4A", "5", "18", "19"]);
+    let kept = keys(&sections);
+    assert_eq!(kept, ["1", "3", "3.D", "4", "4A", "5", "18", "19"]);
     let risk = section(&sections, "3.D");
     assert_eq!(risk.title, "3.D. RISK FACTORS");
     assert_eq!(risk.part.as_deref(), Some("I"));
     assert!(risk.text.ends_with("Demand for our wafers may fall."));
     assert_eq!(section(&sections, "3").char_end, risk.char_start);
-    assert!(section(&sections, "4").text.contains("Business Overview\nWe make chips."));
-    assert!(section(&sections, "5").text.ends_with("Cash was NT$2.1 trillion."));
+    let item4 = &section(&sections, "4").text;
+    assert!(item4.contains("Business Overview\nWe make chips."));
+    let item5 = &section(&sections, "5").text;
+    assert!(item5.ends_with("Cash was NT$2.1 trillion."));
     let text = html_to_text(raw.as_bytes()).unwrap();
     for s in &sections {
         assert_eq!(chars(&text, s.char_start, s.char_end).trim(), s.text);
