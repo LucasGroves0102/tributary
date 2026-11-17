@@ -9,6 +9,8 @@ CORS:
 | `/api/query/*` | Query API (`query-api:8000`) |
 | `/api/agent/*` | agent-api (`agent-api:8001`), unbuffered for server-sent events |
 | `/mcp` (exactly) | the MCP server (`mcp-server:8002`) for users' own AI models; the app never calls it |
+| `/.well-known/oauth-protected-resource[/mcp]` | the MCP server: its resource metadata, where an AI app learns to sign in |
+| `/.well-known/oauth-authorization-server`, `/oauth/*` | Query API: the authorization server for connected apps (also in the dev proxy); any other `/.well-known/` path is a 404 |
 
 Every figure, reading and access decision comes from the APIs: the app words them and decides none.
 Each screen's detail, the rules behind it and the measurements are in [DESIGN.md](DESIGN.md).
