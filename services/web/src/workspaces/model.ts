@@ -21,6 +21,7 @@ export const KIND_LABELS: Record<ItemKind, string> = {
   thesis: "Thesis",
   model: "Model",
   metric: "Metric",
+  notebook: "Notebook",
 };
 export const KIND_PAGES: Record<ItemKind, string> = {
   chart: "Chart builder",
@@ -30,6 +31,7 @@ export const KIND_PAGES: Record<ItemKind, string> = {
   thesis: "the thesis editor",
   model: "the model",
   metric: "Your data",
+  notebook: "the notebook",
 };
 /** Kinds a page's Save bar keeps "open" (reports, theses and models have their own pages). */
 export const isPageKind = (k: ItemKind): k is SavedKind => k === "chart" || k === "comps" || k === "screen";

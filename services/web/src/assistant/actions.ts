@@ -100,7 +100,7 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   const ctx: UiContext = {
     // Your data (B2) is the user's own too: nothing of it goes to the assistant
     page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio"
-      || route.view === "data" ? "about"
+      || route.view === "data" || route.view === "notebook" ? "about"
       : route.view === "alerts" ? "home"
       : route.view === "analysis" ? (route.step === "thesis" || route.step === "model" ? route.step : "workspace")
       : route.view,

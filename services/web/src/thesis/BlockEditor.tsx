@@ -201,7 +201,7 @@ export function BlockEditor({ markdown, onChange, onRemoved, items, token, label
           >
             {u.kind === "quote" ? (
               <QuoteCard markdown={markdown} unit={u} actions={actions} />
-            ) : item && item.kind !== "report" && item.kind !== "thesis" && item.kind !== "metric" ? (
+            ) : item && item.kind !== "report" && item.kind !== "thesis" && item.kind !== "metric" && item.kind !== "notebook" ? (
               <Embed token={token} item={{ ...item, kind: item.kind, ref: item.item_id }} label={label} readable={readable}
                 hasTtm={hasTtm} onOpenChart={onOpenChart} actions={actions} preview />
             ) : (

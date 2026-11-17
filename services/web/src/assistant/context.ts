@@ -228,6 +228,9 @@ export function pageContext(
     case "data":
       // nor the user's own datasets (no tool; MCP reads them with the user's own key)
       return { label: "Your data", suggestions: [] };
+    case "notebook":
+      // nor the user's queries and their results (B3a: no tool, nothing sent)
+      return { label: "Notebook", suggestions: [] };
     case "workspace":
       return { label: "Workspace", suggestions: general(watched).slice(0, 2) };
     case "report":

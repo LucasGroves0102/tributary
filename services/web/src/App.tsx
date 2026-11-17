@@ -42,6 +42,7 @@ import {
   ModelPage,
   PortfolioPage,
   DataPage,
+  NotebookPage,
   Settings,
   Status,
   ThesisPage,
@@ -388,6 +389,7 @@ export function App(props: Props = {}) {
           }
           // an own metric (B2d) lives on Your data, with the user's datasets
           if (item.kind === "metric") return go({ view: "data" });
+          if (item.kind === "notebook") return go({ view: "notebook", itemId: item.item_id });
           if (item.kind === "chart") {
             keepDraft(`Opened ${item.name}.`);
             setChart(() => restoreChartState(item.state));
@@ -858,6 +860,9 @@ export function App(props: Props = {}) {
               <PortfolioPage key={`${user}:${route.import ? "import" : "holdings"}`} token={token} holdingId={route.holdingId} importing={!!route.import} />
             ) : route.view === "data" ? (
               <DataPage key={user} token={token} saved={saved.list.state === "unavailable" ? null : saved} />
+            ) : route.view === "notebook" ? (
+              <NotebookPage key={`${user}-${route.itemId ?? "new"}`} token={token} itemId={route.itemId ?? null}
+                saved={saved.list.state === "unavailable" ? null : saved} />
             ) : route.view === "workspace" ? (
               <WorkspacePage
                 key={`${user}-${route.workspaceId}`}

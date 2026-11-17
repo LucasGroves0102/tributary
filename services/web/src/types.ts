@@ -229,8 +229,84 @@ export type SavedKind = "chart" | "comps" | "screen";
 /** What users write on their own pages: a thesis (Markdown) and a revenue model (app DB 009). */
 export type WrittenKind = "thesis" | "model";
 /** Every item kind: reports are written by the assistant (agent-api /v1/reports); a metric is
- * the user's own saved formula (B2d, app DB 022), kept on Your data. */
-export type ItemKind = SavedKind | WrittenKind | "report" | "metric";
+ * the user's own saved formula (B2d, app DB 022), kept on Your data; a notebook is the user's SQL,
+ * text and charts (B3a, app DB 023), on its own page. */
+export type ItemKind = SavedKind | WrittenKind | "report" | "metric" | "notebook";
+
+/** A notebook's chart over a SQL cell's result (query-api workspaces.py NotebookChart). */
+export interface NotebookChart {
+  /** the SQL cell whose result it draws */
+  source: string;
+  type: "line" | "bar";
+  x: string;
+  y: string[];
+  title?: string;
+}
+
+/** One notebook cell (workspaces.py NotebookCell): a query, the user's Markdown, or a chart. */
+export interface NotebookCell {
+  id: string;
+  kind: "sql" | "text" | "chart";
+  sql?: string;
+  text?: string;
+  chart?: NotebookChart;
+}
+
+/** A notebook as saved (workspaces.py NotebookState): never a result. */
+export interface NotebookState {
+  cells: NotebookCell[];
+}
+
+/** POST /v1/sql (query-api sql_workspace.py): what a column holds. */
+export interface SqlColumn {
+  name: string;
+  type: "number" | "text" | "date" | "timestamp" | "time" | "boolean" | "interval";
+}
+
+/** A value as the API sends it: numerics as exact decimal text, dates ISO. */
+export type SqlValue = string | number | boolean | null | SqlValue[];
+
+/** A query's answer: at most `max_rows` rows; `sql` is the statement as it ran. */
+export interface SqlResult {
+  columns: SqlColumn[];
+  rows: SqlValue[][];
+  row_count: number;
+  /** rows: more than max_rows; size: more than the answer's size cap */
+  truncated: "rows" | "size" | null;
+  max_rows: number;
+  seconds: number;
+  cost: number;
+  /** the workspace views and functions it read */
+  reads: string[];
+  sql: string;
+  budget: { used_seconds: number; limit_seconds: number };
+}
+
+/** A query the API explained it won't run or couldn't finish (422) or a limit (429). */
+export interface SqlRefusal {
+  status: number;
+  /** refused, sql_error, timeout, too_costly, too_large, too_wide, busy, busy_user, busy_slots, budget */
+  code: string;
+  detail: string;
+  /** a syntax error's place in the query, 0-based */
+  position?: number;
+}
+
+/** GET /v1/sql/schema: the workspace's views and functions, each column described. */
+export interface SqlObject {
+  name: string;
+  kind: "view" | "function";
+  description: string | null;
+  /** a function's arguments as Postgres writes them */
+  arguments: string | null;
+  columns: { name: string; type: string; description: string | null }[];
+}
+
+export interface SqlSchema {
+  objects: SqlObject[];
+  examples: { title: string; sql: string }[];
+  limits: { rows: number; seconds: number; max_cost: number; max_plan_rows?: number; seconds_per_day: number; sql_chars: number };
+}
 
 /** An own metric's state (query-api workspaces.py MetricState). */
 export interface MetricState {

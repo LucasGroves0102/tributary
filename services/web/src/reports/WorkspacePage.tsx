@@ -74,7 +74,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
   // a report is written from charts, comps and screens (services/agent report.py)
   const items = ws.items.filter((i) => isPageKind(i.kind));
   const reports = ws.items.filter((i) => i.kind === "report");
-  const written = ws.items.filter((i) => i.kind === "thesis" || i.kind === "model");
+  const written = ws.items.filter((i) => i.kind === "thesis" || i.kind === "model" || i.kind === "notebook");
   const run = writer.run;
   const busy = run.status === "writing";
   const here = run.status !== "idle" && run.workspaceId === workspaceId;
@@ -126,7 +126,7 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
 
       <section className="card">
         <div className="card-h">
-          <h2>Theses and models</h2>
+          <h2>Theses, models and notebooks</h2>
           <span className="sub">written by you; a thesis can embed this workspace's charts, comps, screens and models</span>
         </div>
         {written.length ? (

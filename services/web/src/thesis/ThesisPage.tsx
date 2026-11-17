@@ -682,7 +682,7 @@ export function ThesisBody({ markdown, items, label, token, readable, hasTtm, on
       {parts.map((p, i) =>
         p.type === "text" ? (
           <Markdown key={i} markdown={p.markdown} />
-        ) : p.item.kind === "report" || p.item.kind === "thesis" || p.item.kind === "metric" ? null : (
+        ) : p.item.kind === "report" || p.item.kind === "thesis" || p.item.kind === "metric" || p.item.kind === "notebook" ? null : (
           <Embed key={p.item.item_id} token={token} item={{ ...p.item, kind: p.item.kind, ref: p.item.item_id }} label={label}
             readable={readable} hasTtm={hasTtm} onOpenChart={onOpenChart} />
         ),

@@ -71,6 +71,8 @@ export type Route =
   | { view: "portfolio"; holdingId?: string; import?: boolean }
   /** Your data (B2): the user's own datasets (CSV uploads) and metrics (saved formulas) */
   | { view: "data" }
+  /** the SQL workspace (B3a): a new notebook (no itemId) or a saved one (item of kind notebook) */
+  | { view: "notebook"; itemId?: string }
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
@@ -84,7 +86,7 @@ export type Route =
   | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string; start?: string };
 
 /** Screens in the left nav: routes without parameters. */
-export type NavView = "home" | "analysis" | "portfolio" | "companies" | "chart" | "compare" | "data" | "ask";
+export type NavView = "home" | "analysis" | "portfolio" | "companies" | "chart" | "compare" | "data" | "notebook" | "ask";
 
 /** The left nav: label and the key after "g" that opens it. */
 export const NAV: { view: NavView; label: string; key: string }[] = [
@@ -95,6 +97,7 @@ export const NAV: { view: NavView; label: string; key: string }[] = [
   { view: "chart", label: "Chart builder", key: "b" },
   { view: "compare", label: "Compare", key: "x" },
   { view: "data", label: "Your data", key: "d" },
+  { view: "notebook", label: "Notebook", key: "n" },
   { view: "ask", label: "Ask", key: "a" },
 ];
 
@@ -136,6 +139,7 @@ export function parse(hash: string): Route {
   }
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "api" | "settings" | "alerts" | "data" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
+  if (view === "notebook") return a && ID.test(a) ? { view, itemId: a } : { view };
   if (view === "portfolio") {
     if (a === "import") return { view: "portfolio", import: true };
     return a && ID.test(a) ? { view: "portfolio", holdingId: a } : { view: "portfolio" };
@@ -199,6 +203,8 @@ export function href(route: Route): string {
       return route.search ? `#/search?${searchQuery(route.search)}` : "#/search";
     case "workspace":
       return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
+    case "notebook":
+      return route.itemId ? `#/notebook/${encodeURIComponent(route.itemId)}` : "#/notebook";
     case "portfolio":
       return route.import ? "#/portfolio/import" : route.holdingId ? `#/portfolio/${encodeURIComponent(route.holdingId)}` : "#/portfolio";
     case "analysis":
@@ -240,6 +246,8 @@ export function pageOf(route: Route): string {
       return `filing/${route.companyId}/${route.accessionNo}/${route.section ?? ""}`;
     case "workspace":
       return `workspace/${route.workspaceId}`;
+    case "notebook":
+      return `notebook/${route.itemId ?? ""}`;
     case "portfolio":
       return `portfolio/${route.import ? "import" : (route.holdingId ?? "")}`;
     case "report":

@@ -106,7 +106,24 @@ export interface Fake {
   journal: Record<string, unknown>[];
   /** Your data (query_api/datasets.py): the datasets stored, each with NVDA's rows */
   datasets: Record<string, unknown>[];
+  /** the SQL workspace (query_api/sql_workspace.py): every query POST /v1/sql was sent */
+  queries: string[];
 }
+
+/** GET /v1/sql/schema as the Query API answers it (a part of it). */
+const SQL_SCHEMA = {
+  objects: [
+    { name: "companies", kind: "view", description: "Every company Tributary knows: identity from the SEC.", arguments: null,
+      columns: [{ name: "company_id", type: "text", description: "Tributary's id" }, { name: "name", type: "text", description: "The SEC's name" }] },
+    { name: "financials", kind: "view", description: "Tributary's figures as they stand today. Needs the financials tier.", arguments: null,
+      columns: [{ name: "company_id", type: "text", description: "The company" }, { name: "metric", type: "text", description: "The metric" },
+        { name: "period_end", type: "date", description: "Last day of the period" }, { name: "value", type: "numeric", description: "The figure as filed" }] },
+    { name: "restatements", kind: "function", description: "Every change of one company's figure between two versions.",
+      arguments: "company_id text, as_of date DEFAULT NULL::date", columns: [{ name: "metric", type: "text", description: null }] },
+  ],
+  examples: [{ title: "Nvidia's quarterly revenue", sql: "SELECT period_end, value\nFROM financials\nWHERE company_id = '0001045810' AND span = 'quarter' AND metric = 'revenue'\nORDER BY period_end" }],
+  limits: { rows: 10000, seconds: 15, max_cost: 1500000, seconds_per_day: 600, sql_chars: 20000 },
+};
 
 const DATA_LIMITS = { file_bytes: 20 * 2 ** 20, rows: 200000, columns: 50, datasets: 50, user_bytes: 200 * 2 ** 20, requests_per_hour: 30, uploads_per_hour: 10 };
 
@@ -215,7 +232,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [], datasets: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [], datasets: [], queries: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -583,6 +600,19 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
     if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
+    // the SQL workspace (query_api/sql_workspace.py): the schema browser and a query's answer
+    if (path === "/v1/sql/schema") return json(SQL_SCHEMA);
+    if (path === "/v1/sql" && method === "POST") {
+      const sql = String(body.sql ?? "");
+      fake.queries.push(sql);
+      if (/pg_class/i.test(sql)) {
+        return json({ detail: "pg_class isn't in the workspace: read workspace views only (the schema browser lists them)", code: "refused" }, 422);
+      }
+      return json({ columns: [{ name: "period_end", type: "date" }, { name: "value", type: "number" }],
+        rows: [["2025-10-26", "35082000000"], ["2026-01-25", "39331000000"], ["2026-04-26", "44062000000"], ["2026-07-26", "46743000000"]],
+        row_count: 4, truncated: null, max_rows: 10000, seconds: 0.04, cost: 310, reads: ["financials"], sql,
+        budget: { used_seconds: 0.2, limit_seconds: 600 } });
+    }
     // Your data (query_api/datasets.py): a multipart upload, previewed (dry_run) or stored
     if (path === "/v1/datasets" && method === "GET") return json({ datasets: fake.datasets, limits: DATA_LIMITS, uploads_allowed: true });
     if (path === "/v1/datasets" && method === "POST") {

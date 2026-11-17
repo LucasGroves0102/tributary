@@ -387,7 +387,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
   errors.length = 0; // signed in from here
-  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/portfolio", "#/portfolio/import", "#/data", "#/settings", "#/status", "#/api"]) {
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/portfolio", "#/portfolio/import", "#/data", "#/notebook", "#/settings", "#/status", "#/api"]) {
     await page.goto(`/${hash}`);
     await page.waitForLoadState("networkidle");
   }
@@ -397,7 +397,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
 test("no screen scrolls sideways, on a phone, at 1024 or at 1440 with the panel open", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
-  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/portfolio", "#/data"];
+  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/portfolio", "#/data", "#/notebook"];
   for (const [width, height, panel] of [[390, 844, false], [1024, 768, false], [1440, 900, true]] as const) {
     await page.setViewportSize({ width, height });
     await page.evaluate((open) => localStorage.setItem("tributary.assistant", open ? "open" : "closed"), panel);
@@ -622,6 +622,36 @@ test("your data: a CSV checked, then stored, and its rows on the company page", 
   await expect(page).toHaveURL(/#\/companies\?metric=/);
   await expect(page.locator("table.screen thead")).toContainText("Revenue per store");
   expect(fake.calls.some((c) => c.startsWith("GET /api/query/v1/screener?") && c.includes("metric="))).toBe(true);
+});
+
+test("notebook: an example run, a refusal in the server's words, a chart, saved without its results", async ({ page }) => {
+  const fake = await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/notebook");
+  await expect(page.locator(".nb-schema")).toContainText("The figure as filed");
+  await page.getByRole("button", { name: "Nvidia's quarterly revenue" }).click();
+  const query = page.locator(".nb-cell.nb-sql").nth(1); // the starter's query, then the example's
+  await expect(query.locator("table.nb-table tbody tr")).toHaveCount(4);
+  await expect(query.locator(".nb-line")).toHaveText("4 rows in 0.04 s");
+  expect(fake.queries.at(-1)).toContain("FROM financials");
+
+  // a catalog is refused by the server, said beside the query
+  await page.getByRole("button", { name: "Add a query" }).click();
+  const second = page.locator(".nb-cell.nb-sql").nth(2);
+  await second.locator("textarea").fill("SELECT * FROM pg_class");
+  await second.locator("textarea").press("Control+Enter");
+  await expect(second.locator(".nb-refusal")).toContainText("This query can't run here: pg_class isn't in the workspace");
+
+  // a chart over the first query, then saved: the state holds the SQL, never the rows
+  await query.getByRole("button", { name: "Chart it" }).click();
+  await expect(page.locator(".nb-cell.nb-chart svg").first()).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.locator("form.nb-save input").fill("Nvidia revenue");
+  await page.getByRole("button", { name: "Save in Notebooks" }).click();
+  await expect(page.locator("h1")).toHaveText("Nvidia revenue");
+  const saved = [...fake.items.values()].find((i) => i.kind === "notebook")!;
+  expect(JSON.stringify(saved.state)).not.toContain("39331000000");
+  expect((saved.state as { cells: { kind: string }[] }).cells.map((c) => c.kind)).toEqual(["text", "sql", "sql", "chart", "sql"]);
 });
 
 test("portfolio: a Fidelity export previewed then added, a holding by hand, and the journal's first entries", async ({ page }) => {

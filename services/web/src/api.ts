@@ -16,6 +16,9 @@ import type {
   DatasetProblem,
   Datasets,
   DatasetUpload,
+  SqlRefusal,
+  SqlResult,
+  SqlSchema,
   FieldUnit,
   KeyRoutesDoc,
   AuthProviders,
@@ -375,7 +378,7 @@ async function tolerantSave<T>(save: (state: object) => Promise<T>, state: objec
   }
 }
 
-export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind | "metric", name: string, state: object) =>
+export const addItem = (token: string, workspaceId: string, kind: SavedKind | WrittenKind | "metric" | "notebook", name: string, state: object) =>
   tolerantSave((s) => sendJson<SavedItemFull>(token, "POST", `/v1/workspaces/${enc(workspaceId)}/items`, { kind, name, state: s }), state);
 
 /** The item with its state, without recording it as opened. */
@@ -1057,6 +1060,29 @@ export class UploadRefused extends ApiError {
 
 /** The user's datasets and the limits; null from an older Query API (the deploy window). */
 export const datasets = (token: string) => orNullOn404(get<Datasets>(token, "/v1/datasets"));
+
+/** The SQL workspace's views, functions, example queries and limits (B3a); null from a Query API
+ * one release older (the deploy window). */
+export const sqlSchema = (token: string) => orNullOn404(get<SqlSchema>(token, "/v1/sql/schema"));
+
+/** Runs one query as the user (POST /v1/sql, B3a). What the API explains (422: the query itself;
+ * 429: a limit) is an answer to show beside the query, not a failure; null without the route.
+ * Rows are as the API sent them (no display names: a query's output is the user's). */
+export async function runSql(token: string, sql: string): Promise<{ result: SqlResult } | { refusal: SqlRefusal } | null> {
+  const r = await fetch(url("/v1/sql", {}), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ sql }),
+  });
+  if (r.ok) return { result: (await r.json()) as SqlResult };
+  if (r.status === 404) return null;
+  const body = await r.json().catch(() => ({}));
+  if ((r.status === 422 || r.status === 429) && typeof body.detail === "string") {
+    return { refusal: { status: r.status, code: typeof body.code === "string" ? body.code : "refused", detail: body.detail,
+      ...(typeof body.position === "number" ? { position: body.position } : {}) } };
+  }
+  throw new ApiError(typeof body.detail === "string" ? body.detail : noDetail(r.status, r.statusText), r.status);
+}
 
 /** Uploads a CSV as multipart/form-data: into a new dataset (`datasetId` unset) or into one of
  * the user's (`mode` replace or append). `dryRun`: a preview, nothing stored. The file goes only

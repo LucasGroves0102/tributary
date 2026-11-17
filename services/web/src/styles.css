@@ -7922,3 +7922,285 @@ label.check {
     margin-left: 0;
   }
 }
+
+/* Notebook (B3a, notebook/): queries over the workspace views, notes and charts */
+.nb-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-8);
+  margin: calc(-1 * var(--sp-4)) 0 var(--sp-6);
+}
+
+.nb-dirty::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 6px 1px 10px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.nb-save {
+  margin: 0 0 var(--sp-6);
+}
+
+.nb-save label {
+  display: grid;
+  gap: var(--sp-2);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.nb-save .field {
+  width: min(360px, 100%);
+}
+
+.nb-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--sp-9);
+  align-items: start;
+}
+
+@container main (max-width: 960px) {
+  .nb-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.nb-cell {
+  border-top: 1px solid var(--rule);
+  padding: var(--sp-6) 0 var(--sp-8);
+}
+
+.nb-cells > .nb-cell:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.nb-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-6);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+
+/* a cell's name is a rubric: red sans, as in the company page's margins */
+.nb-rubric {
+  margin: 0;
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--red);
+}
+
+.nb-line {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.nb-head .grow {
+  flex: 1;
+}
+
+textarea.nb-sql {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-5) var(--sp-6);
+  border: 1px solid var(--rule-2);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  tab-size: 2;
+  resize: vertical;
+}
+
+textarea.nb-sql:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.nb-text-edit.field {
+  display: block;
+  width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  padding: var(--sp-5) var(--sp-6);
+  font-family: var(--serif);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.nb-note {
+  max-width: 76ch;
+}
+
+.nb-refusal {
+  margin: var(--sp-4) 0 0;
+  padding: var(--sp-3) 0 var(--sp-3) var(--sp-6);
+  border-left: 2px solid var(--error);
+  font-size: var(--fs-md);
+}
+
+.nb-result {
+  margin-top: var(--sp-6);
+}
+
+.nb-result-bar {
+  align-items: center;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+
+.nb-table td,
+.nb-table th {
+  white-space: nowrap;
+}
+
+.nb-table td.nb-null::after {
+  content: "null";
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+.nb-chart-controls {
+  align-items: flex-end;
+  gap: var(--sp-4) var(--sp-8);
+  margin-bottom: var(--sp-4);
+}
+
+.nb-chart-controls label {
+  display: grid;
+  gap: var(--sp-2);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.nb-ys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-8);
+  margin: 0 0 var(--sp-6);
+  padding: 0;
+  border: 0;
+}
+
+.nb-ys legend {
+  padding: 0;
+  margin-bottom: var(--sp-2);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.nb-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--rule);
+}
+
+.nb-side {
+  position: sticky;
+  top: var(--sp-6);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding-left: var(--sp-8);
+  border-left: 1px solid var(--rule);
+}
+
+@container main (max-width: 960px) {
+  .nb-side {
+    position: static;
+    max-height: none;
+    padding: var(--sp-6) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+}
+
+.nb-side-h {
+  margin: var(--sp-8) 0 var(--sp-4);
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--red);
+}
+
+.nb-side-h:first-child {
+  margin-top: 0;
+}
+
+.nb-examples {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nb-examples li {
+  margin-bottom: var(--sp-3);
+}
+
+.nb-examples button.link {
+  text-align: left;
+}
+
+.nb-object {
+  border-bottom: 1px solid var(--rule);
+  padding: var(--sp-3) 0;
+}
+
+.nb-object > summary {
+  cursor: pointer;
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+}
+
+.nb-object > summary:hover {
+  background: var(--sheet-2);
+}
+
+.nb-object p {
+  margin: var(--sp-3) 0;
+  color: var(--ink-2);
+}
+
+.nb-columns {
+  margin: 0 0 var(--sp-4);
+  font-size: var(--fs-sm);
+}
+
+.nb-columns > div {
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--rule);
+}
+
+.nb-columns dt {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.nb-columns dt .faint {
+  font-weight: 400;
+}
+
+.nb-columns dd {
+  margin: var(--sp-1) 0 0;
+  color: var(--ink-2);
+}
+
+.nb-rules {
+  margin-top: var(--sp-8);
+}
