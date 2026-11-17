@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tributary</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="taskpane.css">
+  <!-- Office.js from Microsoft's CDN (Office add-ins must load it from there); the CSP of /addins/
+       allows only that origin beside this site's own -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="functions.js"></script>
+  <script src="taskpane.js" defer></script>
+</head>
+<body>
+  <main class="pane">
+    <header class="head">
+      <img src="icon-32.png" alt="" width="24" height="24">
+      <h1>Tributary</h1>
+    </header>
+    <p class="lede">Figures from SEC filings in your cells, each with the filing it came from.</p>
+
+    <section aria-labelledby="key-title">
+      <h2 id="key-title">Your API key</h2>
+      <p id="key-state" class="state" role="status">Looking for a saved key…</p>
+      <form id="key-form" autocomplete="off" novalidate>
+        <label for="key">Paste a key (it starts <code>trb_</code>)</label>
+        <input id="key" name="key" type="password" spellcheck="false" autocomplete="off">
+        <div class="row">
+          <button type="submit" class="primary">Save key</button>
+          <button type="button" id="forget">Remove key</button>
+        </div>
+        <p id="key-error" class="error" role="alert" hidden></p>
+      </form>
+      <p class="muted">
+        Make one in Tributary's
+        <a href="https://tributary.lucasgroves.dev/#/settings" target="_blank" rel="noreferrer">Settings, API keys</a>:
+        a read-only key is enough. It stays in this add-in's storage on this computer and goes
+        only to Tributary.
+      </p>
+    </section>
+
+    <section aria-labelledby="figures-title">
+      <h2 id="figures-title">Figures</h2>
+      <div class="row">
+        <button type="button" id="refresh">Refresh figures</button>
+        <button type="button" id="check">Check the key</button>
+      </div>
+      <p id="figures-state" class="state" role="status"></p>
+      <p class="muted">
+        Figures are kept for ten minutes; Refresh asks again for every cell. A workbook's cells go in
+        requests of up to 200 figures, each counting once against the key's limits.
+      </p>
+    </section>
+
+    <section aria-labelledby="functions-title">
+      <h2 id="functions-title">Functions</h2>
+      <dl class="fns">
+        <dt><code>=TRIBUTARY.VALUE("NVDA", "revenue")</code></dt>
+        <dd>The newest quarter's figure. Then, optional: the period (latest, TTM, FY, FY2024,
+          FY2024 Q3, CY2024 Q3 or a quarter's end day), an as-of day, and the currency you accept.</dd>
+        <dt><code>=TRIBUTARY.SERIES("NVDA", "revenue", 8)</code></dt>
+        <dd>The newest eight periods, oldest first: the period and the figure on each row. Then the
+          span: quarter, TTM or FY.</dd>
+        <dt><code>=HYPERLINK(TRIBUTARY.SOURCE("NVDA", "revenue"))</code></dt>
+        <dd>The filing on EDGAR. Or a field: period, filed, form, accession, unit, status, reason.</dd>
+      </dl>
+      <p class="muted">
+        <b>#N/A</b> with a reason means no number to show: stale, n/m, n/a, another currency (Tributary
+        never converts: give the currency to read it) or nothing on file. <b>#VALUE!</b> is an
+        argument to fix.
+        <a href="https://tributary.lucasgroves.dev/#/api" target="_blank" rel="noreferrer">More on the API</a>
+      </p>
+    </section>
+  </main>
+</body>
+</html>

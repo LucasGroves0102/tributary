@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tributary for Excel: custom functions (TRIBUTARY.VALUE, SERIES, SOURCE) and a task pane for the
+     API key, on one shared runtime. Every file is served by Tributary's web app (nginx location
+     /addins/). Sideload this file (services/web/README.md "Excel add-in"); AppSource listing later. -->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>6033c037-29f0-4917-af95-e2f9330220df</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Tributary</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Tributary"/>
+  <Description DefaultValue="Figures from SEC filings in your workbook, each with the filing it came from: =TRIBUTARY.VALUE, =TRIBUTARY.SERIES and =TRIBUTARY.SOURCE, with your Tributary API key."/>
+  <IconUrl DefaultValue="https://tributary.lucasgroves.dev/addins/excel/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://tributary.lucasgroves.dev/addins/excel/icon-64.png"/>
+  <SupportUrl DefaultValue="https://tributary.lucasgroves.dev/#/api"/>
+  <AppDomains>
+    <AppDomain>https://tributary.lucasgroves.dev</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="SharedRuntime" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://tributary.lucasgroves.dev/addins/excel/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <Runtimes>
+          <Runtime resid="Taskpane.Url" lifetime="long"/>
+        </Runtimes>
+        <AllFormFactors>
+          <ExtensionPoint xsi:type="CustomFunctions">
+            <Script>
+              <SourceLocation resid="Functions.Script.Url"/>
+            </Script>
+            <Page>
+              <SourceLocation resid="Taskpane.Url"/>
+            </Page>
+            <Metadata>
+              <SourceLocation resid="Functions.Metadata.Url"/>
+            </Metadata>
+            <Namespace resid="Functions.Namespace"/>
+          </ExtensionPoint>
+        </AllFormFactors>
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+          <FunctionFile resid="Taskpane.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Tributary.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Tributary.TaskpaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16"/>
+                    <bt:Image size="32" resid="Icon.32x32"/>
+                    <bt:Image size="80" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ButtonId1</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16x16" DefaultValue="https://tributary.lucasgroves.dev/addins/excel/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://tributary.lucasgroves.dev/addins/excel/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://tributary.lucasgroves.dev/addins/excel/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://tributary.lucasgroves.dev/addins/excel/functions.js"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://tributary.lucasgroves.dev/addins/excel/functions.json"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://tributary.lucasgroves.dev/addins/excel/taskpane.html"/>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://tributary.lucasgroves.dev/#/api"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Functions.Namespace" DefaultValue="TRIBUTARY"/>
+        <bt:String id="GetStarted.Title" DefaultValue="Figures from SEC filings, with their sources"/>
+        <bt:String id="Group.Label" DefaultValue="Tributary"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Tributary"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="Open Tributary on the Home tab, paste your API key, then type =TRIBUTARY.VALUE(&quot;NVDA&quot;, &quot;revenue&quot;) in a cell."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Paste your Tributary API key, refresh figures, and see how the TRIBUTARY functions work."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
