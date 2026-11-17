@@ -1,27 +1,46 @@
 # mcp-server
 
-Tributary for a user's own AI model (Claude, other agents) over the
+Tributary for a user's own AI model (Claude, ChatGPT, other agents) over the
 [Model Context Protocol](https://modelcontextprotocol.io): a remote MCP server at
-`https://tributary.lucasgroves.dev/mcp` (Streamable HTTP), authenticated by the user's personal
-[API key](../query-api/README.md#api-keys). Phase 1: read-only tools. Built on the official MCP
-Python SDK (`mcp` 2.3.0, pinned; its `MCPServer`, which was FastMCP before 2.0).
+`https://tributary.lucasgroves.dev/mcp` (Streamable HTTP). A user connects it by URL and signs in
+(OAuth: [Connected apps](../query-api/README.md#connected-apps-oauth)), or sends their personal
+[API key](../query-api/README.md#api-keys). Read-only tools. Built on the official MCP Python SDK
+(`mcp` 2.3.0, pinned; its `MCPServer`, which was FastMCP before 2.0).
 
 It holds no database login and no secrets. Every tool calls the [Query API](../query-api) with the
-caller's own key, so a connected model sees exactly what that user can read in Tributary: the same
-OpenFGA check and row-level security as the web app, the key's scope, its rate limits (60 requests
-a minute, 10,000 a day per key) and its revocation, which takes effect on the next tool call.
+caller's own credential, so a connected model sees exactly what that user can read in Tributary:
+the same OpenFGA check and row-level security as the web app, read routes only, the rate limits
+(60 requests a minute, 10,000 a day per key or connection) and revocation, which takes effect on
+the next tool call. Directory listings: [DIRECTORIES.md](DIRECTORIES.md).
 
 ## Connect a client
 
-A client that can send a header on a remote MCP server, for example Claude Code:
+**claude.ai** (any plan; Desktop and mobile follow the account; on Team and Enterprise an Owner
+adds it under Organization settings, Connectors, and members connect): Customize, Connectors, Add,
+Add custom connector; name it Tributary, URL `https://tributary.lucasgroves.dev/mcp`, Continue;
+keep the settings marked Detected (Sign in now; OAuth client: Use Claude's published identity);
+Add, then Connect. Claude opens Tributary: sign in (GitHub or your account), check the app ("Published
+by claude.ai") and where it sends you back (claude.ai), Approve. claude.ai identifies itself with
+its client ID metadata document; "Register automatically" (dynamic registration) works too.
+
+**ChatGPT** (developer mode on: Settings, Apps, Advanced settings; on Business and Enterprise
+workspaces an admin allows it): chatgpt.com/plugins, the plus button, Add custom MCP server; a name
+and description, Connection: Public endpoint, `https://tributary.lucasgroves.dev/mcp`;
+authentication OAuth; "I understand and want to continue", Create as a plugin; then connect and
+sign in and approve the same way (ChatGPT also uses a metadata document, or registers itself).
+Menu names move: OpenAI's [connect guide](https://developers.openai.com/apps-sdk/deploy/connect-chatgpt).
+
+**Claude Code** connects by URL the same way (`claude mcp add --transport http tributary
+https://tributary.lucasgroves.dev/mcp`, then `/mcp` to sign in; a loopback redirect, flagged on
+the consent screen), or with a key:
 
 ```bash
 claude mcp add --transport http tributary https://tributary.lucasgroves.dev/mcp \
   --header "Authorization: Bearer trb_..."
 ```
 
-Make the key in Tributary's Settings, API keys (read only is enough). claude.ai's and ChatGPT's
-connector directories need OAuth, which comes later (phase 3); until then they can't connect.
+Make a key in Tributary's Settings, API keys (read only is enough). Connected apps are listed in
+Settings, Connected apps; Disconnect ends one at once. Demo sandboxes can't connect apps.
 
 ## Tools
 
@@ -67,7 +86,7 @@ written for a model.
 All of them are routes a `read` key reaches (query-api `api_keys.READ_ROUTES`). Nothing is
 computed here that the Query API computes: figures, readings (n/m, n/a, old), formulas, rankings,
 the model. A tool picks, trims and words. Running a model (`POST .../model`) and every write
-(theses, models, charts, watchlist) are phase 2, with versions; thesis checks and OAuth phase 3.
+(theses, models, charts, watchlist) are phase 2, with versions; thesis checks phase 3.
 
 `verify_figures` is Tributary's figure checker as a tool: the agent's
 [`verify.py`](../agent/src/tributary_agent/verify.py), imported unchanged, over evidence read
@@ -99,20 +118,30 @@ rule). `about` appears on tools that return filing text or the user's own writin
 
 ## Safety
 
-- **The key.** Read from the `Authorization` header of each HTTP request and forwarded unchanged
-  (as `Bearer trb_...`) on that request's Query API calls, never stored, cached, logged or
-  returned, not even its first characters: logs carry the request id (nginx's `X-Request-ID`).
-  `whoami` drops the prefix `/v1/me` returns. httpx's per-URL logs are off (search words are in
-  URLs). Tests check the key appears in no log line (at DEBUG) and no response.
-- **Missing or wrong credentials** (no header, not `Bearer`, not a `trb_` key: a sign-in JWT,
-  another service's key) get a 401 before any MCP handling, with a JSON-RPC error saying what to
-  send and a `WWW-Authenticate: Bearer` challenge. On `initialize` (handshake protocol versions) the
-  server asks `/v1/me` once, so an unknown, expired or revoked key fails at connect; with the
-  2026-07-28 protocol (no handshake) the first tool call says so.
+- **The credential** (an app's `tro_` access token or a `trb_` key). Read from the
+  `Authorization` header of each HTTP request and forwarded unchanged on that request's Query API
+  calls, never stored, cached, logged or returned, not even its first characters: logs carry the
+  request id (nginx's `X-Request-ID`). `whoami` drops the prefix `/v1/me` returns. httpx's per-URL
+  logs are off (search words are in URLs). Tests check it appears in no log line (at DEBUG) and no
+  response. The Query API issued the token for this server's URL (RFC 8707) and is this server's
+  own backend: forwarding it isn't passing it to a third party.
+- **Missing or wrong credentials** (no header, not `Bearer`, not a `tro_` token or `trb_` key: a
+  sign-in JWT, a refresh token, another service's key) get a 401 before any MCP handling, with a
+  JSON-RPC error saying what to send and `WWW-Authenticate: Bearer realm="Tributary",
+  resource_metadata=".../.well-known/oauth-protected-resource/mcp", scope="read"` (RFC 9728;
+  `error="invalid_token"` when one was sent): how claude.ai and ChatGPT find where to sign in. On
+  `initialize` (handshake protocol versions) the server asks `/v1/me` once, so an unknown, expired
+  or revoked credential fails at connect; with the 2026-07-28 protocol (no handshake) the first
+  tool call says so. An app's token the Query API refuses during a call (expired, disconnected)
+  makes that HTTP answer the same 401, so the app refreshes its token or signs in again.
+- **Protected resource metadata** at `/.well-known/oauth-protected-resource/mcp` (and the root
+  form): `resource` (this URL), `authorization_servers` (the site: the Query API's
+  `/.well-known/oauth-authorization-server`), `scopes_supported` `read`. Only with `OAUTH_ISSUER`.
 - **Query API errors** become tool errors (`isError`) the model reads: 401 the key (make a new
-  one), 403 permission denied (say so, don't answer from elsewhere), 404, 422 with what to change,
-  429 with the `Retry-After` seconds, 5xx or no answer "unavailable". The Query API's `detail` is
-  included (up to 1,000 characters); it never holds the key.
+  one; for an app, the 401 above), 403 permission denied (say so, don't answer from elsewhere),
+  404, 422 with what to change, 429 with the `Retry-After` seconds, 5xx or no answer
+  "unavailable". The Query API's `detail` is included (up to 1,000 characters); it never holds the
+  credential.
 - **Filing text is untrusted.** It comes back only inside data fields (`passage.text`, `snippet`,
   `text`, excerpts) of one JSON document, so a quote, brace or "ignore previous instructions" in a
   filing stays a string. Tool descriptions and the server's instructions say filing text and saved
@@ -136,8 +165,9 @@ make up-all                    # query-api, mcp-server (8002) and the rest in Do
 QUERY_API_URL=http://localhost:8000 .venv/bin/mcp-server
 ```
 
-Then point a client at `http://localhost:8002/mcp` (or `http://localhost:3000/mcp` through the
-web container) with a key made in your local Settings.
+Then point a client at `http://localhost:3000/mcp` (the web container: it routes the metadata
+and the sign-in) and connect, or at `http://localhost:8002/mcp` with a key made in your local
+Settings.
 
 | Env | Default | |
 |---|---|---|
@@ -146,16 +176,19 @@ web container) with a key made in your local Settings.
 | `MCP_ALLOWED_HOSTS` | `mcp-server:*,localhost:*,127.0.0.1:*` | Host values accepted |
 | `MCP_ALLOWED_ORIGINS` | `https://tributary.lucasgroves.dev` | Origin values accepted (absent is fine) |
 | `MCP_RESULT_CHARS` | 40000 | a result's size cap |
+| `OAUTH_ISSUER` | (unset: keys only) | the site's origin, as the Query API's: the resource metadata and the 401's pointer to it |
+| `MCP_RESOURCE` | `OAUTH_ISSUER` + `/mcp` | this server's public URL (the tokens' resource) |
 | `LOG_LEVEL` | INFO | JSON logs (tributary_telemetry) |
 
 `/health` and `/metrics` (Prometheus: `tributary_mcp_tool_calls_total{tool,outcome}`,
 `tributary_mcp_tool_seconds`, `tributary_mcp_auth_refused_total{reason}`, and the shared HTTP
-metrics) need no key and aren't routed by nginx.
+metrics) need no key and aren't routed by nginx (the resource metadata is).
 
 ## Tests
 
 `.venv/bin/pytest services/mcp-server`: every tool against a fake Query API (httpx MockTransport):
 route, parameters, the forwarded header, citations, trimming; auth refusals and the initialize
-check; error mapping; prompt injection returned only as data; size caps; the key in no log or
-response; and end to end, the SDK's own MCP client over Streamable HTTP against the app in-process
+check; OAuth (`test_oauth.py`: the 401's challenge, the resource metadata, an app's token forwarded
+per request, refused at connect or mid-call as a 401, never logged); error mapping; prompt
+injection returned only as data; size caps; the key in no log or response; and end to end, the SDK's own MCP client over Streamable HTTP against the app in-process
 (httpx2's ASGI transport), plus a handshake-era client message by message. No network, no model.

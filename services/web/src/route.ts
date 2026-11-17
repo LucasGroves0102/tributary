@@ -65,6 +65,9 @@ export type Route =
   | { view: "api" }
   /** Settings: alerts (forms per company, webhooks) and the user's own market-data key */
   | { view: "settings" }
+  /** Connect an app (Claude, ChatGPT): the consent screen for a sealed request the Query API's
+   * /oauth/authorize sent the browser here with, or the problem it found (`error`, a short code) */
+  | { view: "connect"; request?: string; error?: string }
   /** filing alerts: new 10-K/10-Q/8-K of watched and analysed companies, newest first */
   | { view: "alerts" }
   /** the user's holdings (no holdingId), one holding with its journal, or the Fidelity import */
@@ -107,6 +110,9 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Section keys as the Query API takes them: 10-K "1A", 10-Q "II-1A", 8-K "2.02", "EX-99.1". */
 export const SECTION = /^[A-Z0-9.?-]{1,8}$/;
 const MAX_Q = 200;
+/** A sealed request to connect an app (query-api oauth.py SEALED): base64url payload and signature. */
+export const SEALED_REQUEST = /^[A-Za-z0-9_-]{1,8000}\.[A-Za-z0-9_-]{43}$/;
+const CONNECT_ERROR = /^[a-z_]{1,32}$/;
 /** The first day point-in-time figures go back to (query-api point_in_time.EARLIEST). */
 export const EARLIEST_AS_OF = "2009-01-01";
 
@@ -138,6 +144,15 @@ export function parse(hash: string): Route {
   }
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "api" | "settings" | "alerts" | "data" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
+  if (view === "connect") {
+    // only a sealed request or a short error code: never a URL (the sign-in return path)
+    const params = new URLSearchParams(query);
+    const request = params.get("request");
+    const error = params.get("error");
+    if (request && SEALED_REQUEST.test(request)) return { view, request };
+    if (error && CONNECT_ERROR.test(error)) return { view, error };
+    return { view, error: "request" };
+  }
   if (view === "portfolio") {
     if (a === "import") return { view: "portfolio", import: true };
     return a && ID.test(a) ? { view: "portfolio", holdingId: a } : { view: "portfolio" };
@@ -213,6 +228,8 @@ export function href(route: Route): string {
     case "model":
     case "screen":
       return `#/${route.view}/${encodeURIComponent(route.itemId)}`;
+    case "connect":
+      return route.request ? `#/connect?request=${route.request}` : `#/connect?error=${route.error ?? "request"}`;
     case "company": {
       const tabQ = route.tab === "statements" && route.statements ? statementQuery(route.statements)
         : route.tab === "filings" && route.changes ? `changes=${route.changes}` : "";

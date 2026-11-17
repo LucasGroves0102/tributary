@@ -26,7 +26,7 @@ from prometheus_client import Counter, Histogram
 from pydantic import Field
 
 from tributary_mcp.api import ApiError, Caller, QueryApi
-from tributary_mcp.auth import NO_KEY, bearer
+from tributary_mcp.auth import NO_KEY, REFUSED_MID_CALL, bearer, is_app_token
 from tributary_mcp.results import (
     ABOUT_FILING_TEXT,
     ABOUT_USER_DATA,
@@ -123,6 +123,18 @@ def _caller(ctx: Context) -> Caller:
 Handler = Callable[..., Awaitable[CallToolResult]]
 
 
+def _refused_mid_call(ctx: Context) -> None:
+    """An app's token the Query API refused (expired, disconnected): mark this HTTP request so
+    the gate answers it with a 401 the client acts on (auth.KeyGate). A key stays a tool error."""
+    try:
+        request = ctx.request_context.request
+    except ValueError:  # no request context (not over HTTP)
+        return
+    scope = getattr(request, "scope", None)
+    if isinstance(scope, dict) and is_app_token(bearer(ctx.headers)):
+        scope[REFUSED_MID_CALL] = True
+
+
 def _tool(name: str) -> Callable[[Handler], Handler]:
     """Counts, times and logs one tool's calls (tool, outcome, request id: never arguments or the
     key) and turns a Query API refusal into the error result the model reads."""
@@ -139,6 +151,8 @@ def _tool(name: str) -> Callable[[Handler], Handler]:
                 return out
             except ApiError as e:
                 outcome = e.outcome
+                if e.status == 401 and ctx is not None:
+                    _refused_mid_call(ctx)
                 raise ToolError(str(e)) from None
             except ToolError:
                 outcome = "invalid"

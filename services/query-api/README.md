@@ -1,7 +1,8 @@
 # query-api
 
 FR8, week 2. HTTP API over the gold tables, read-only except for the caller's own rows in the app
-database (watchlist, saved work, preferences, alert settings, API keys, a market-data connection);
+database (watchlist, saved work, preferences, alert settings, API keys, connected apps, a market-data
+connection);
 the [agent](../agent), the [web](../web) app and the [MCP server](../mcp-server) reach data only
 through it. Design notes, measurements and each feature's full rules: [DESIGN.md](DESIGN.md).
 
@@ -22,10 +23,11 @@ plan's tiers, through the same two layers: OpenFGA resolves `reader from catalog
 Check, and RLS reads `authz.public_access`. Per-company grants keep working for anything outside
 the catalog. Nothing in the API changes shape except `/v1/me`'s `catalog`.
 
-The caller is identified by an HS256 JWT (`sub` = app user_id) or, from a script, by one of
-their personal API keys (`Authorization: Bearer trb_...`, [API keys](#api-keys)): the user is the
-key's owner, read from the key's row. The user is never read from request parameters. Dev
-tokens: `make token USER=alice`.
+The caller is identified by an HS256 JWT (`sub` = app user_id), from a script by one of their
+personal API keys (`Authorization: Bearer trb_...`, [API keys](#api-keys)), or through the MCP
+server by a connected app's access token (`Bearer tro_...`, [Connected apps](#connected-apps-oauth)):
+the user is the key's owner or the app's grant's, read from that row. The user is never read from
+request parameters. Dev tokens: `make token USER=alice`.
 
 ## Routes
 
@@ -52,7 +54,16 @@ tokens: `make token USER=alice`.
 | `POST /v1/api-keys` | sign-in, not a demo sandbox, app DB | `{"name", "scopes", "expires_in_days"}` → 201 with the key, shown once; 409 with 5 active keys |
 | `DELETE /v1/api-keys/{key_id}` | sign-in, app DB | revokes the key at once; another user's is the same 404 |
 | `GET /v1/openapi-keys.json` | | the OpenAPI of the routes an API key can use (the web app's "Using the API" page) |
-| `GET /v1/me` | token | `catalog {public, tiers, companies}`; `companies` (private grants only when the catalog is public); `sandbox`, `github`, `account` or `api_key` by kind of caller |
+| `GET /.well-known/oauth-authorization-server` | `OAUTH_ISSUER` | RFC 8414 metadata of the authorization server for the MCP server ([Connected apps](#connected-apps-oauth)); 404 when off |
+| `POST /oauth/register` | the same | RFC 7591 dynamic client registration (JSON); 201 with a `client_id` (and a secret, shown once, for a confidential client); 400 for an unsafe redirect URI; 429 per address |
+| `GET /oauth/authorize` | the same | checks the client (registered, or its metadata document fetched) and the exact redirect URI, then PKCE S256, `resource`, `state`; 302 to the consent page (`/#/connect?request=…`, nonce cookie) or back to the app with `error`, `state`, `iss` |
+| `POST /oauth/token` | the same | form: `authorization_code` (code, redirect_uri, code_verifier, client) or `refresh_token` (rotated) → `tro_` access token (1 h) and `trr_` refresh token (30 d); RFC 6749 errors |
+| `POST /oauth/revoke` | the same | RFC 7009: the token's grant is revoked; 200 also for an unknown token |
+| `POST /v1/oauth/consent` | sign-in only, nonce cookie | `{"request"}` → the app, publisher, redirect host, loopback flag, scopes, `allowed` (false for a demo sandbox) |
+| `POST /v1/oauth/consent/approve` / `deny` | the same | a grant and a single-use code, or `access_denied`: `{"redirect"}` to the app; 403 for a demo sandbox; 409 over 25 live connections |
+| `GET /v1/oauth/connections` | sign-in only | the apps connected to the account (name, publisher, redirect hosts, connected, last used) |
+| `DELETE /v1/oauth/connections/{id}` | sign-in only | disconnects the app: every grant and token at once; another user's is the same 404 |
+| `GET /v1/me` | token | `catalog {public, tiers, companies}`; `companies` (private grants only when the catalog is public); `sandbox`, `github`, `account`, `api_key` or `connected_app` by kind of caller |
 | `GET /v1/companies/search?q=&access=&limit=` | token | tickers, CIKs and any part of a name, best match first (`silver.search_companies`); `limit` 1-25 (default 5); `access=financials`: only companies you can read |
 | `GET /v1/metrics` | | metric names served by `financials` (`silver.metrics` + `gold.derived_metrics`) |
 | `GET /v1/companies/{id}/financials?metrics=&quarters=&view=&basis=&format=&readings=&callouts=` | financials | values + citation + freshness; `quarters` 1-120; `format=csv`; `readings=true` ([Screener](#screener)); `callouts=true` ([Statement callouts](#statement-callouts)); `currency` and `cadence: "annual"` only when not USD / not quarterly |
@@ -179,7 +190,9 @@ unset makes those routes answer 503), `FGA_API_TOKEN` (OpenFGA preshared key, wh
 the demo routes), the demo sandbox settings below, `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` /
 `GITHUB_REDIRECT_URI` ([GitHub sign-in](#github-sign-in)), `DATA_CONNECTIONS_KEY` ([Connect
 your data](#connect-your-data)), `API_KEY_PER_MINUTE` / `API_KEY_PER_DAY` (each API key's limits,
-default 60 and 10,000; [API keys](#api-keys)), `PORT` (default 8000), `LOG_LEVEL`. Password
+default 60 and 10,000; [API keys](#api-keys)), `OAUTH_ISSUER` (the site's origin: connected apps
+on; `OAUTH_RESOURCE` overrides the MCP server's URL, default `OAUTH_ISSUER` + `/mcp`; [Connected
+apps](#connected-apps-oauth)), `PORT` (default 8000), `LOG_LEVEL`. Password
 accounts and API keys need no other setting: their routes work whenever `APP_DATABASE_URL` is set. The alerts job reads
 `DATABASE_URL`, `APP_DATABASE_URL`, `FGA_API_URL`, `QUERY_API_JWT_SECRET` (webhook secrets),
 `PUBLIC_APP_URL` (where alert links point; default the public site) and the email settings in
@@ -453,6 +466,32 @@ curl -H "Authorization: Bearer $TRIBUTARY_API_KEY" \
 ```
 
 Full rules, metrics and tests: [DESIGN.md](DESIGN.md#api-keys).
+
+## Connected apps (OAuth)
+
+The authorization server for the [MCP server](../mcp-server) (`oauth.py` and
+`client_metadata.py`, their docstrings are the spec; app migration 025): a user adds
+`https://tributary.lucasgroves.dev/mcp` in claude.ai or ChatGPT, the app sends them here to sign
+in and approve it on the web app's consent page, and from then on it reads Tributary as them.
+
+- **Discovery**: the MCP server's 401 names its resource metadata (RFC 9728), which names this
+  issuer (the site); `/.well-known/oauth-authorization-server` says PKCE S256 only, both client
+  registrations, `iss` in every authorization answer (RFC 9207).
+- **Clients**: client ID metadata documents (the MCP spec's preferred way; claude.ai and ChatGPT
+  use it when the metadata offers it with `none` auth: fetched over https from public addresses
+  only, no redirects, 8 KB, 5 s, cached up to a day) or dynamic registration (RFC 7591; 30 an hour
+  per address). Redirect URIs: https, or http on a loopback address; matched exactly (a loopback
+  port may change).
+- **Consent**: the request is sealed (no table) and bound to the browser by a nonce cookie;
+  approving needs a sign-in (never a key or an app's token), refuses demo sandboxes, and stores a
+  grant and a single-use 60-second code bound to the client, redirect URI and PKCE challenge.
+- **Tokens**: opaque, stored as SHA-256; access 1 hour, refresh 30 days and rotated each use; a
+  code or refresh token presented twice revokes its grant. An app's token is taken like a read API
+  key: the user is the grant's, then OpenFGA and RLS as that user, only the read routes, the key
+  limits per connection; account routes never; agent-api refuses it.
+- **Settings**: Connected apps lists each app; Disconnect revokes all of its grants at once.
+
+Full rules: [DESIGN.md](DESIGN.md#connected-apps-oauth).
 
 ## Connect your data
 

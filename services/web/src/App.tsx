@@ -35,6 +35,7 @@ import {
   Companies,
   Company,
   Compare,
+  Connect,
   FilingReader,
   prefetchScreens,
   ReportView,
@@ -48,6 +49,7 @@ import {
   WorkspacePage,
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
+import { loadPending, savePending } from "./connect/connect";
 import { go, href, pageOf, parse, useRoute } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
@@ -131,6 +133,10 @@ export function App(props: Props = {}) {
   const [focusTick, setFocusTick] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
   const route = useRoute();
+  // a request to connect an app waits in this tab while the visitor signs in (connect/connect.ts)
+  useEffect(() => {
+    if (!token && route.view === "connect" && route.request) savePending(route.request);
+  }, [token, route]);
   // narrow screens: the sidebar is a drawer behind the Menu button (styles.css), closed on
   // every navigation and on Escape
   const [navOpen, setNavOpen] = useState(false);
@@ -652,16 +658,41 @@ export function App(props: Props = {}) {
     );
   }
 
+  // a problem /oauth/authorize found needs no sign-in to be read
+  if (!picker && !token && frontDoor && route.view === "connect" && route.error) {
+    return (
+      <main className="welcome connect-page">
+        <Suspense fallback={<p className="muted">Loading…</p>}>
+          <Connect token="" me={null} error={route.error} />
+        </Suspense>
+      </main>
+    );
+  }
+
   if (!picker && !token && frontDoor) {
+    const connecting = route.view === "connect" || !!loadPending();
     return (
       <Welcome
-        notice={frontDoor.notice}
+        notice={frontDoor.notice ?? (connecting ? "Sign in to Tributary to connect your app: you'll see what it asks for, and approve it, next." : null)}
         github={frontDoor.github}
         onReady={(s, m) => {
           signIn(s, m);
-          go({ view: "home" });
+          // back to the app's request, if one was waiting (only ever a sealed request, never a URL)
+          const pending = loadPending();
+          go(pending ? { view: "connect", request: pending } : { view: "home" });
         }}
       />
+    );
+  }
+
+  // the consent screen stands alone, like the front door
+  if (token && route.view === "connect") {
+    return (
+      <main className="welcome connect-page">
+        <Suspense fallback={<p className="muted">Loading…</p>}>
+          <Connect token={token} me={me} request={route.request} error={route.error} />
+        </Suspense>
+      </main>
     );
   }
 
@@ -960,7 +991,7 @@ export function App(props: Props = {}) {
                   go({ view: "chart" });
                 }}
               />
-            ) : (
+            ) : route.view === "connect" ? null /* drawn without the shell, above */ : (
               <Compare
                 key={user}
                 token={token}

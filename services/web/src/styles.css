@@ -8144,3 +8144,195 @@ label.check {
     flex: 1 1 100%;
   }
 }
+
+/* Connect an app (#/connect, connect/Connect.tsx): the consent screen, one sheet on the page like
+   the front door. The app's name and the host it sends the user back to are the loudest things on
+   it (the MCP spec: the redirect host shown clearly); what it can and can't do under red rubrics. */
+.connect-sheet {
+  width: 100%;
+  max-width: 640px;
+  padding: 44px 52px 40px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  box-shadow: var(--lift);
+}
+
+.connect-brand {
+  margin: 0 0 28px;
+}
+
+.connect-title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  font-variation-settings: "opsz" 60;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.connect-lead {
+  margin: 14px 0 0;
+  max-width: 54ch;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.connect-facts {
+  margin: 26px 0 0;
+  border-top: 1px solid var(--ink);
+}
+
+.connect-facts > div {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: var(--sp-6);
+  padding: 11px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.connect-facts dt {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+  padding-top: 2px;
+}
+
+.connect-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connect-app,
+.connect-host {
+  font-weight: 650;
+}
+
+.connect-host {
+  font-size: var(--fs-lg);
+}
+
+.connect-sub {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.connect-warn {
+  display: block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-left: 2px solid var(--warn);
+  color: var(--warn);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+
+.connect-scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  margin: 24px 0 0;
+}
+
+.connect-sect {
+  margin: 0 0 6px;
+  color: var(--red);
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.connect-scope ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.connect-scope li {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.connect-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-5);
+  margin: 28px 0 0;
+}
+
+.connect-actions .btn {
+  padding: 10px 22px;
+  font-size: var(--fs-md);
+}
+
+.connect-actions .welcome-notice {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.connect-sheet .welcome-error {
+  margin: 16px 0 0;
+}
+
+.connect-leaving {
+  margin: 28px 0 0;
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.connect-foot {
+  margin: 22px 0 0;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+@container welcome (max-width: 600px) {
+  .connect-sheet {
+    padding: 28px 20px 26px;
+  }
+
+  .connect-title {
+    font-size: 27px;
+  }
+
+  .connect-facts > div,
+  .connect-scope {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .connect-scope {
+    gap: 18px;
+  }
+}
+
+/* Connected apps (Settings) */
+.connected-apps-lead {
+  max-width: 100ch;
+}
+
+.connected-app-list td {
+  white-space: nowrap;
+}
+
+.connected-app-list td.first {
+  white-space: normal;
+  min-width: 140px;
+}
+
+.connected-app-list td.revoke {
+  width: 1%;
+  text-align: right;
+}

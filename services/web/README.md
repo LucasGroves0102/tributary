@@ -9,6 +9,8 @@ CORS:
 | `/api/query/*` | Query API (`query-api:8000`) |
 | `/api/agent/*` | agent-api (`agent-api:8001`), unbuffered for server-sent events |
 | `/mcp` (exactly) | the MCP server (`mcp-server:8002`) for users' own AI models; the app never calls it |
+| `/.well-known/oauth-protected-resource[/mcp]` | the MCP server: its resource metadata, where an AI app learns to sign in |
+| `/.well-known/oauth-authorization-server`, `/oauth/*` | Query API: the authorization server for connected apps (also in the dev proxy); any other `/.well-known/` path is a 404 |
 
 Every figure, reading and access decision comes from the APIs: the app words them and decides none.
 Each screen's detail, the rules behind it and the measurements are in [DESIGN.md](DESIGN.md).
@@ -61,13 +63,15 @@ Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companie
 | `#/screen/<id>` | a saved screen's link (alerts point at it): opens it as Companies' open screen, in place of the link | [Watched screens](DESIGN.md#watched-screens) |
 | `#/portfolio[/<holding>]`, `#/portfolio/import` | your holdings on your own prices, a holding's buys, sales and journal, the Fidelity import | [Portfolio](DESIGN.md#portfolio) |
 | `#/data` | Your data: your datasets (CSV upload, checked before storing), your metrics (saved formulas, screener columns) | [Your data](DESIGN.md#your-data) |
-| `#/settings` | filing alerts, Connect your data (when on), API keys | [Price](DESIGN.md#price-connect-your-data), [API keys](DESIGN.md#api-keys-and-using-the-api) |
+| `#/settings` | filing alerts, Connect your data (when on), Connected apps, API keys | [Price](DESIGN.md#price-connect-your-data), [Connected apps](DESIGN.md#connected-apps), [API keys](DESIGN.md#api-keys-and-using-the-api) |
+| `#/connect?request=…` | the consent screen when an AI app (Claude, ChatGPT) asks to read Tributary as you: the app, who published it, where it sends you back, Approve or Deny; without the shell | [Connected apps](DESIGN.md#connected-apps) |
 | `#/about` | what Tributary covers and doesn't | [Screens](DESIGN.md#screens-hash-routes) |
 | `#/status` | Data status: freshness, completeness, quality checks by what they mean for a reader, filing-section checks, recorded suites; public | [Screens](DESIGN.md#screens-hash-routes) |
 | `#/api` | Using the API: keys, examples, in your spreadsheet (Excel, Google Sheets), the routes a key can use, connecting an AI model; public | [API keys](DESIGN.md#api-keys-and-using-the-api), [Spreadsheet add-ins](#spreadsheet-add-ins) |
 | `#/signed-in?token=…` | where GitHub sign-in and an owner-issued link land | [Sign-in](DESIGN.md#sign-in-and-access) |
 
-`#/status` and `#/api` render signed out too, without the shell.
+`#/status` and `#/api` render signed out too, without the shell. `#/connect` signed out shows the
+front door, keeps the request in the tab while you sign in, and opens again after.
 
 ## Rules every screen follows
 

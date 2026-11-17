@@ -248,7 +248,7 @@ describe("Using the API", () => {
     expect(container.querySelector<HTMLAnchorElement>(`a[href="${href({ view: "settings" })}"]`)).toBeTruthy();
   });
 
-  it("says how to connect your own AI model to the site's MCP server, and what isn't possible yet", async () => {
+  it("says how to connect your own AI model to the site's MCP server, by its address or with a key", async () => {
     await mount(<ApiDocs load={async () => DOC} origin="https://tributary.example" />);
     expect(container.querySelector(".api-mcp")?.textContent).toBe("https://tributary.example/mcp");
     expect(container.querySelector('pre[aria-label="Claude Code example"]')?.textContent).toBe(
@@ -257,7 +257,9 @@ describe("Using the API", () => {
     const text = container.textContent ?? "";
     expect(text).toContain("A read-only key is enough; nothing can be written through it yet.");
     expect(text).toContain("verify_figures");
-    expect(text).toContain("connector directories need sign-in through OAuth, which Tributary doesn't offer yet");
+    expect(text).toContain("add a custom connector with that address and connect it");
+    expect(text).toContain("read-only (no changes, no portfolio, no account settings)");
+    expect(text).not.toContain("doesn't offer yet");
     expect(mcpUrl("http://localhost:3000")).toBe("http://localhost:3000/mcp");
   });
 

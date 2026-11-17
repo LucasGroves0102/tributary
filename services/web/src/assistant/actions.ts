@@ -96,11 +96,12 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   // "Using the API": agent-api's pages have no "api")
   // an analysis project is a workspace to agent-api (its pages have no "analysis"): its thesis
   // and model steps are those pages; the alerts list is about the user's companies, like Home;
-  // the portfolio is the user's own and the agent has no part of it: an information page too
+  // the portfolio is the user's own and the agent has no part of it: an information page too, as
+  // is connecting an app (the consent screen)
   const ctx: UiContext = {
     // Your data (B2) is the user's own too: nothing of it goes to the assistant
     page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio"
-      || route.view === "data" ? "about"
+      || route.view === "data" || route.view === "connect" ? "about"
       : route.view === "alerts" ? "home"
       // a saved screen's link is Companies a moment later (agent-api's pages have no "screen")
       : route.view === "screen" ? "companies"

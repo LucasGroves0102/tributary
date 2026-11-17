@@ -1435,14 +1435,45 @@ API keys (Query API README, "API keys"; `src/apikeys/`):
   and description as the API writes them for its users, its `code` spans as code; 404: "doesn't take
   API keys yet"), and the error codes. "Connect your AI model" says how to add the site's MCP server
   (`apiKeys.ts` `mcpUrl`: origin + `/mcp`, [mcp-server](../mcp-server)) to a client that sends a header
-  (the Claude Code command), what its tools read, and that claude.ai's and ChatGPT's directories need
-  OAuth, which comes later. The assistant reads it as `about` (agent-api has no "api" page).
+  (the Claude Code command), what its tools read, and that claude.ai and ChatGPT connect it by its
+  address (the next section). The assistant reads it as `about` (agent-api has no "api" page).
 - **In your spreadsheet** (`pages/Spreadsheets.tsx`, on Using the API): the Excel and Google Sheets
   formulas with examples, install steps (the manifest and script as same-origin downloads from
   `/addins/`), the sharing caveat (Google runs formulas with the owner's key), limits and how
   citations and readings reach a cell. The script's text is fetched only when "The script" is opened
   (nothing new on load, so #68's clean console holds), with Copy. The add-ins themselves are static
   files: README "Spreadsheet add-ins".
+
+## Connected apps
+
+An AI app (claude.ai, ChatGPT, Claude Code) added by the MCP server's address signs the user in
+here (Query API README, "Connected apps (OAuth)"; `src/connect/`). The API decides everything; the
+web shows it and passes the user's decision on.
+
+- **The consent screen** (`#/connect?request=<sealed>`, `connect/Connect.tsx`, lazy, without the
+  shell like the front door): the API's `/oauth/authorize` sends the browser here with a sealed
+  request and a nonce cookie. `POST /v1/oauth/consent` (the cookie goes with it: same origin) says
+  the app's name, its publisher (the host of its metadata document, or "Registered itself with
+  Tributary: Tributary can't confirm who made it"), the host it sends the user back to (shown large:
+  the MCP spec asks for it), a warning for a loopback address, what it can and can't do (read as
+  you; no changes, no portfolio or journal, no assistant, keys, alerts or settings), who is signed
+  in, and Approve (the one primary) or Deny. Both answer `{"redirect"}`; the browser goes there only
+  if `connect.ts` `safeRedirect` agrees (https, or http on localhost, 127.0.0.1, [::1]; no user info
+  or fragment): never a javascript: or data: URL whatever an answer says. A demo sandbox sees why it
+  can't connect and may only go back (Deny). An expired request, or one started in another browser,
+  says to start again from the app. `#/connect?error=<code>` words `/oauth/authorize`'s refusals
+  (`connectError`) with no request and no sign-in.
+- **Signing in on the way**: signed out, `#/connect` shows the front door with a notice and keeps
+  the sealed request in this tab's sessionStorage (`savePending`: only a sealed request, matched by
+  `route.ts` `SEALED_REQUEST`, never a URL, so the way back can't be pointed elsewhere); after any
+  sign-in (GitHub's round trip included) the app opens `#/connect` with it, and the page forgets it.
+- **Settings → Connected apps** (`connect/ConnectedApps.tsx`, before API keys): the address to add,
+  each connected app (name, publisher, redirect hosts, connected, last used), Disconnect after the
+  Radix alert dialog (every token of that app refused from its next request). Hidden when
+  `/v1/oauth/connections` answers 404 (an older API, or OAuth off) or `allowed: false` (a sandbox).
+- Nothing of it reaches the assistant (`uiContext` sends `#/connect` as about). Codes and tokens
+  never touch the web: the code passes once through the approve answer to the browser's
+  navigation; nothing is stored.
 
 ## End-to-end flows
 
@@ -1535,4 +1566,6 @@ server yet; the company page's Your data panel asks `/v1/companies/{id}/datasets
 on a 404; a saved screen refused for its own metrics (`metric`, or a sort on an `m_` column) is
 saved again without them; the screener sends `metric` only when the user chose one. Watched
 screens: `/v1/watches` and `/v1/alerts/screens` answering 404 (or a 503 without the app database)
-show no watch and no screen alerts (`orNullOn404`); nothing else is asked differently.
+show no watch and no screen alerts (`orNullOn404`); nothing else is asked differently. Connected
+apps: `/v1/oauth/connections` answering 404 hides Settings' section (`orNullOn404`); the consent
+screen is reached only from the newer API's `/oauth/authorize`, so it never meets an older one.

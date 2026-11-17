@@ -95,6 +95,17 @@ def test_an_api_key_never_runs_the_assistant():
     assert messages.requests == []
 
 
+def test_a_connected_apps_token_never_runs_the_assistant():
+    """A connected app's token (tro_/trr_, Query API oauth.py) is refused like a key: apps read
+    through the MCP server, and the assistant spends the user's questions."""
+    c, messages = client()
+    for tok in ("tro_" + "A" * 43, "trr_" + "A" * 43):
+        r = ask(c, token=tok)
+        assert r.status_code == 403 and "sign in" in r.json()["detail"]
+        assert allowance(c, token=tok).status_code == 403
+    assert messages.requests == []
+
+
 def test_history_is_validated_and_passed_through():
     c, messages = client()
     history = [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]

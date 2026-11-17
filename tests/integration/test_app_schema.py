@@ -115,3 +115,82 @@ def test_an_api_keys_hash_is_unique_and_it_goes_with_the_user(conn):
     conn.execute("DELETE FROM users WHERE user_id = 't-user'")
     assert conn.execute("SELECT count(*) FROM api_keys WHERE user_id = 't-user'"
                         ).fetchone()[0] == 0
+
+
+# --- connected apps (migration 025) ------------------------------------------------------------
+
+OAUTH_TABLES = ("oauth_grants", "oauth_codes", "oauth_tokens", "oauth_usage")
+
+
+def oauth_client(conn, client_id="trc_" + "A" * 32):
+    return conn.execute(
+        "INSERT INTO oauth_clients (client_id, kind, client_name, redirect_uris, auth_method,"
+        " created_at, refreshed_at) VALUES (%s, 'registered', 'Claude',"
+        " '{https://claude.ai/api/mcp/auth_callback}', 'none', now(), now())"
+        " RETURNING client_key", (client_id,)).fetchone()[0]
+
+
+def oauth_grant(conn, client_key, user="t-user", consent=b"\x05" * 32):
+    return conn.execute(
+        "INSERT INTO oauth_grants (user_id, client_key, scopes, resource, consent_hash,"
+        " created_at) VALUES (%s, %s, '{read}', 'https://t.example/mcp', %s, now())"
+        " RETURNING grant_id", (user, client_key, consent)).fetchone()[0]
+
+
+def test_connected_apps_are_owner_only_and_not_streamed(conn):
+    for table in OAUTH_TABLES:
+        rls, forced, identity = conn.execute(
+            "SELECT relrowsecurity, relforcerowsecurity, relreplident FROM pg_class"
+            " WHERE oid = %s::regclass", (table,)).fetchone()
+        assert (rls, forced, identity) == (True, True, "d"), table
+    connector = Path(__file__).parents[2] / "streaming" / "debezium" / "app-connector.json"
+    assert "oauth" not in json.loads(connector.read_text())["table.include.list"]
+
+
+@pytest.mark.parametrize("sql, args", [
+    # a token's kind, prefix and lifetime agree; an access token lives an hour, a refresh 30 days
+    ("INSERT INTO oauth_tokens (token_hash, grant_id, user_id, kind, prefix, created_at,"
+     " expires_at) VALUES (%s, %s, 't-user', 'access', 'tro_AbCd', now(),"
+     " now() + interval '2 hours')", "token"),
+    ("INSERT INTO oauth_tokens (token_hash, grant_id, user_id, kind, prefix, created_at,"
+     " expires_at) VALUES (%s, %s, 't-user', 'refresh', 'trr_AbCd', now(),"
+     " now() + interval '31 days')", "token"),
+    ("INSERT INTO oauth_tokens (token_hash, grant_id, user_id, kind, prefix, created_at,"
+     " expires_at) VALUES (%s, %s, 't-user', 'access', 'trr_AbCd', now(),"
+     " now() + interval '1 hour')", "token"),
+    # a code lives 60 seconds and its challenge is an S256 one
+    ("INSERT INTO oauth_codes (code_hash, grant_id, user_id, redirect_uri, code_challenge,"
+     " created_at, expires_at) VALUES (%s, %s, 't-user', 'https://claude.ai/cb', %s, now(),"
+     " now() + interval '61 seconds')", "code"),
+    ("INSERT INTO oauth_codes (code_hash, grant_id, user_id, redirect_uri, code_challenge,"
+     " created_at, expires_at) VALUES (%s, %s, 't-user', 'https://claude.ai/cb', 'plain',"
+     " now(), now() + interval '30 seconds')", "plain"),
+])
+def test_codes_and_tokens_are_checked(conn, sql, args):
+    grant = oauth_grant(conn, oauth_client(conn))
+    params = {"token": (b"\x01" * 32, grant), "code": (b"\x02" * 32, grant, "E" * 43),
+              "plain": (b"\x03" * 32, grant)}[args]
+    with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+        conn.execute(sql, params)
+
+
+def test_a_sandbox_never_holds_a_grant_and_everything_goes_with_the_user_or_the_app(conn):
+    client = oauth_client(conn)
+    conn.execute("INSERT INTO users (user_id, email) VALUES ('demo-0123456789abcdef', 'd@x')")
+    with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+        oauth_grant(conn, client, user="demo-0123456789abcdef")
+    grant = oauth_grant(conn, client)
+    conn.execute("INSERT INTO oauth_tokens (token_hash, grant_id, user_id, kind, prefix,"
+                 " created_at, expires_at) VALUES (%s, %s, 't-user', 'refresh', 'trr_AbCd',"
+                 " now(), now() + interval '30 days')", (b"\x04" * 32, grant))
+    with pytest.raises(psycopg.errors.UniqueViolation), conn.transaction():
+        oauth_grant(conn, client)  # the same consent twice
+    conn.execute("DELETE FROM users WHERE user_id = 't-user'")
+    for table in ("oauth_grants", "oauth_tokens"):
+        assert conn.execute(f"SELECT count(*) FROM {table} WHERE user_id = 't-user'"
+                            ).fetchone()[0] == 0
+    conn.execute("INSERT INTO users (user_id, email) VALUES ('t-user', 't@example.com')")
+    oauth_grant(conn, client, consent=b"\x06" * 32)
+    conn.execute("DELETE FROM oauth_clients WHERE client_key = %s", (client,))
+    assert conn.execute("SELECT count(*) FROM oauth_grants WHERE user_id = 't-user'"
+                        ).fetchone()[0] == 0

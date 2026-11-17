@@ -25,6 +25,7 @@ from query_api.authorizer import (
     Readable,
     readable_from,
 )
+from query_api.client_metadata import DocumentFetcher
 from query_api.components import add_components_routes
 from query_api.connections import MarketData, add_connection_routes
 from query_api.csv_export import csv_response
@@ -51,6 +52,7 @@ from query_api.journal import add_journal_routes
 from query_api.model_api import add_model_routes
 from query_api.notes import add_notes_routes
 from query_api.notes import callouts as statement_callouts
+from query_api.oauth import OAuthAuth, OAuthConfig, OAuthStore, add_oauth_routes, app_info
 from query_api.password_accounts import PasswordAccounts, add_password_routes
 from query_api.passwords import is_password_user
 from query_api.portfolio import AppPortfolio, add_portfolio_routes, own_prices_from
@@ -146,7 +148,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                api_key_limits: Limits = KEY_LIMITS,
                portfolio: AppPortfolio | None = None,
                userdata: UserData | None = None,
-               watches: AppWatches | None = None) -> FastAPI:
+               watches: AppWatches | None = None,
+               oauth: OAuthStore | None = None,
+               oauth_config: OAuthConfig | None = None,
+               client_documents: DocumentFetcher | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -171,7 +176,11 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     portfolio: holdings and the decision journal (query_api.portfolio, query_api.journal; None:
     those routes answer 503); values use market_data's prices only when it is on.
     userdata: the caller's own datasets (query_api.datasets; None: those routes answer 503 and
-    a formula naming mine.<dataset>.<field> too)."""
+    a formula naming mine.<dataset>.<field> too).
+    oauth, oauth_config, client_documents: connected apps (query_api.oauth: the authorization
+    server for the MCP server; its routes 404 unless both oauth and oauth_config are given, and
+    an app's token is refused like a bad token); client_documents fetches client ID metadata
+    documents (query_api.client_metadata; injected in tests)."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -187,6 +196,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     now = clock or (lambda: datetime.now(UTC))
     key_auth = KeyAuth(api_keys, api_key_limits, now)
+    oauth_auth = OAuthAuth(oauth, oauth_config, api_key_limits, now)
 
     def current_user(
         request: Request,
@@ -197,6 +207,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         if is_api_key(creds.credentials):
             # the key's own row says whose it is, what it may reach and its limits (api_keys)
             return key_auth.user(request, creds.credentials)
+        if creds.credentials.startswith(("tro_", "trr_")):
+            # a connected app's token: its grant's row says whose (oauth; read routes only)
+            return oauth_auth.user(request, creds.credentials)
         try:
             claims = verify_claims(creds.credentials, jwt_secret)
         except Unauthenticated:
@@ -326,6 +339,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                        today=today or today_eastern)
     add_api_key_routes(app, keys=api_keys, current_user=current_user, limits=api_key_limits,
                        clock=now)
+    add_oauth_routes(app, config=oauth_config, store=oauth, documents=client_documents,
+                     jwt_secret=jwt_secret, current_user=current_user, limits=api_key_limits,
+                     clock=now)
     demo_companies = demo_company_resolver(store)
     sandbox_info = add_sandbox_routes(
         app, store=store, sandboxes=sandboxes, config=sandbox_config, jwt_secret=jwt_secret,
@@ -395,6 +411,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         github_account = github_info(user_id)
         account = account_info(user_id)
         key = key_info(request)  # only for a request made with an API key
+        connected = app_info(request)  # only for a request made with an app's token
         return {
             "user_id": user_id,
             "catalog": ({"public": True, "tiers": sorted(access.public),
@@ -406,6 +423,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             **({"github": github_account} if github_account else {}),
             **({"account": account} if account else {}),
             **({"api_key": key} if key else {}),
+            **({"connected_app": connected} if connected else {}),
         }
 
     @app.get("/v1/companies/search")

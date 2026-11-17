@@ -41,6 +41,11 @@ function respond(url: string): Response {
     return Response.json({ as_of: "", forms: [], from: null, to: null, limit: 50, offset: 0, has_more: false, filings: [] });
   }
   if (path.endsWith("/v1/screener")) return Response.json({ as_of: "", total: 0, limit: 1, offset: 0, sort: "name", columns: [], rows: [] });
+  if (path.endsWith("/v1/oauth/consent")) {
+    return Response.json({ client: { name: "Claude", kind: "metadata_document", publisher: "claude.ai", registered_at: null,
+      redirect_uri: "https://claude.ai/api/mcp/auth_callback", redirect_host: "claude.ai", loopback: false },
+    scopes: ["read"], allowed: true, expires_at: "2099-01-01T00:00:00Z" });
+  }
   return Response.json({ detail: "forbidden" }, { status: 403 });
 }
 
@@ -77,6 +82,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => respond(url)));
   window.localStorage.clear();
+  window.sessionStorage.clear();
   meCalls = 0;
   meSequence = [() => Response.json(meGithub(20))];
   providers = () => Response.json({ github: true });
@@ -193,6 +199,43 @@ describe("Sign in with GitHub", () => {
     window.location.hash = `#/company/${TSLA}`;
     await mount(<App picker={false} />);
     expect($(".not-in-demo h1")?.textContent).toContain("isn't one of the 20 companies");
+  });
+});
+
+describe("Connecting an app", () => {
+  const SEALED = "eyJjIjoidHJjX0FBQUEifQ." + "s".repeat(43);
+
+  it("a request waits while you sign in with GitHub, then the consent screen opens on its own", async () => {
+    window.history.replaceState(null, "", `/#/connect?request=${SEALED}`);
+    await mount(<App picker={false} />);
+    expect($(".welcome-notice")?.textContent).toContain("Sign in to Tributary to connect your app");
+    expect(sessionStorage.getItem("tributary.connect")).toBe(SEALED);
+    act(() => root.unmount());
+    document.body.innerHTML = "";
+    // GitHub sends the browser back to the signed-in route (a new page load in the same tab)
+    window.history.replaceState(null, "", "/#/signed-in?token=gh-token&expires_in=604800");
+    await mount(<App picker={false} />);
+    expect(window.location.hash).toBe(`#/connect?request=${SEALED}`);
+    await settle();
+    expect($(".connect-sheet h1")?.textContent).toBe("Connect Claude to Tributary");
+    expect($(".top")).toBeNull(); // the consent screen stands alone
+    expect(sessionStorage.getItem("tributary.connect")).toBeNull();
+  });
+
+  it("signed in already, the consent screen opens at once, without the app around it", async () => {
+    saveSession(githubSession());
+    window.location.hash = `#/connect?request=${SEALED}`;
+    await mount(<App picker={false} />);
+    expect($(".connect-sheet h1")?.textContent).toBe("Connect Claude to Tributary");
+    expect($(".sidebar")).toBeNull();
+    expect(container.textContent).toContain("octocat");
+  });
+
+  it("a problem with the app is shown signed out, with no sign-in asked for", async () => {
+    window.history.replaceState(null, "", "/#/connect?error=client");
+    await mount(<App picker={false} />);
+    expect($(".connect-sheet h1")?.textContent).toBe("This app can't connect");
+    expect(button("Try the demo")).toBeUndefined();
   });
 });
 

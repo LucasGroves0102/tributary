@@ -1030,6 +1030,125 @@ the limits and Retry-After, a slow clock, limits and the cap across two instance
 against the real saved-work store, and with `TEST_DATABASE_URL` a key behind an allow-all
 authorizer reading only what RLS gives its user).
 
+## Connected apps (OAuth)
+
+MCP phase 3: a user adds Tributary to claude.ai, ChatGPT or another MCP client by its URL
+(`https://tributary.lucasgroves.dev/mcp`), signs in at Tributary, approves the app on a consent
+screen, and the app reads Tributary as them with no key to copy. The Query API is the OAuth 2.1
+authorization server (it has the users and the sign-in); the MCP server is the resource server.
+`oauth.py` and `client_metadata.py` (their docstrings are the spec), app migration 025, web
+`src/connect/`. Built against the MCP authorization spec of 2025-11-25 (mcp 2.3.0 also speaks
+2026-07-28, which changes nothing here).
+
+- **Discovery.** `/mcp` without a credential answers 401 with `WWW-Authenticate: Bearer
+  resource_metadata=".../.well-known/oauth-protected-resource/mcp", scope="read"` (RFC 9728); that
+  document (the MCP server's) names `resource` (the URL exactly as users type it) and one
+  authorization server, the site's origin (`OAUTH_ISSUER`, no path, so its metadata is at
+  `/.well-known/oauth-authorization-server`, RFC 8414). nginx routes both, and `/oauth/*`; every
+  other `/.well-known/` path is a 404, never the app's HTML. The metadata says S256 only
+  (`code_challenge_methods_supported`, which clients must find), `none`, `client_secret_basic` and
+  `client_secret_post`, `client_id_metadata_document_supported: true`, a registration and a
+  revocation endpoint, scope `read`, and `authorization_response_iss_parameter_supported`
+  (RFC 9207: `iss` is on every authorization answer, success and error; ChatGPT uses its stable
+  redirect URI only then).
+- **Clients, two ways.** (1) Client ID metadata documents: `client_id` is an https URL; the
+  server fetches the JSON (`client_id` must equal the URL, 1-10 redirect URIs that pass the
+  redirect rule, a name) and caches it in `oauth_clients` for its `max-age`, 5 minutes to 24 hours
+  (a failed refresh keeps a copy up to 7 days). The URL arrives unauthenticated, so the fetch is
+  webhooks.py's SSRF rules (a host name, port 443, every address public, the connection pinned to
+  the address checked, no redirects, 8 KB, 5 s on a worker thread), 20 fetches per address and 200
+  per replica each 10 minutes; cached documents cost nothing. claude.ai (and Claude Code) and
+  ChatGPT pick this when the metadata advertises it with `none`, and treat it as a public client.
+  (2) Dynamic registration (RFC 7591), the fallback: JSON read by hand, the same redirect rule,
+  grant types `authorization_code` (+ `refresh_token`), response type `code`, a name cleaned of
+  control and format characters (at most 100). `token_endpoint_auth_method` defaults to
+  `client_secret_basic` as RFC 7591 says: such a client gets `trs_` + 32 bytes, shown once, kept
+  as SHA-256, and must present it (Basic or in the body). 30 registrations per address and 300 per
+  replica an hour (claude.ai registers from a few addresses; most will use documents). A
+  registration never used is deleted after a day, a used one 60 days after its last use (a refresh
+  token can't outlive 30). The prune can't see grants (forced RLS), so it goes by `last_used_at`,
+  which approval and every token exchange write.
+- **Redirect URIs.** https (any host), or http on `localhost`, `127.0.0.1` or `[::1]` (apps on the
+  user's computer, Claude Code); no fragment, user info, spaces, backslashes or IPv6 zone; nothing
+  else (javascript:, data:, custom schemes). An authorization request must name one of the
+  client's exactly, except that a loopback URI's port may differ (RFC 8252 7.3; Claude Code picks a
+  port per session; for `localhost` too, as Claude's docs ask).
+- **Authorize.** The client and redirect URI are checked first; a problem with either never
+  redirects (Tributary's own page, `/#/connect?error=client|redirect_uri|unavailable`). Then, back
+  to the app with `error`, `state` and `iss`: a repeated parameter or a `state` over 1,024
+  characters (`invalid_request`), `response_type` other than `code`, PKCE missing or not S256 (plain
+  is refused), a `resource` that isn't this MCP server's (`invalid_target`; compared canonically:
+  scheme and host case, default port, trailing slash). `resource` absent means this server.
+  Scopes: only `read` exists; others asked for are ignored and the token answer says `read`.
+  Nothing is stored: the request (client, redirect URI, challenge, state, resource, a nonce's hash,
+  10 minutes) is sealed with HMAC under a key derived from the JWT secret with its own label (no
+  new secret), and the browser goes to `/#/connect?request=<sealed>` with the nonce in an HttpOnly,
+  Secure, SameSite=Lax cookie for `/api/query/v1/oauth/` (the GitHub sign-in's pattern).
+- **Consent (web).** Signed out, the sealed request waits in the tab's sessionStorage while the
+  user signs in (only a sealed request, never a URL: no open redirect through the sign-in) and the
+  page reopens after. `POST /v1/oauth/consent` checks the seal, expiry, the cookie's nonce and that
+  the client still lists the redirect URI, and says the app's name, its publisher (a document's
+  host), the redirect host (the MCP spec: shown clearly), whether it is a loopback address (a
+  warning: any local program can claim a name) and `allowed` (false for a demo sandbox).
+  Approve does the same checks, refuses a sandbox (403; a CHECK too) and more than 25 live
+  connections (409), then in one transaction as the user stores a grant (whose `consent_hash`, the
+  nonce's, is unique: a request is approved once) and a code (60 s, single use, bound to the
+  grant, so client and user, the redirect URI and the challenge), and answers the redirect (code,
+  state, iss); Deny answers access_denied. Both clear the cookie. The consent routes take the user
+  only from the signed-in bearer token (never a cookie, a key or an app's token), so a forged
+  cross-site request has nothing to ride on, and the cookie means a victim can't approve a request
+  someone else started (a link to it fails in their browser). The web follows the answer only to
+  https or a loopback http address. Grants that never got a token, or whose tokens all expired, are
+  revoked when the user next approves; revoked ones are deleted after 30 days.
+- **Tokens.** `POST /oauth/token`, form-encoded, parsed by hand (secrets: never pydantic), each
+  parameter once, 16 KB. `authorization_code`: the code is spent on its first presentation whatever
+  follows (an attempt with another client, redirect URI or verifier burns it); a second
+  presentation revokes the grant and everything it issued (RFC 6749 4.1.2). Then the client, the
+  exact redirect URI, `S256(code_verifier)` and `resource` must match. `refresh_token`: rotated
+  every time (OAuth 2.1 for public clients; the new pair in the same answer); a used one presented
+  again revokes the grant (reuse detection: someone else has a copy), and another client's is
+  refused and spent. Access tokens `tro_` + 32 random bytes, 1 hour; refresh `trr_` + 32, 30 days;
+  opaque, kept as SHA-256 + the first 8 characters, like API keys. Errors are RFC 6749's
+  (`invalid_grant` for any bad code or refresh token, so Claude's refresh logic reads them;
+  `invalid_client` 401). `POST /oauth/revoke` (RFC 7009) revokes the token's grant for its own
+  client; 200 for anything else.
+- **Using a token.** `current_user` routes `tro_`/`trr_` to `OAuthAuth.user`: one app-DB
+  transaction finds the access token by hash (`token_holder` policy), then as its user the live
+  grant (not revoked; a password account not disabled and the grant made after its last password
+  change) and counts the request (`oauth_usage`, the API-key limits per grant: 60 a minute, 10,000
+  a day, 429 with Retry-After, `X-RateLimit-*`). The grant's resource must be this MCP server's.
+  Then the route must be in `api_keys.READ_ROUTES` (default deny: anything else, the account
+  routes, writes and the portfolio among them, answers 403 "connected apps can't use this route"),
+  and the request is the web app's: OpenFGA, then RLS as that user. One 401 for unknown, expired,
+  revoked and malformed tokens; a refresh token is never an access token. `/v1/me` adds
+  `connected_app` (name, scopes, expiry). agent-api refuses `tro_`/`trr_` (403), like keys.
+- **Audience.** Tokens are issued only for the MCP server's URL. The MCP server forwards the token
+  to the Query API, which is its own backend and the token's issuer (not a third party, so not the
+  spec's forbidden token passthrough); the Query API checks the grant's resource and takes the
+  token only on read routes, so used directly it can do nothing a read API key can't.
+- **Settings.** `GET /v1/oauth/connections`: one row per app with a live grant (a refresh token
+  unused and unexpired): name, publisher, redirect hosts, first connected, last used. `DELETE`
+  revokes every grant of that app for the user at once; its next request is refused (and the MCP
+  server answers 401, so the app asks to sign in again).
+- **Metrics.** `tributary_oauth_events_total{event,result}` (register, document, authorize,
+  approve, deny, token, refresh, revoke, use). Logs carry user, client key and grant ids and short
+  codes, never a code, token, secret, verifier, state or document.
+
+Tests: `test_oauth.py` (the adversarial list: a code twice, for another client, a redirect URI
+one character off, a missing, wrong or plain PKCE verifier, a token for another resource at
+authorize, token and use, a refresh token reused or another client's, Disconnect and revocation,
+every non-read route and the consent and account routes refusing an app's token, keys refused on
+consent, a demo sandbox refused, unregistered redirect URIs and unknown clients never followed,
+CSRF on consent (no cookie, another request's, a forged or expired seal, approving twice),
+registration refusing javascript:, data:, non-loopback http, fragments and bad metadata, rate
+limits, nothing secret in a log or a later answer, one user's token never reaching another's
+datasets, saved work or companies, nor anyone's portfolio, the nginx routes),
+`test_client_metadata.py` (which URLs are fetched, private addresses never connected to,
+redirects, content types, size and time limits, the document's checks) and `test_oauth_db.py`
+(forced RLS and hash-only lookups, a code and a refresh token presented twice at the same moment,
+the password-account rule, the sandbox CHECK, one approval per consent, the grant cap, the prune
+never touching a used client, limits across two instances).
+
 ## Connect your data
 
 Share prices can't be shown publicly: market-data vendors license them for personal use, not

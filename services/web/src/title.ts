@@ -41,6 +41,8 @@ function what(route: Route, k: Known): string {
       return "Using the API";
     case "settings":
       return "Settings";
+    case "connect":
+      return "Connect an app";
     case "alerts":
       return "Alerts";
     case "data":
