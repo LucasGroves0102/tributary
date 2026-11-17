@@ -47,6 +47,7 @@ export function HoldingView({ token, holding: h, portfolio, onChanged }: {
       await deleteHolding(token, h.id);
       toast({ text: `Removed ${name} from your portfolio. Its journal is kept.` });
       go({ view: "portfolio" });
+      onChanged(); // the list is the same page: read it again without the holding
     } catch (e) {
       toast({ text: `Couldn't remove it: ${failureReason(e)}.`, error: true });
     }
