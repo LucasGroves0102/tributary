@@ -857,8 +857,9 @@ What depends on the date (the `<= current_date` filters of latest period and equ
 the catch-up refreshes it. `gold.screen_company` and `gold.screen_reading` read stored inputs, or
 live (`gold.latest_period`, `gold.latest_reading`) for a company without a row; both are inlined.
 `screen_figures`' primary key INCLUDEs every column a screen reads: a sort over one column is an
-index-only range of its ~6,600 entries, whatever the heap's order. `gold.financials_coverage` reads
-the stored metric lists first.
+index-only range of its ~6,600 entries, whatever the heap's order. The screener's coverage test reads
+the stored metric lists first; `gold.financials_coverage` itself is unchanged (the public catalog's
+membership reads it: access never depends on a cache).
 
 Kept current: `gold.refresh_financials` calls `gold.refresh_screen` for the companies it builds, under
 the same locks, in the same transaction. The tables ship empty (a build of the previous body running

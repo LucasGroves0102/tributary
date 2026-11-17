@@ -46,20 +46,20 @@
 -- 4. The screener reads gold.screen_company(company) (latest period and the stored inputs, or live:
 --    gold.latest_period when the company has no row or is past `until`) and gold.screen_reading(...)
 --    (the stored figure through gold.reading, or gold.latest_reading live), and hide_blank tests the
---    stored metric lists (live probes without a row). Results equal the live path's: test_screen_db.py
---    compares every column of every fixture company at several dates.
--- 5. gold.financials_coverage (017) reads the stored lists first: a company with a row is covered when
---    it has quarterly rows; without a row, the probe as before. Still owner rights, company ids only.
+--    stored metric lists (live probes without a row), and so does its coverage test (a row with
+--    quarterly metrics; else gold.financials_coverage as before). gold.financials_coverage itself is
+--    unchanged: authz.catalog_companies reads it for the public catalog, and access never depends on
+--    a cache. Results equal the live path's: test_screen_figures_db.py compares every column of every
+--    fixture company at several dates, and whole screens.
 --
 -- A change to gold.latest_row, gold.latest_equity, gold.quarterly_recent, gold.amount_currency_of or
 -- silver.metrics' kinds changes what is stored: that migration empties both tables (TRUNCATE; the
 -- catch-up refills them within the hour, reads stay live meanwhile). Readings rules (gold.reading and
 -- what it calls) are read time: no refill.
 --
--- Locks on hermes: new tables and functions; CREATE OR REPLACE of gold.latest_reading,
--- gold.refresh_financials (catalog only; a running build keeps the body it started with) and the view
--- gold.financials_coverage (a moment's ACCESS EXCLUSIVE on the view; lock_timeout 3 s: re-run the hook if
--- a reader held it). No table is scanned or rewritten. Backout: db/backout/screener_figures_078.sql
+-- Locks on hermes: new tables and functions; CREATE OR REPLACE of gold.latest_reading and
+-- gold.refresh_financials (catalog only; a running build keeps the body it started with). No table
+-- is scanned or rewritten, no existing table or view is altered. Backout: db/backout/screener_figures_078.sql
 -- (heads the chain).
 
 SET LOCAL lock_timeout = '3s';
@@ -411,15 +411,3 @@ $$;
 
 GRANT EXECUTE ON FUNCTION gold.screen_company(text),
     gold.screen_reading(text, text, text, text, date, boolean, numeric, text, boolean) TO query_api;
-
--- 5. Coverage reads the stored lists first (header, 5): 017's view otherwise. Scalar subqueries with
--- a LIMIT, not EXISTS: inside coalesce an EXISTS may become a hashed subplan, a seq scan of all of
--- gold.quarterly_financials for the first company without a row (the screener's _has_value, 061).
-CREATE OR REPLACE VIEW gold.financials_coverage AS
-SELECT c.company_id
-FROM silver.companies c
-WHERE coalesce((SELECT s.reported_metrics <> '{}' FROM gold.screen_companies s
-                WHERE s.company_id = c.company_id),
-               (SELECT true FROM gold.quarterly_financials q WHERE q.company_id = c.company_id
-                LIMIT 1),
-               false);

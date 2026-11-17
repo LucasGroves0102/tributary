@@ -257,8 +257,13 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
         params["granted"] = granted
     meta = ["TRUE"]
     if s.coverage:
-        meta.append("EXISTS (SELECT 1 FROM gold.financials_coverage v"
-                    " WHERE v.company_id = c.company_id)")
+        # 078: the stored metric lists (a company with quarterly rows) when this caller reads them,
+        # else gold.financials_coverage (owner rights: metadata rows are public). Scalar subqueries
+        # with a LIMIT, not EXISTS, inside coalesce: never a hashed subplan over all of gold
+        meta.append("coalesce((SELECT s.reported_metrics <> '{}' FROM gold.screen_companies s"
+                    " WHERE s.company_id = c.company_id),"
+                    " (SELECT true FROM gold.financials_coverage v"
+                    " WHERE v.company_id = c.company_id LIMIT 1), false)")
     if s.hide_blank:
         meta.append(_has_value(s.columns, granted, params))
     if s.company_ids is not None:

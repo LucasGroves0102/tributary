@@ -62,7 +62,7 @@ the parser image's `parser-peers` job, not in SQL.
 | `ops.statement_backlog(reader)` (10-K/10-Qs with tables this statements.READER hasn't read) | `079_catchup_status_cleanups.sql` (before: `074_statement_reconciliation_confidence.sql`) |
 | `ops.section_check_backlog(int)` (documents no check of this version has seen; an anti-join) | `079_catchup_status_cleanups.sql` (before: `072_data_trust_checks.sql`) |
 | `ops.catchup_record` (nine arguments, with a note), `ops.catchup_skipped`, view `ops.catchup_status` (`note`; a skip counts as progress) | `079_catchup_status_cleanups.sql` (before: `071_auto_catchup.sql`) |
-| `gold.latest_row`, `gold.latest_equity`, `gold.quarterly_recent`, `gold.is_stale`, `gold.reading` (the readings' parts and rules), `gold.refresh_screen`, `gold.screen_backlog`, `gold.refresh_screen_backlog`, `gold.screen_company`, `gold.screen_reading`, view `gold.financials_coverage` | `078_screener_figures.sql` |
+| `gold.latest_row`, `gold.latest_equity`, `gold.quarterly_recent`, `gold.is_stale`, `gold.reading` (the readings' parts and rules), `gold.refresh_screen`, `gold.screen_backlog`, `gold.refresh_screen_backlog`, `gold.screen_company`, `gold.screen_reading` | `078_screener_figures.sql` |
 | `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
 
 ## Readings (read, not refreshed)

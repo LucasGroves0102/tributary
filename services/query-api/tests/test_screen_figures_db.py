@@ -193,11 +193,19 @@ def test_the_backlog_fills_every_company_once(conn):
     assert conn.execute("SELECT count(*) FROM gold.screen_backlog()").fetchone() == (0,)
 
 
-def test_coverage_reads_the_stored_lists_or_the_probe(conn):
+def test_coverage_reads_the_stored_lists_or_the_view(conn, token):
+    """The screener's coverage test: the stored lists where the caller reads the company, else
+    gold.financials_coverage (owner rights, unchanged: the public catalog's membership reads it)."""
     more_shapes(conn)
-    sql = ("SELECT company_id FROM gold.financials_coverage WHERE company_id LIKE '92%'"
-           " ORDER BY 1")
-    live = conn.execute(sql).fetchall()
+
+    def listed():
+        # a name search: no blank-row test, so coverage alone decides who is listed
+        body = screen(conn, token, q="co", columns=["revenue_q"], sort="name", limit=200)
+        return [r["company_id"] for r in body["rows"]]
+
+    live = listed()
     conn.execute("SELECT gold.refresh_screen(%s)", (companies(conn),))
-    assert conn.execute(sql).fetchall() == live
-    assert (FOREIGN,) in live and (LOCKED,) in live  # owner rights: every company with quarters
+    assert listed() == live
+    assert FOREIGN in live and LOCKED in live  # metadata rows: every company with quarters
+    view = conn.execute("SELECT pg_get_viewdef('gold.financials_coverage'::regclass)").fetchone()[0]
+    assert "screen_companies" not in view

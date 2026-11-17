@@ -1,6 +1,6 @@
 -- Backout of 078_screener_figures.sql (never a migration: README.md): the screener reads live
 -- again. gold.latest_reading back to 069's body and gold.refresh_financials to 071's (copied
--- unchanged), gold.financials_coverage to 017's view; gold.screen_company and gold.screen_reading
+-- unchanged); gold.screen_company and gold.screen_reading
 -- read live only (the Query API from 078 keeps calling them: no other image needed), the backlog
 -- is empty (the hourly catch-up stores nothing) and both tables are emptied. The readings are the
 -- same; the screener's cold first request is as slow as before 078. 078's other functions stay,
@@ -203,12 +203,6 @@ CREATE OR REPLACE FUNCTION gold.screen_backlog() RETURNS TABLE (company_id text)
 LANGUAGE sql STABLE AS $$
     SELECT NULL::text WHERE false
 $$;
-
--- 017's view
-CREATE OR REPLACE VIEW gold.financials_coverage AS
-SELECT c.company_id
-FROM silver.companies c
-WHERE EXISTS (SELECT 1 FROM gold.quarterly_financials q WHERE q.company_id = c.company_id);
 
 TRUNCATE gold.screen_companies, gold.screen_figures;
 
