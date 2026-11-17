@@ -34,6 +34,7 @@ BEGIN
         ('gold.best_facts(text[])', '805280aad1147c74d415ea8cc33ba846'),
         ('gold.best_facts(text[],date)', NULL),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
+        ('gold.company_confidence(text,text,date)', '139f9512b8629850a2e0f66333e44d37'),
         ('gold.company_financials_at(text,date,text,text[])', NULL),
         ('gold.derived_rows(text[],date,gold.quarter_row[])', NULL),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),

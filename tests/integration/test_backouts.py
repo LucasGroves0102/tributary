@@ -65,6 +65,7 @@ RESTORES = {
         "gold.financials_at(date)": None,
         "gold.company_financials_at(text,date,text,text[])": None,
         "gold.restatements(text,date)": None,
+        "gold.company_confidence(text,text,date)": "074_statement_reconciliation_confidence.sql",
     },
     "revenue_fallbacks_080.sql": {"gold.best_facts(text[])": "077_net_income_one_line.sql"},
     "screener_figures_078.sql": {

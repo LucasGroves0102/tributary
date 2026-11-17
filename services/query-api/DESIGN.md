@@ -341,7 +341,8 @@ first stated it to the day a filing changed it, built by gold's own pipeline as 
   row with its period's first version.
 
 What isn't point in time: segments, data notes, coverage and the confidence mark (today's; the web
-labels them), and a figure's citation for a company replayed at read time (above).
+labels them, and an as-of screen's rows carry no confidence: the web asks for today's), and a
+figure's citation for a company replayed at read time (above).
 
 ## Per-share figures on one share basis
 

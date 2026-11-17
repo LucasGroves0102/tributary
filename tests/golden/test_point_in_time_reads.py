@@ -194,6 +194,19 @@ def test_the_screener_as_of_a_day_reads_what_the_company_page_reads(gold):
                         want["citation"]["accession_no"]
 
 
+def test_a_screen_today_after_one_as_of_a_day_on_the_same_connection(gold):
+    """The as-of session sets tributary.today locally: on a pooled connection it reads '' after,
+    which every reader must take as today (087's gold.company_confidence, gold.is_stale)."""
+    ids = sorted(IDS.values())
+    old = get(gold, "/v1/screener", company_id=ids, as_of="2025-06-30", limit=50)
+    assert all(r["confidence"] is None for r in old["rows"])  # today's only
+    # here the fixture's one transaction keeps the setting; a pooled connection reads '' next
+    gold.execute("SELECT set_config('tributary.today', '', true)")
+    now = get(gold, "/v1/screener", company_id=ids, limit=50)
+    assert "known_on" not in now
+    assert any(r["confidence"] for r in now["rows"])
+
+
 def test_per_share_applies_only_the_splits_restated_by_the_day(gold):
     bkng = IDS["BKNG"]
     before = get(gold, f"/v1/companies/{bkng}/per-share", as_of="2026-01-15")

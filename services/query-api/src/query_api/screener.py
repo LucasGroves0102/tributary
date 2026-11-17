@@ -15,7 +15,7 @@ caller's SIC, the same rules); a company with nothing stored is read live, as be
 past day (`as_of`, migrations 085-087) every company is read live from gold's history
 (gold.latest_period and gold.latest_reading with the day: the versions believed at its end), in
 a session whose "today" is that day (stale is against it); hide_blank probes the history the
-same way. The confidence mark stays today's. Sorts and
+same way. The confidence mark is today's only: as of a day its row has none. Sorts and
 range filters take the comparable value, `k<i>`, which is NULL for all of them but "behind": the
 exact figure stays in `v<i>`, so a
 209,828% gross margin is still returned, with its reason, and doesn't win a sort or pass a filter.
@@ -384,6 +384,11 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
                               else ("", ""))
     page_sector, page_join = (("", "") if sector_early
                               else (sector_cols, sector_join.format("r")))
+    # the confidence mark (074) is today's: as of a past day there is none to give
+    confidence = ("LEFT JOIN LATERAL (SELECT NULL::text AS level, NULL::text[] AS reasons) cf"
+                  " ON true" if at else
+                  "LEFT JOIN LATERAL gold.company_confidence(r.company_id, r.sic,"
+                  f" {page_latest}) cf ON true")
     sql = f"""
 WITH base AS (
     SELECT c.company_id, c.name, c.tickers, c.exchanges, c.sic,
@@ -410,7 +415,7 @@ SELECT r.*{'' if early else ', a.latest AS latest_period'}{page_outputs}{page_se
 FROM ranked r
 {'' if early else _latest('r.company_id', granted, at)}
 LEFT JOIN LATERAL {_values(page, 'r.company_id', 'r.sic', page_inputs, granted, at)} w ON true
-LEFT JOIN LATERAL gold.company_confidence(r.company_id, r.sic, {page_latest}) cf ON true
+{confidence}
 {page_join}
 ORDER BY {final} {direction} NULLS LAST, r.company_id
 """

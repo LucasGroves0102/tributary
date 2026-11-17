@@ -24,11 +24,15 @@
 --    inputs' consequences): the original and restated values, each version's citation and first
 --    day, and whether the line (XBRL tag) stayed the same. Security invoker (RLS). Which change is
 --    a stock split is query_api.notes' one rule, applied by the route.
+-- 6. gold.company_confidence (074's body) reads tributary.today through nullif, as gold.is_stale
+--    does: an as-of session sets it locally (SET LOCAL), and on a pooled connection it reads ''
+--    afterwards, not NULL; 074's bare cast would fail every later screen on that connection.
 --
 -- Locks on hermes (lock_timeout 3 s): DROP FUNCTION of the five readings, latest_reading and
--- annual_per_share and CREATE of their replacements in this transaction (catalog only; a running
--- query keeps the plan it started with; the next one resolves the new function); new functions. No
--- table is read, written or locked. Backout db/backout/point_in_time_085.sql.
+-- annual_per_share and CREATE of their replacements in this transaction, CREATE OR REPLACE of
+-- gold.company_confidence (catalog only; a running query keeps the plan it started with; the next
+-- one resolves the new function); new functions. No table is read, written or locked. Backout
+-- db/backout/point_in_time_085.sql.
 
 SET LOCAL lock_timeout = '3s';
 
@@ -468,3 +472,102 @@ LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
     WHERE v.next_from IS NOT NULL AND v.next_value <> v.value
 $$;
 GRANT EXECUTE ON FUNCTION gold.restatements(text, date) TO query_api;
+
+-- 6. "Today" after an as-of session -------------------------------------------------------------
+
+-- 074's body, reading tributary.today as gold.is_stale does (header, 6).
+CREATE OR REPLACE FUNCTION gold.company_confidence(p_company_id text, p_sic text, p_latest date)
+RETURNS TABLE (level text, reasons text[])
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT CASE WHEN q.company_id IS NULL AND p_latest IS NULL THEN NULL
+                WHEN cardinality(x.low) > 0 THEN 'low'
+                WHEN cardinality(x.medium) > 0 THEN 'medium'
+                ELSE 'high' END,
+           CASE WHEN q.company_id IS NULL AND p_latest IS NULL THEN NULL
+                WHEN cardinality(x.low) > 0 THEN x.low
+                WHEN cardinality(x.medium) > 0 THEN x.medium
+                ELSE x.high END
+    FROM (SELECT 1) one
+    LEFT JOIN ops.quality_companies q ON q.company_id = p_company_id
+    LEFT JOIN LATERAL gold.amount_currency_of(p_company_id) cu ON true
+    CROSS JOIN LATERAL (
+        -- 087: an as-of session sets tributary.today locally; on a pooled connection it reads ''
+        -- afterwards, never NULL again (gold.is_stale's nullif)
+        SELECT coalesce(nullif(current_setting('tributary.today', true), '')::date, current_date)
+                   - p_latest
+                   AS age,
+               CASE WHEN q.figures > 0 THEN 1000.0 * q.errors / q.figures END AS errors_k,
+               CASE WHEN q.figures > 0 THEN 1000.0 * q.warnings / q.figures END AS warnings_k
+    ) t
+    -- 069's annual filer (no quarterly revenue or net income in the 200 days before its latest
+    -- period), probed only for a company past 270 days
+    LEFT JOIN LATERAL (
+        SELECT NOT EXISTS (
+                   SELECT 1 FROM gold.quarterly_financials g
+                   WHERE g.company_id = p_company_id AND g.metric IN ('revenue', 'net_income')
+                     AND g.period_end BETWEEN p_latest - 200 AND p_latest
+                     AND g.period_end - g.period_start BETWEEN 80 AND 120) AS annual
+        WHERE t.age > 270
+    ) a ON true
+    CROSS JOIN LATERAL (
+        SELECT array_remove(ARRAY[
+                   CASE q.entity
+                       WHEN 'shell' THEN 'a blank-check company with no business yet, so its '
+                                         'figures say little about one'
+                       WHEN 'commodity_pool' THEN 'a commodity pool or trust: its results are gains '
+                                         'on what it holds, not sales and profits'
+                       WHEN 'royalty_trust' THEN 'a royalty trust: it passes royalties through, so '
+                                         'most operating figures don''t apply'
+                       WHEN 'bdc' THEN 'a business development company: it reports investment '
+                                         'income and net assets, which the standard lines read '
+                                         'only in part' END,
+                   CASE WHEN t.errors_k >= 2
+                        THEN format('%s %s a reader could see in its %s figures', q.errors,
+                                    CASE WHEN q.errors = 1 THEN 'error' ELSE 'errors' END,
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN t.warnings_k >= 25
+                        THEN format('%s %s to double-check in its %s', q.warnings,
+                                    CASE WHEN q.warnings = 1 THEN 'figure' ELSE 'figures' END,
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN t.age > 500
+                        THEN 'no report since the period ended '
+                             || to_char(p_latest, 'FMMon FMDD, YYYY') END,
+                   CASE WHEN q.core_figures <= 2
+                        THEN format('only %s of the six core figures for its latest period',
+                                    q.core_figures) END
+               ], NULL) AS low,
+               array_remove(ARRAY[
+                   CASE WHEN q.company_id IS NULL THEN 'not checked yet' END,
+                   CASE WHEN q.errors > 0
+                        THEN format('%s %s a reader could see', q.errors,
+                                    CASE WHEN q.errors = 1 THEN 'error' ELSE 'errors' END) END,
+                   CASE WHEN t.warnings_k >= 10
+                        THEN format('%s %s to double-check in its %s', q.warnings,
+                                    CASE WHEN q.warnings = 1 THEN 'figure' ELSE 'figures' END,
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN q.statements_differ_at IS NOT NULL
+                        THEN 'a filing''s own statement prints another headline figure than '
+                             'the one here' END,
+                   CASE WHEN cu.unit IS NOT NULL AND cu.unit <> 'USD'
+                        THEN 'reported in ' || cu.unit || ': fewer of its lines map to the '
+                             'standard ones, and nothing is converted' END,
+                   CASE WHEN t.age > 270 AND t.age <= 500 AND NOT a.annual
+                        THEN 'its latest figures are for the period ended '
+                             || to_char(p_latest, 'FMMon FMDD, YYYY') END,
+                   CASE WHEN q.core_figures IN (3, 4)
+                        THEN format('%s of the six core figures for its latest period',
+                                    q.core_figures) END
+               ], NULL) AS medium,
+               array_remove(ARRAY[
+                   CASE WHEN q.figures > 0
+                        THEN format('no error found in its %s figures',
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN q.statements_agreed > 0
+                        THEN format('%s %s from its filings'' own statements %s the figures here',
+                                    q.statements_agreed,
+                                    CASE WHEN q.statements_agreed = 1 THEN 'line' ELSE 'lines' END,
+                                    CASE WHEN q.statements_agreed = 1 THEN 'agrees with'
+                                         ELSE 'agree with' END) END
+               ], NULL) AS high
+    ) x
+$$;

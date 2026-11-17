@@ -1,15 +1,15 @@
 -- Backout of 085_point_in_time_pipeline.sql, 086_financials_known.sql and
--- 087_point_in_time_reads.sql (never a migration: README.md): everything point-in-time
--- undone, newest first: 087's reads (gold.financials_at, company_financials_at, restatements dropped;
--- the readings' probes back to one signature each: gold.latest_row, latest_equity and
--- quarterly_recent 078's, amount_currency_of 061's, latest_period 035's, latest_reading 083's;
--- gold.annual_per_share 056's two-argument form), then 086's history (gold.financials_known,
--- gold.known_companies and their functions dropped; gold.refresh_financials back to 078's body;
--- the 'known' catch-up kind and its stamps removed, ops.company_rule_version, ops.company_backlog
--- and ops.rebuild_soon back to 071's, 074's and 076's), then 085's pipeline (gold.usable_facts and
--- gold.best_facts with one argument, 056's and 080's; the writers 043's and 084's; the pure
--- functions and their types dropped). Deploy the previous query-api image first (it calls the as-of
--- forms). Gold's own rows are the same either way: nothing to rebuild.
+-- 087_point_in_time_reads.sql (never a migration: README.md): everything point-in-time undone,
+-- newest first: 087's reads (gold.financials_at, company_financials_at, restatements dropped; the
+-- readings' probes back to one signature each: gold.latest_row, latest_equity and quarterly_recent
+-- 078's, amount_currency_of 061's, latest_period 035's, latest_reading 083's; gold.annual_per_share
+-- 056's two-argument form; gold.company_confidence 074's), then 086's history
+-- (gold.financials_known, gold.known_companies and their functions dropped; gold.refresh_financials
+-- back to 078's body; the 'known' catch-up kind and its stamps removed, ops.company_rule_version,
+-- ops.company_backlog and ops.rebuild_soon back to 071's, 074's and 076's), then 085's pipeline
+-- (gold.usable_facts and gold.best_facts with one argument, 056's and 080's; the writers 043's and
+-- 084's; the pure functions and their types dropped). Deploy the previous query-api image first (it
+-- calls the as-of forms). Gold's own rows are the same either way: nothing to rebuild.
 --
 -- Run it as the migration owner, the migrate login `tributary` (SET ROLE as below): run as
 -- postgres, a function it drops and re-creates would belong to postgres, and the non-superuser
@@ -38,6 +38,7 @@ BEGIN
         ('gold.best_facts(text[])', NULL),
         ('gold.best_facts(text[],date)', '6950247dc6c9f51d99de4b12e906dc5a'),
         ('gold.companies_for_ciks(text[])', '5f02b9f1e395d7f743635d0a399f8f6c'),
+        ('gold.company_confidence(text,text,date)', '91c5d249e662b77610e084d4a0620ddb'),
         ('gold.company_financials_at(text,date,text,text[])', '63de4900f9b4285f61d220d0141ceda7'),
         ('gold.derived_rows(text[],date,gold.quarter_row[])', 'd22751c4c57103d6fda7665e6477a179'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
@@ -275,6 +276,100 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $f
 $fn$;
 REVOKE EXECUTE ON FUNCTION gold.annual_per_share(text, int) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION gold.annual_per_share(text, int) TO query_api;
+
+-- 074's gold.company_confidence, copied unchanged
+CREATE OR REPLACE FUNCTION gold.company_confidence(p_company_id text, p_sic text, p_latest date)
+RETURNS TABLE (level text, reasons text[])
+LANGUAGE sql STABLE PARALLEL SAFE SECURITY INVOKER AS $$
+    SELECT CASE WHEN q.company_id IS NULL AND p_latest IS NULL THEN NULL
+                WHEN cardinality(x.low) > 0 THEN 'low'
+                WHEN cardinality(x.medium) > 0 THEN 'medium'
+                ELSE 'high' END,
+           CASE WHEN q.company_id IS NULL AND p_latest IS NULL THEN NULL
+                WHEN cardinality(x.low) > 0 THEN x.low
+                WHEN cardinality(x.medium) > 0 THEN x.medium
+                ELSE x.high END
+    FROM (SELECT 1) one
+    LEFT JOIN ops.quality_companies q ON q.company_id = p_company_id
+    LEFT JOIN LATERAL gold.amount_currency_of(p_company_id) cu ON true
+    CROSS JOIN LATERAL (
+        SELECT coalesce(current_setting('tributary.today', true)::date, current_date) - p_latest
+                   AS age,
+               CASE WHEN q.figures > 0 THEN 1000.0 * q.errors / q.figures END AS errors_k,
+               CASE WHEN q.figures > 0 THEN 1000.0 * q.warnings / q.figures END AS warnings_k
+    ) t
+    -- 069's annual filer (no quarterly revenue or net income in the 200 days before its latest
+    -- period), probed only for a company past 270 days
+    LEFT JOIN LATERAL (
+        SELECT NOT EXISTS (
+                   SELECT 1 FROM gold.quarterly_financials g
+                   WHERE g.company_id = p_company_id AND g.metric IN ('revenue', 'net_income')
+                     AND g.period_end BETWEEN p_latest - 200 AND p_latest
+                     AND g.period_end - g.period_start BETWEEN 80 AND 120) AS annual
+        WHERE t.age > 270
+    ) a ON true
+    CROSS JOIN LATERAL (
+        SELECT array_remove(ARRAY[
+                   CASE q.entity
+                       WHEN 'shell' THEN 'a blank-check company with no business yet, so its '
+                                         'figures say little about one'
+                       WHEN 'commodity_pool' THEN 'a commodity pool or trust: its results are gains '
+                                         'on what it holds, not sales and profits'
+                       WHEN 'royalty_trust' THEN 'a royalty trust: it passes royalties through, so '
+                                         'most operating figures don''t apply'
+                       WHEN 'bdc' THEN 'a business development company: it reports investment '
+                                         'income and net assets, which the standard lines read '
+                                         'only in part' END,
+                   CASE WHEN t.errors_k >= 2
+                        THEN format('%s %s a reader could see in its %s figures', q.errors,
+                                    CASE WHEN q.errors = 1 THEN 'error' ELSE 'errors' END,
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN t.warnings_k >= 25
+                        THEN format('%s %s to double-check in its %s', q.warnings,
+                                    CASE WHEN q.warnings = 1 THEN 'figure' ELSE 'figures' END,
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN t.age > 500
+                        THEN 'no report since the period ended '
+                             || to_char(p_latest, 'FMMon FMDD, YYYY') END,
+                   CASE WHEN q.core_figures <= 2
+                        THEN format('only %s of the six core figures for its latest period',
+                                    q.core_figures) END
+               ], NULL) AS low,
+               array_remove(ARRAY[
+                   CASE WHEN q.company_id IS NULL THEN 'not checked yet' END,
+                   CASE WHEN q.errors > 0
+                        THEN format('%s %s a reader could see', q.errors,
+                                    CASE WHEN q.errors = 1 THEN 'error' ELSE 'errors' END) END,
+                   CASE WHEN t.warnings_k >= 10
+                        THEN format('%s %s to double-check in its %s', q.warnings,
+                                    CASE WHEN q.warnings = 1 THEN 'figure' ELSE 'figures' END,
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN q.statements_differ_at IS NOT NULL
+                        THEN 'a filing''s own statement prints another headline figure than '
+                             'the one here' END,
+                   CASE WHEN cu.unit IS NOT NULL AND cu.unit <> 'USD'
+                        THEN 'reported in ' || cu.unit || ': fewer of its lines map to the '
+                             'standard ones, and nothing is converted' END,
+                   CASE WHEN t.age > 270 AND t.age <= 500 AND NOT a.annual
+                        THEN 'its latest figures are for the period ended '
+                             || to_char(p_latest, 'FMMon FMDD, YYYY') END,
+                   CASE WHEN q.core_figures IN (3, 4)
+                        THEN format('%s of the six core figures for its latest period',
+                                    q.core_figures) END
+               ], NULL) AS medium,
+               array_remove(ARRAY[
+                   CASE WHEN q.figures > 0
+                        THEN format('no error found in its %s figures',
+                                    to_char(q.figures, 'FM999,999,999')) END,
+                   CASE WHEN q.statements_agreed > 0
+                        THEN format('%s %s from its filings'' own statements %s the figures here',
+                                    q.statements_agreed,
+                                    CASE WHEN q.statements_agreed = 1 THEN 'line' ELSE 'lines' END,
+                                    CASE WHEN q.statements_agreed = 1 THEN 'agrees with'
+                                         ELSE 'agree with' END) END
+               ], NULL) AS high
+    ) x
+$$;
 
 -- 086: the history
 -- 078's gold.refresh_financials, copied unchanged
