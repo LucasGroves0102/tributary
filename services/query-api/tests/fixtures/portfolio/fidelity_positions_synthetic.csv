@@ -1,0 +1,19 @@
+﻿Account Number,Account Name,Symbol,Description,Quantity,Last Price,Last Price Change,Current Value,Today's Gain/Loss Dollar,Today's Gain/Loss Percent,Total Gain/Loss Dollar,Total Gain/Loss Percent,Percent Of Account,Cost Basis Total,Average Cost Basis,Type
+Z09876543,Individual,SPAXX**,HELD IN MONEY MARKET,,,,$12.34,,,,,2.47%,,,Cash,
+Z09876543,Individual,NVDA,NVIDIA CORPORATION COM,1.25,$186.26,+$2.10,$232.83,+$2.63,+1.14%,+$32.83,+16.41%,46.56%,$200.00,$160.00,Cash,
+Z09876543,Individual,AAPL,APPLE INC,0.75,$228.52,-$1.48,$171.39,-$1.11,-0.64%,+$21.39,+14.26%,34.28%,$150.00,$200.00,Cash,
+Z09876543,Individual,BRK.B,BERKSHIRE HATHAWAY INC COM USD0.0033 CLASS B,0.1,$470.10,+$0.85,$47.01,+$0.09,+0.18%,-$2.99,-5.98%,9.40%,"$1,000.00",$500.00,Cash,
+Z09876543,Individual,VOO,VANGUARD S&P 500 ETF,0.05,$560.00,+$3.20,$28.00,+$0.16,+0.57%,+$3.00,+12.00%,5.60%,$25.00,$500.00,Cash,
+Z09876543,Individual,Pending Activity,,,,,-$5.00,,,,,,,,,
+Y55511122,ROTH IRA,FXAIX,FIDELITY 500 INDEX FUND,0.312,$210.33,+$1.17,$65.62,+$0.37,+0.56%,+$5.62,+9.37%,24.70%,$60.00,$192.31,Cash,
+Y55511122,ROTH IRA,NVDA,NVIDIA CORPORATION COM,0.5,$186.26,+$2.10,$93.13,+$1.05,+1.14%,+$8.13,+9.56%,35.06%,$85.00,$170.00,Cash,
+Y55511122,ROTH IRA, -NVDA261218C200,NVDA DEC 18 2026 $200 CALL,1,$4.10,+$0.35,$410.00,+$35.00,+9.33%,+$60.00,+17.14%,15.43%,$350.00,$3.50,Margin,
+Y55511122,ROTH IRA,MSFT,MICROSOFT CORP,0.2,$505.00,-$2.00,$101.00,-$0.40,-0.39%,--,--,38.02%,--,--,Cash,
+Y55511122,ROTH IRA,FDRXX**,FIDELITY GOVERNMENT CASH RESERVES,6.00,$1.00,,$6.00,,,,,2.26%,,,Cash,
+X31415926,Joint WROS 31415926,TSLA,TESLA INC COM,0.1,$350.00,+$7.00,$35.00,+$0.70,+2.04%,"($5.00)",-12.50%,100.00%,$40.00,$400.00,Cash,
+
+"The data and information in this spreadsheet is provided to you solely for your use and is not for distribution. If you have chosen to download this data to another device or application, you are responsible for the security of the data."
+
+"Brokerage services are provided by Fidelity Brokerage Services LLC (FBS), 900 Salem Street, Smithfield, RI 02917. Custody and other services provided by National Financial Services LLC (NFS). Both are Fidelity Investments companies and members SIPC, NYSE."
+
+"Date downloaded Nov-16-2026 10:15 a.m ET"

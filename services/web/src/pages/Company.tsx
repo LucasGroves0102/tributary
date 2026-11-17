@@ -25,6 +25,7 @@ import { NEW_WORK_TITLE, NewWorkForm, newWorkOffline } from "../workspaces/NewWo
 import type { WrittenKind } from "../types";
 import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
+import { HoldingLine } from "../portfolio/HoldingLine";
 import { coRegistrantNote } from "../compare/peers";
 
 interface Props {
@@ -131,6 +132,8 @@ export function Company({ token, companyId, tab, statements, changes, watched, o
             </span>
           </p>
         )}
+        {/* the user's own holding, quietly (portfolio, app 021): nothing when they hold none */}
+        <HoldingLine token={token} companyId={companyId} />
         {joint && (
           <p className="meta co-meta joint-note" role="note">
             <span>

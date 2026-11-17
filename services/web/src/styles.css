@@ -7509,3 +7509,330 @@ table.t.release-grid {
     color: var(--ink-3);
   }
 }
+
+/* --- portfolio and journal (portfolio/*) -------------------------------------------------------
+   The user's own records: money to the cent (portfolio.ts `cash`), no seal (nothing here is a filed
+   figure), umber (--warn) for what asks for the user's own writing (a review due, a correction). */
+.portfolio-story {
+  margin-bottom: var(--sp-3);
+}
+
+.not-advice {
+  margin: 0 0 var(--sp-6);
+  max-width: 76ch;
+}
+
+.review-due-note {
+  margin: 0 0 var(--sp-6);
+  padding: 6px 12px;
+  border-left: 2px solid var(--warn);
+  background: var(--warn-soft);
+  font-size: var(--fs-md);
+  max-width: 76ch;
+}
+
+.portfolio-table td.first a,
+.portfolio-closed td.first a {
+  font-weight: 600;
+}
+
+.holding-review {
+  display: block;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--warn);
+}
+
+.price-src {
+  display: block;
+  font-family: var(--sans);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.price-src.stale {
+  color: var(--warn);
+}
+
+.next-report {
+  white-space: nowrap;
+}
+
+.portfolio-empty {
+  display: grid;
+  gap: var(--sp-6);
+  max-width: 72ch;
+}
+
+.portfolio-empty .story,
+.portfolio-empty p {
+  margin: 0;
+}
+
+.portfolio-how {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: var(--sp-3);
+  font-size: var(--fs-md);
+}
+
+.holding-page h1 a.plain {
+  color: inherit;
+  text-decoration: none;
+}
+
+.holding-ledger {
+  margin-bottom: var(--sp-6);
+}
+
+.research-link p {
+  margin: 0 0 var(--sp-4);
+}
+
+.research-link .pf-field {
+  max-width: 460px;
+}
+
+.co-held a {
+  font-weight: 600;
+}
+
+/* forms: the one control size, labels sans 13 over their fields */
+.pf-form {
+  display: grid;
+  gap: var(--sp-6);
+  margin: 0 0 var(--sp-8);
+}
+
+.pf-form h2,
+.pf-form h3 {
+  margin: 0;
+}
+
+.pf-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-6) var(--sp-8);
+}
+
+.pf-field {
+  display: grid;
+  gap: var(--sp-2);
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.pf-field > span:first-child,
+.pf-field > legend {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+  padding: 0;
+}
+
+.pf-field .field.num {
+  width: 120px;
+  text-align: right;
+}
+
+.pf-field.wide {
+  flex: 1 1 280px;
+  max-width: 460px;
+}
+
+.pf-field.full {
+  flex: 1 1 100%;
+  max-width: 76ch;
+}
+
+.pf-field textarea.field {
+  resize: vertical;
+  font-family: var(--serif);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+}
+
+.pf-cost {
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.pf-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-4) var(--sp-6);
+  margin-top: var(--sp-6);
+}
+
+.pf-inline .err {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+label.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-md);
+}
+
+.entry-lines {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+/* the journal: entries newest first, a correction under the entry it corrects */
+.journal {
+  display: grid;
+  gap: var(--sp-6);
+  max-width: 820px;
+}
+
+.journal-list,
+.journal-corrections,
+.journal-recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.journal-item {
+  padding: var(--sp-6) 0;
+  border-top: 1px solid var(--rule);
+}
+
+.journal-corrections {
+  margin: var(--sp-4) 0 0 var(--sp-6);
+  padding-left: var(--sp-6);
+  border-left: 2px solid var(--warn);
+}
+
+.entry-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+}
+
+.entry-day {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.entry-kind {
+  font-weight: 650;
+}
+
+.entry.correction .entry-kind {
+  color: var(--warn);
+}
+
+.entry-confidence {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.entry-why,
+.entry-sell p {
+  margin: var(--sp-3) 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--fs-md);
+  line-height: 1.55;
+}
+
+.entry-sell {
+  margin-top: var(--sp-4);
+}
+
+.entry-label {
+  display: block;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.entry-redlines {
+  margin: var(--sp-2) 0 0;
+  padding-left: 18px;
+}
+
+.entry-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: var(--sp-4);
+}
+
+.journal-recent li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.journal-snip {
+  flex-basis: 100%;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* the import's preview */
+.import-lead {
+  margin: 0 0 var(--sp-4);
+  max-width: 76ch;
+}
+
+.import-file {
+  margin-top: var(--sp-6);
+  cursor: pointer;
+}
+
+.import-file:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.import-table tr.off td:not(.first) {
+  color: var(--ink-3);
+}
+
+.import-table .field.import-cost {
+  width: 100px;
+  text-align: right;
+}
+
+.import-table .field.import-label {
+  width: 140px;
+}
+
+.import-actions {
+  align-items: center;
+}
+
+@container main (max-width: 600px) {
+  .pf-field.wide,
+  .pf-field.full {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .journal-corrections {
+    margin-left: 0;
+  }
+}

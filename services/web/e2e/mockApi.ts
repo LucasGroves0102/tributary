@@ -101,7 +101,62 @@ export interface Fake {
   checks: Map<string, Record<string, unknown>[]>;
   /** the account's API keys (/v1/api-keys), as the Query API lists them */
   apiKeys: Record<string, unknown>[];
+  /** the portfolio (query_api/portfolio.py): holdings with their lots, and journal entries */
+  holdings: PortfolioHolding[];
+  journal: Record<string, unknown>[];
 }
+
+interface PortfolioHolding {
+  id: string;
+  company_id: string | null;
+  symbol: string;
+  name: string | null;
+  lots: { id: string; shares: string; cost_total: string; bought_on: string | null; account_label: string | null; source: string }[];
+  price: { value: string; on: string; source: string } | null;
+}
+
+/** A portfolio as GET /v1/portfolio answers it: average cost, values only on a price given. */
+function portfolioAnswer(holdings: PortfolioHolding[]) {
+  const rows = holdings.map((h) => {
+    const shares = h.lots.reduce((s, l) => s + Number(l.shares), 0);
+    const cost = h.lots.reduce((s, l) => s + Number(l.cost_total), 0);
+    const value = h.price ? shares * Number(h.price.value) : null;
+    return {
+      id: h.id, company_id: h.company_id, covered: h.company_id !== null, symbol: h.symbol, name: h.name,
+      added_at: "2026-10-21T12:00:00Z", open: shares > 0, shares: String(shares), cost_basis: cost.toFixed(2),
+      average_cost: shares ? String(cost / shares) : null, realised: "0.00", first_bought: h.lots.find((l) => l.bought_on)?.bought_on ?? null,
+      price: h.price ? { ...h.price, provider: null, stale: false } : null,
+      value: value === null ? null : value.toFixed(2), unrealised: value === null ? null : (value - cost).toFixed(2),
+      unrealised_pct: value === null || !cost ? null : ((value - cost) / cost).toFixed(4),
+      next_report: h.company_id ? { form: "10-Q", period_end: "2027-01-25", expected_date: "2027-02-25" } : null,
+      weight: null as string | null, link: null, candidates: [], review_due: null,
+      lots: h.lots.map((l) => ({ ...l, cost_per_share: String(Number(l.cost_total) / Number(l.shares)), created_at: "2026-10-21T12:00:00Z" })),
+      sells: [],
+    };
+  });
+  const total = rows.reduce((s, r) => s + Number(r.cost_basis), 0);
+  for (const r of rows) r.weight = total ? (Number(r.cost_basis) / total).toFixed(4) : null;
+  const priced = rows.filter((r) => r.value !== null);
+  return {
+    holdings: rows, currency: "USD", method: "average_cost", weight_basis: "cost", stale_after_days: 7, today: "2026-10-21",
+    totals: { open: rows.length, priced: priced.length, cost_basis: total.toFixed(2),
+      value: priced.length ? priced.reduce((s, r) => s + Number(r.value), 0).toFixed(2) : null,
+      unrealised: priced.length ? priced.reduce((s, r) => s + Number(r.unrealised), 0).toFixed(2) : null, realised: "0.00" },
+    reviews_due: 0, prices_connected: false, refresh: false,
+  };
+}
+
+/** What the Query API reads from Fidelity's positions export (portfolio_import.py): account numbers
+ * already dropped. */
+const FIDELITY_PREVIEW = {
+  positions: [
+    { row: 0, symbol: "NVDA", description: "NVIDIA CORPORATION COM", shares: "1.25", cost_total: "200.00", last_price: "186.26", account_label: "Individual", company_id: NVDA, name: "NVIDIA CORP", covered: true, held: null },
+    { row: 1, symbol: "MSFT", description: "MICROSOFT CORP", shares: "0.2", cost_total: null, last_price: "505.00", account_label: "ROTH IRA", company_id: MSFT, name: "MICROSOFT CORP", covered: true, held: null },
+    { row: 2, symbol: "VOO", description: "VANGUARD S&P 500 ETF", shares: "0.05", cost_total: "25.00", last_price: "560.00", account_label: "Individual", company_id: null, name: null, covered: false, held: null },
+  ],
+  skipped: [{ symbol: "SPAXX", description: "HELD IN MONEY MARKET", reason: "cash" }, { symbol: null, description: "Pending activity", reason: "pending" }],
+  downloaded: "2026-10-21", source: "fidelity",
+};
 
 /** A GitHub account's session (stored in localStorage as the app keeps one): API keys need a
  * permanent account, so Settings offers them only to it, never to the demo sandbox. */
@@ -156,7 +211,7 @@ function reportState(workspaceId: string, items: Record<string, unknown>[]) {
 }
 
 export async function mockApi(page: Page): Promise<Fake> {
-  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [] };
+  const fake: Fake = { watched: new Set([NVDA, PEP]), calls: [], workspaces: [], items: new Map(), asked: [], views: {}, reports: [], checkResult: null, checks: new Map(), apiKeys: [], holdings: [], journal: [] };
   let seq = 0;
   const now = () => new Date(Date.UTC(2026, 9, 21, 12, 0, seq++)).toISOString();
 
@@ -164,7 +219,8 @@ export async function mockApi(page: Page): Promise<Fake> {
     const req = route.request();
     const u = new URL(req.url());
     const method = req.method();
-    const body = req.postData() ? JSON.parse(req.postData()!) : {};
+    // JSON bodies; the portfolio import's preview posts a CSV's text
+    const body = req.postData() && req.headers()["content-type"]?.includes("application/json") ? JSON.parse(req.postData()!) : {};
     fake.calls.push(`${method} ${u.pathname}${u.search}`);
     const json = (data: unknown, status = 200) => route.fulfill({ status, json: data });
 
@@ -506,6 +562,57 @@ export async function mockApi(page: Page): Promise<Fake> {
     }
     if (path === "/v1/alerts/deliveries") return json({ deliveries: [], retries: [300, 1800, 7200, 21600] });
     if (path === "/v1/alerts/red-lines") return json({ red_lines: [], max_per_company: 10, evaluation: [], evaluated_at: now() });
+    // the portfolio and journal (query_api/portfolio.py, journal.py)
+    if (path === "/v1/portfolio") return json(portfolioAnswer(fake.holdings));
+    m = path.match(/^\/v1\/portfolio\/position\/(\d{10})$/);
+    if (m) {
+      const h = fake.holdings.find((x) => x.company_id === m![1]);
+      const shares = h ? h.lots.reduce((s, l) => s + Number(l.shares), 0) : 0;
+      return json({ position: h ? { holding_id: h.id, shares: String(shares), open: shares > 0, first_bought: h.lots.find((l) => l.bought_on)?.bought_on ?? null, added_at: "2026-10-21T12:00:00Z" } : null });
+    }
+    if (path === "/v1/portfolio/holdings" && method === "POST") {
+      const c = body.company_id ? byId.get(body.company_id) : byTicker.get(body.symbol);
+      const key = c ? c.id : null;
+      let h = fake.holdings.find((x) => (key ? x.company_id === key : !x.company_id && x.symbol === body.symbol));
+      const created = !h;
+      if (!h) {
+        h = { id: `0000000${++seq}-0000-4000-8000-000000000000`.slice(-36), company_id: key, symbol: c?.ticker ?? body.symbol, name: c ? null : (body.name ?? null), lots: [], price: null };
+        fake.holdings.push(h);
+      }
+      const cost = body.lot.cost_total ?? String(Number(body.lot.cost_per_share) * Number(body.lot.shares));
+      h.lots.push({ id: `l${++seq}`, shares: body.lot.shares, cost_total: Number(cost).toFixed(2), bought_on: body.lot.bought_on ?? null, account_label: body.lot.account_label ?? null, source: "typed" });
+      return json({ holding_id: h.id, created, covered: !!key, company_id: key });
+    }
+    if (path === "/v1/portfolio/import/preview" && method === "POST") return json(FIDELITY_PREVIEW);
+    if (path === "/v1/portfolio/import" && method === "POST") {
+      let made = 0;
+      for (const p of body.positions as { symbol: string; description: string | null; shares: string; cost_total: string; last_price: string | null; account_label: string | null }[]) {
+        const c = byTicker.get(p.symbol) ?? null;
+        let h = fake.holdings.find((x) => (c ? x.company_id === c.id : !x.company_id && x.symbol === p.symbol));
+        if (!h) {
+          h = { id: `0000000${++seq}-0000-4000-8000-000000000000`.slice(-36), company_id: c?.id ?? null, symbol: p.symbol, name: c ? null : p.description, lots: [], price: null };
+          fake.holdings.push(h);
+          made++;
+        }
+        h.lots.push({ id: `l${++seq}`, shares: p.shares, cost_total: Number(p.cost_total).toFixed(2), bought_on: null, account_label: p.account_label, source: "fidelity" });
+        if (c && p.last_price && body.price_on) h.price = { value: p.last_price, on: body.price_on, source: "fidelity" };
+      }
+      return json({ holdings_added: made, lots_added: body.positions.length, prices_saved: 0 });
+    }
+    if (path === "/v1/portfolio/journal" && method === "GET") {
+      const company = u.searchParams.get("company_id");
+      const symbol = u.searchParams.get("symbol");
+      const entries = fake.journal.filter((e) => (company ? e.company_id === company : symbol ? e.symbol === symbol : true));
+      return json({ entries: [...entries].reverse(), has_more: false, edit_hours: 24, kinds: ["bought", "added", "trimmed", "sold", "review", "note"] });
+    }
+    if (path === "/v1/portfolio/journal" && method === "POST") {
+      const at = now();
+      const e = { id: `e${++seq}`, company_id: body.company_id ?? null, symbol: body.symbol ?? null, kind: body.kind, decided_on: body.decided_on ?? "2026-10-21",
+        why: body.why, sell_rules: body.sell_rules ?? null, red_lines: [], confidence: body.confidence ?? null, corrects: body.corrects ?? null,
+        created_at: at, edited_at: null, editable_until: "2026-10-22T12:00:00Z", kept: false };
+      fake.journal.push(e);
+      return json({ entry: e });
+    }
     if (path === "/v1/status") return json({ last_accepted_at: now(), last_ingested_at: now() });
     // the public status page's data: Data status, the front door's figures, and Home's "checks
     // last ran" (#24: the run's time, from the same source as Data status)

@@ -14,6 +14,8 @@ interface Known {
   chart?: string;
   /** a workspace's, project's or saved item's name, by id */
   saved?: (id: string) => string | null;
+  /** a holding's name, by id (portfolio) */
+  holding?: (id: string) => string | null;
 }
 
 function what(route: Route, k: Known): string {
@@ -41,6 +43,8 @@ function what(route: Route, k: Known): string {
       return "Settings";
     case "alerts":
       return "Alerts";
+    case "portfolio":
+      return route.import ? "Import from Fidelity" : route.holdingId ? `${k.holding?.(route.holdingId) ?? "Holding"} · Portfolio` : "Portfolio";
     case "workspace":
       return k.saved?.(route.workspaceId) ?? "Workspace";
     case "report":

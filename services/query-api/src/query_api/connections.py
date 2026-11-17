@@ -98,6 +98,8 @@ class Connections(Protocol):
     def prices(self, user_id: str, provider: str, company_id: str, since: date | None,
                until: date | None) -> list[dict]: ...
     def latest_day(self, user_id: str, provider: str, company_id: str) -> date | None: ...
+    def latest_closes(self, user_id: str, provider: str,
+                      company_ids: list[str]) -> dict[str, dict]: ...
 
 
 class Pool(Protocol):
@@ -209,6 +211,16 @@ class AppConnections:
                         (user_id, provider, company_id))
             r = cur.fetchone()
             return r["day"] if r else None
+
+    def latest_closes(self, user_id: str, provider: str,
+                      company_ids: list[str]) -> dict[str, dict]:
+        """company_id → {close, day}: the newest stored close of each (the portfolio's)."""
+        with self._tx(user_id) as cur:
+            cur.execute("SELECT DISTINCT ON (company_id) company_id, close, day"
+                        " FROM market_prices"
+                        " WHERE user_id = %s AND provider = %s AND company_id = ANY(%s)"
+                        " ORDER BY company_id, day DESC", (user_id, provider, company_ids))
+            return {r.pop("company_id"): r for r in cur.fetchall()}
 
 
 # --- rate limits ----------------------------------------------------------------------------

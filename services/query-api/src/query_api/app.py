@@ -39,11 +39,13 @@ from query_api.formula import (
 )
 from query_api.github import Accounts, GitHub, GitHubConfig, add_github_routes, is_github_user
 from query_api.insiders import add_insider_routes
+from query_api.journal import add_journal_routes
 from query_api.model_api import add_model_routes
 from query_api.notes import add_notes_routes
 from query_api.notes import callouts as statement_callouts
 from query_api.password_accounts import PasswordAccounts, add_password_routes
 from query_api.passwords import is_password_user
+from query_api.portfolio import AppPortfolio, add_portfolio_routes, own_prices_from
 from query_api.research import add_research_routes
 from query_api.sandbox import (
     DEMO_PLAN,
@@ -128,7 +130,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                webhook_resolver: Callable[..., Any] | None = None,
                monotonic: Callable[[], float] = time.monotonic,
                api_keys: ApiKeys | None = None,
-               api_key_limits: Limits = KEY_LIMITS) -> FastAPI:
+               api_key_limits: Limits = KEY_LIMITS,
+               portfolio: AppPortfolio | None = None) -> FastAPI:
     """demo_users: accounts anyone may sign in as without a password (empty disables it).
     today: the current US Eastern date (EDGAR's), injectable for tests.
     watchlists: the app database's watchlists (None: watchlist routes answer 503).
@@ -148,7 +151,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     webhook_sender, webhook_resolver: how a webhook test send connects and resolves names
     (query_api.webhooks; injected in tests).
     api_keys, api_key_limits: personal API keys (query_api.api_keys; None: a "trb_" bearer is
-    refused like a bad token, and the key routes answer 503)."""
+    refused like a bad token, and the key routes answer 503).
+    portfolio: holdings and the decision journal (query_api.portfolio, query_api.journal; None:
+    those routes answer 503); values use market_data's prices only when it is on."""
     app = FastAPI(title="Tributary Query API", version="1")
     instrument(app)
 
@@ -266,9 +271,17 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     add_connection_routes(app, market=market_data, store=store, current_user=current_user,
                           require=require)
 
+    latest_closes, refresh_prices = own_prices_from(market_data) if market_data else (None, None)
+    reviews_due = add_portfolio_routes(
+        app, portfolio=portfolio, store=store, current_user=current_user, readable=readable,
+        today=today or today_eastern, own_prices=latest_closes, refresh_prices=refresh_prices,
+        clock=now)
+    add_journal_routes(app, portfolio=portfolio, current_user=current_user,
+                       today=today or today_eastern, clock=now)
     add_alert_routes(app, alerts=alerts, store=store, current_user=current_user, require=require,
                      readable=readable, jwt_secret=jwt_secret, sender=webhook_sender,
-                     resolver=webhook_resolver, clock=now)
+                     resolver=webhook_resolver, clock=now,
+                     reviews_due=reviews_due if portfolio is not None else None)
     add_status_routes(app, store=store, clock=now)
     add_api_key_routes(app, keys=api_keys, current_user=current_user, limits=api_key_limits,
                        clock=now)

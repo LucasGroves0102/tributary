@@ -27,6 +27,7 @@ the `authz` tables row-level security reads (`user_access`, `user_tiers`, `publi
 | `demo_sandboxes` (sandbox user → expiry), `demo_creations` (creation rate limit, HMAC of the client address), `demo_agent_usage` / `demo_agent_daily` (assistant question caps) | no: they grant nothing |
 | `github_accounts` (migration 007: GitHub id → `gh-<id>` user, login, first/last sign-in) | no: identity, not access |
 | `password_accounts` (migration 013: owner-created username → `pw-<username>` user, scrypt hash, own daily assistant cap, disabled, lockout, `sessions_valid_after`, first/last sign-in) | no: identity, not access |
+| `portfolio_holdings`, `portfolio_lots`, `portfolio_sells`, `journal_entries` (migration 021: a user's holdings by company, or by symbol for a fund Tributary doesn't cover; each buy and sale; their own last typed or imported price; an optional link to their Analysis project or thesis (ON DELETE SET NULL of that column); the decision journal by company, kept as written after 24 hours by a trigger (`restrict_violation`; cascades from a deleted user pass); an account label never holds five digits in a row or six in all); owner-only, forced RLS on `app.user_id`; 021 also lets `notifications.sources` say `portfolio` | no: they grant nothing |
 
 Watchlists are preferences only and never grant access.
 

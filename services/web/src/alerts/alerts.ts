@@ -23,7 +23,7 @@ export const FORM_WORDS: Record<AlertForm, string> = {
   "10-Q": "quarterly report",
   "8-K": "material event",
 };
-export const SOURCE_WORDS: Record<AlertSource, string> = { watchlist: "on your watchlist", analysis: "you're analysing it" };
+export const SOURCE_WORDS: Record<AlertSource, string> = { watchlist: "on your watchlist", analysis: "you're analysing it", portfolio: "you hold it" };
 export const OP_WORDS: Record<RedLineOp, string> = { "<": "below", "<=": "at or below", ">": "above", ">=": "at or above" };
 
 /** A figure's value as the statements show it. */
@@ -169,7 +169,12 @@ export function stallNote(w: Pick<Webhook, "stalls" | "stalled_until">, now: Dat
   return `Not reachable on its last ${w.stalls} tries: alerts wait until ${when}, then it's tried again`;
 }
 
-/** The bell's words for screen readers and its hover. */
-export function bellLabel(unread: number): string {
-  return unread ? `Alerts: ${unread} new filing${unread === 1 ? "" : "s"}` : "Alerts: nothing new";
+/** The bell's words for screen readers and its hover: new filings, then holdings whose review fell
+ * due (a new 10-K/10-Q since the last review, app 021). */
+export function bellLabel(unread: number, reviews = 0): string {
+  const parts = [
+    ...(unread ? [`${unread} new filing${unread === 1 ? "" : "s"}`] : []),
+    ...(reviews ? [`${reviews} review${reviews === 1 ? "" : "s"} due`] : []),
+  ];
+  return parts.length ? `Alerts: ${parts.join(", ")}` : "Alerts: nothing new";
 }

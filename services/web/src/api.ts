@@ -66,6 +66,13 @@ import type {
   RedLine,
   RedLineOp,
   RedLines,
+  HeldPosition,
+  ImportPreview,
+  ImportResult,
+  Journal,
+  JournalEntry,
+  JournalEntryBody,
+  Portfolio,
   Webhook,
   WebhookCreated,
   WebhookDelivery,
@@ -932,3 +939,82 @@ export const testWebhook = (token: string, id: string) =>
 
 export const webhookDeliveries = (token: string, webhookId?: string) =>
   get<{ deliveries: WebhookDelivery[]; retries: number[] }>(token, "/v1/alerts/deliveries", webhookId ? { webhook_id: webhookId } : {});
+
+// --- portfolio and decision journal (query_api/portfolio.py, journal.py) ----------------------
+// Account routes: the user's own holdings, never readable with an API key. An older Query API has
+// none (404, the deploy window): the page and the company line read that as "not here yet".
+
+export const portfolio = (token: string) => orNullOn404(get<Portfolio>(token, "/v1/portfolio"));
+
+/** Whether the user holds the company (the company page's line); null without the route. */
+export const heldPosition = (token: string, companyId: string) =>
+  orNullOn404(get<{ position: HeldPosition | null }>(token, `/v1/portfolio/position/${companyId}`))
+    .then((r) => r?.position ?? null);
+
+export interface LotBody {
+  shares: string;
+  cost_total?: string;
+  cost_per_share?: string;
+  bought_on?: string;
+  account_label?: string;
+}
+
+/** A buy: a company (id, or a ticker the API resolves) or a fund's symbol (not covered). */
+export const addHolding = (token: string, body: { company_id?: string; symbol?: string; name?: string; lot: LotBody }) =>
+  sendJson<{ holding_id: string; created: boolean; covered: boolean; company_id: string | null }>(token, "POST", "/v1/portfolio/holdings", body);
+
+export const deleteHolding = (token: string, id: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/holdings/${enc(id)}`);
+
+export const addLot = (token: string, holdingId: string, body: LotBody) =>
+  sendJson<{ lot: unknown }>(token, "POST", `/v1/portfolio/holdings/${enc(holdingId)}/lots`, body);
+
+export const deleteLot = (token: string, lotId: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/lots/${enc(lotId)}`);
+
+export const addSell = (token: string, holdingId: string, body: { shares: string; price: string; sold_on: string }) =>
+  sendJson<{ sell: unknown }>(token, "POST", `/v1/portfolio/holdings/${enc(holdingId)}/sells`, body);
+
+export const deleteSell = (token: string, sellId: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/sells/${enc(sellId)}`);
+
+export const putHoldingPrice = (token: string, holdingId: string, price: string, on: string) =>
+  sendJson<unknown>(token, "PUT", `/v1/portfolio/holdings/${enc(holdingId)}/price`, { price, on });
+
+export const deleteHoldingPrice = (token: string, holdingId: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/holdings/${enc(holdingId)}/price`);
+
+export const putHoldingLink = (token: string, holdingId: string, link: { project_id?: string; thesis_item_id?: string }) =>
+  sendJson<unknown>(token, "PUT", `/v1/portfolio/holdings/${enc(holdingId)}/link`, link);
+
+/** A Fidelity positions CSV, as its text: matched rows to choose from; nothing is saved. */
+export async function importPreview(token: string, csv: string): Promise<ImportPreview> {
+  const r = await fetch(url("/v1/portfolio/import/preview", {}), {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "text/csv" }, body: csv,
+  });
+  return json<ImportPreview>(r);
+}
+
+export const importPositions = (token: string, body: {
+  positions: { symbol: string; description: string | null; shares: string; cost_total: string; last_price: string | null; account_label: string | null }[];
+  price_on?: string;
+}) => sendJson<ImportResult>(token, "POST", "/v1/portfolio/import", body);
+
+export const refreshPortfolioPrices = (token: string) =>
+  sendJson<{ asked: number; warnings: number; provider: string }>(token, "POST", "/v1/portfolio/prices/refresh");
+
+export const journal = (token: string, q: { companyId?: string; symbol?: string; limit?: number } = {}) =>
+  orNullOn404(get<Journal>(token, "/v1/portfolio/journal", {
+    ...(q.companyId ? { company_id: q.companyId } : {}),
+    ...(q.symbol ? { symbol: q.symbol } : {}),
+    ...(q.limit ? { limit: q.limit } : {}),
+  }));
+
+export const addJournalEntry = (token: string, body: JournalEntryBody) =>
+  sendJson<{ entry: JournalEntry }>(token, "POST", "/v1/portfolio/journal", body);
+
+export const editJournalEntry = (token: string, id: string, body: Partial<Omit<JournalEntryBody, "company_id" | "symbol" | "corrects">>) =>
+  sendJson<{ entry: JournalEntry }>(token, "PATCH", `/v1/portfolio/journal/${enc(id)}`, body);
+
+export const deleteJournalEntry = (token: string, id: string) =>
+  sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/journal/${enc(id)}`);

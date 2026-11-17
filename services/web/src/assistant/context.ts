@@ -222,6 +222,9 @@ export function pageContext(
       return { label: "Settings", suggestions: [] };
     case "alerts":
       return { label: "Alerts", suggestions: general(watched).slice(0, 2) };
+    case "portfolio":
+      // the assistant can't read holdings (no tool, by design): nothing to suggest about them
+      return { label: "Portfolio", suggestions: [] };
     case "workspace":
       return { label: "Workspace", suggestions: general(watched).slice(0, 2) };
     case "report":

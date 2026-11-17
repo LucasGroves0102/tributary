@@ -40,6 +40,7 @@ import {
   ReportView,
   Search,
   ModelPage,
+  PortfolioPage,
   Settings,
   Status,
   ThesisPage,
@@ -843,6 +844,8 @@ export function App(props: Props = {}) {
               <Settings key={user} token={token} />
             ) : route.view === "alerts" ? (
               <AlertsPage key={user} token={token} />
+            ) : route.view === "portfolio" ? (
+              <PortfolioPage key={`${user}:${route.import ? "import" : "holdings"}`} token={token} holdingId={route.holdingId} importing={!!route.import} />
             ) : route.view === "workspace" ? (
               <WorkspacePage
                 key={`${user}-${route.workspaceId}`}
