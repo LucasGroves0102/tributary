@@ -21,7 +21,8 @@ Sources:
     equal the predecessor's, or (before XBRL) the same name plus address or phone, and the
     predecessor's 10-K/10-Q/20-F/40-F stop at the move. Candidates the rules refused (mergers,
     predecessors still reporting, two candidates, figures that disagree) are in
-    `re_registrations_uncertain.csv` beside this README, for the owner
+    `re_registrations_uncertain.csv` beside this README, for the owner;
+    `re_registrations_review.md` is the 2026-11-17 review of its 25 worth a look (9 linked)
   - `ticker_history.csv`: retired tickers (e.g. FB)
 
 `company_id` is the first CIK in a company's lineage, so it never changes when a successor

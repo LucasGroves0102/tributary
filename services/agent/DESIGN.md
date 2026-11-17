@@ -129,13 +129,17 @@ can't overspend). Every model call that returns is added to the day's model budg
 client that goes away, still counts what it cost. Questions are given back only for a failure that
 is ours and can't be caused on purpose, and at most twice per user per UTC day (`REFUNDS_PER_DAY`,
 in-process like the hour's limits): a model API error (outage, overload) before any model call
-returned and before any text streamed, or a thesis check that saved nothing because its replies
-were cut off at max_tokens (`server.Charge`; the Query API's `POST /v1/demo/agent-quota/refund`
-for the daily caps). The stream then carries `{"type": "refunded", "questions": n}`, and the web
-app says the run didn't count only then. Nothing else is given back: an error after a paid round
-(a long enough tool result can push the next call past the model's context), a model that chose
-not to submit, a save refused because the thesis or workspace was deleted mid-run, a client that
-disconnects. A result counts, partial ones included. A refused daily quota gives the hour's
+returned and before any text streamed, a thesis check that saved nothing because its replies
+were cut off at max_tokens, or a report the user stopped (the stream closed: its generator's
+GeneratorExit) before it saved anything (Riley #18; the refund runs on its own thread, since the
+close can happen on the event loop) (`server.Charge`; the Query API's `POST
+/v1/demo/agent-quota/refund` for the daily caps). The stream then carries `{"type": "refunded",
+"questions": n}` (a stopped report gets none: nobody is listening), and the web app says the run
+didn't count only then. Nothing else is given back: an error after a paid round (a long enough tool
+result can push the next call past the model's context), a model that chose not to submit, a save
+refused because the thesis or workspace was deleted mid-run, an answer or a check whose client
+disconnects (it may have read the answer). A result counts, partial ones included. Stopping reports
+on purpose gets at most two reports' model calls a day, inside the day's budget. A refused daily quota gives the hour's
 allowance back. `get_financials` asks for at most 40 quarters whatever the model passes (the
 schema's limit; the Query API itself takes 120 for the web app).
 

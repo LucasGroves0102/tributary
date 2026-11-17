@@ -206,7 +206,7 @@ route passes a catalog-sized list. What changes per route when public:
 
 | Route | With the catalog public | Why it has to differ |
 |---|---|---|
-| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: `gold.latest_reading` per company for the sort and value filters, the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
+| `/v1/screener`, `/v1/watchlist`, `/peers` | two stages: each company's reading per column for the sort and value filters (the screener's stored figures, 078: `gold.screen_company` and `gold.screen_reading`; `/peers` `gold.latest_reading`), the other columns only for the page | pivoting `gold.latest_financials` read and sorted 1.6M rows for a page of 50 |
 | `/v1/filings/latest` | documents newest first, stop at `limit` with sections, then the same grouping | grouped every section under RLS, then `LIMIT` |
 | `/v1/filing-index` (no `company_id`) | filing-date windows (3, 14, 90, 365 days, all time) on CIKs and `filed_on`, stopping at the first that fills the page: the same rows, because the query sorts newest first | `silver.filings` joined and de-duplicated 5M rows, then `LIMIT` |
 | `/v1/search` (no `company`) | ranks the newest window that fills the page (30, 180, 730 days, all time): **`searched_from` in the response says how far back** | can't rank 276,000 passages ("supply chain") in 8 s; see Search |

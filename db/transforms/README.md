@@ -24,7 +24,7 @@ starting from the latest definition listed here (and regenerate the backout guar
 
 | Function | Latest definition |
 |---|---|
-| `gold.refresh_financials(text[])` (quarters, then derived metrics, then the checks, for a batch of companies; takes the companies' locks and stamps `ops.company_builds`) | `071_auto_catchup.sql` (before: `014_gold_calendar.sql`) |
+| `gold.refresh_financials(text[])` (quarters, then derived metrics, the screener's stored figures, then the checks, for a batch of companies; takes the companies' locks and stamps `ops.company_builds`) | `078_screener_figures.sql` (before: `071_auto_catchup.sql`, `014_gold_calendar.sql`) |
 | `gold.rules_version()` (the gold rules' version: replace it with the number of a migration that changes them), `gold.lock_companies(text[])` | `077_net_income_one_line.sql` (77; first: `071_auto_catchup.sql`) |
 | `gold.usable_facts(text[])` (which facts gold may read: tags by taxonomy and company, each company in its reporting currency, sums, dropped facts; interest expense and debt without their sign; a filing's facts to the filer its XBRL names) | `056_ifrs_currencies.sql` (before: `055_filing_xbrl_facts.sql`, `050_filers_debt_signs.sql`, `043_interest_expense_sign.sql`, `039_gold_fact_selection.sql`) |
 | `gold.best_facts(text[])` (which fact gold believes: revenue's zero and part rules, then tag priority; a year tagged ProfitLoss reads it first for net income) | `077_net_income_one_line.sql` (one net income line per year; before: `064_revenue_net_of_interest_part.sql`, net revenue under 20% of the gross line is a part; a revenue tag 1,000x another of its period is a scale slip, which one by the period's other figures; before: `039_gold_fact_selection.sql`) |
@@ -59,7 +59,10 @@ the parser image's `parser-peers` job, not in SQL.
 | Function | Latest definition |
 |---|---|
 | `ops.company_backlog(kind)` (a statement read after a company's check makes the check due) | `074_statement_reconciliation_confidence.sql` (before: `071_auto_catchup.sql`) |
-| `ops.statement_backlog(reader)` (10-K/10-Qs with tables this statements.READER hasn't read) | `074_statement_reconciliation_confidence.sql` |
+| `ops.statement_backlog(reader)` (10-K/10-Qs with tables this statements.READER hasn't read) | `079_catchup_status_cleanups.sql` (before: `074_statement_reconciliation_confidence.sql`) |
+| `ops.section_check_backlog(int)` (documents no check of this version has seen; an anti-join) | `079_catchup_status_cleanups.sql` (before: `072_data_trust_checks.sql`) |
+| `ops.catchup_record` (nine arguments, with a note), `ops.catchup_skipped`, view `ops.catchup_status` (`note`; a skip counts as progress) | `079_catchup_status_cleanups.sql` (before: `071_auto_catchup.sql`) |
+| `gold.latest_row`, `gold.latest_equity`, `gold.quarterly_recent`, `gold.is_stale`, `gold.reading` (the readings' parts and rules), `gold.refresh_screen`, `gold.screen_backlog`, `gold.refresh_screen_backlog`, `gold.screen_company`, `gold.screen_reading`, view `gold.financials_coverage` | `078_screener_figures.sql` |
 | `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
 
 ## Readings (read, not refreshed)
@@ -72,7 +75,7 @@ How a stored figure may be read, called by the Query API under RLS or with
 | `gold.not_meaningful` (five arguments: the dollar bases only for dollar amounts; the four-argument form reads as dollars) | `057_currency_readings.sql` (before: `035_value_readings.sql`) |
 | `gold.not_applicable_metrics` (the one list of banks: depository SICs, Goldman Sachs, Morgan Stanley, Schwab, American Express, Synchrony, Ally) | `058_bank_holding_companies.sql` (before: `049_kpis_cash_flow.sql` adds `cash_and_investments`; `035_value_readings.sql`) |
 | `gold.period_status`, `gold.latest_period` | `035_value_readings.sql` |
-| `gold.latest_reading` (`other_currency` and the unit; the base's currency from `gold.amount_currency_of`, inlined; `not_computed` and `stale`) | `069_readings_not_computed_stale.sql` (before: `061_screener_currency_inline.sql`, `060_annual_filer_currency.sql`, `057_currency_readings.sql`, `056_ifrs_currencies.sql`, `035_value_readings.sql`) |
+| `gold.latest_reading` (`other_currency` and the unit; the base's currency from `gold.amount_currency_of`, inlined; `not_computed` and `stale`; the rules through `gold.reading`) | `078_screener_figures.sql` (before: `069_readings_not_computed_stale.sql` (before: `061_screener_currency_inline.sql`, `060_annual_filer_currency.sql`, `057_currency_readings.sql`, `056_ifrs_currencies.sql`, `035_value_readings.sql`) |
 | `gold.not_computed(metric, sic)` (why Tributary computes no gross profit for this kind of company: 039's industries, worded) | `069_readings_not_computed_stale.sql` |
 | `gold.amount_currency_of(company)` (the rule: latest quarterly revenue's unit, else net income's, else the TTM rows', else USD; one row, set-returning so a caller's plan inlines it) and `gold.amount_currency(company)` (that row's unit, for scalar callers) | `061_screener_currency_inline.sql` (before: `060_annual_filer_currency.sql`, `057_currency_readings.sql`) |
 | `gold.latest_value(company, span, metric)` | `032_open_access_speed.sql` |

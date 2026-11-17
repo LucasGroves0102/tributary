@@ -86,9 +86,11 @@ persistent daily allowance from the Query API (`/v1/demo/agent-quota`: a sandbox
 account's caps, a password account's own `questions_per_day`). Over a limit → 429. A report
 counts as 3 questions ([Reports](#reports)), a thesis check 4 ([Thesis checks](#thesis-checks)),
 taken before the model runs. Every model call that returns is added to the day's budget at once.
-Questions are given back only for a model API error before any output, or a thesis check cut off
-at max_tokens that saved nothing, at most twice per user per UTC day (`REFUNDS_PER_DAY`); the
-stream then carries `{"type": "refunded", "questions": n}`. Nothing else is given back. The hour's
+Questions are given back only for a model API error before any output, a thesis check cut off
+at max_tokens that saved nothing, or a report stopped (the stream closed) before it saved anything,
+at most twice per user per UTC day (`REFUNDS_PER_DAY`); the stream then carries `{"type":
+"refunded", "questions": n}` (not for a stopped report: nobody is listening). Nothing else is given
+back. The hour's
 limits and refunds are in-process (they reset on restart). Details:
 [DESIGN.md](DESIGN.md#allowance-limits-and-refunds).
 
