@@ -65,6 +65,8 @@ export type Route =
   | { view: "settings" }
   /** filing alerts: new 10-K/10-Q/8-K of watched and analysed companies, newest first */
   | { view: "alerts" }
+  /** the user's holdings (no holdingId), one holding with its journal, or the Fidelity import */
+  | { view: "portfolio"; holdingId?: string; import?: boolean }
   /** one saved workspace: its items and reports, "Write a report" */
   | { view: "workspace"; workspaceId: string }
   /** a report the assistant wrote (a workspace item of kind report) */
@@ -78,12 +80,13 @@ export type Route =
   | { view: "analysis"; projectId?: string; step?: ProjectStep; itemId?: string; start?: string };
 
 /** Screens in the left nav: routes without parameters. */
-export type NavView = "home" | "analysis" | "companies" | "chart" | "compare" | "ask";
+export type NavView = "home" | "analysis" | "portfolio" | "companies" | "chart" | "compare" | "ask";
 
 /** The left nav: label and the key after "g" that opens it. */
 export const NAV: { view: NavView; label: string; key: string }[] = [
   { view: "home", label: "Home", key: "h" },
   { view: "analysis", label: "Analysis", key: "p" },
+  { view: "portfolio", label: "Portfolio", key: "o" },
   { view: "companies", label: "Companies", key: "c" },
   { view: "chart", label: "Chart builder", key: "b" },
   { view: "compare", label: "Compare", key: "x" },
@@ -119,6 +122,10 @@ export function parse(hash: string): Route {
   }
   if (view && SIMPLE.has(view)) return { view: view as "chart" | "ask" | "about" | "status" | "api" | "settings" | "alerts" };
   if (view === "explore") return { view: "companies" }; // links from before the v3 shell
+  if (view === "portfolio") {
+    if (a === "import") return { view: "portfolio", import: true };
+    return a && ID.test(a) ? { view: "portfolio", holdingId: a } : { view: "portfolio" };
+  }
   if (view === "analysis") {
     if (!a || !ID.test(a)) {
       // "#/analysis?start=<company>": the projects list with New analysis open on that company (L5)
@@ -176,6 +183,8 @@ export function href(route: Route): string {
       return route.search ? `#/search?${searchQuery(route.search)}` : "#/search";
     case "workspace":
       return `#/workspace/${encodeURIComponent(route.workspaceId)}`;
+    case "portfolio":
+      return route.import ? "#/portfolio/import" : route.holdingId ? `#/portfolio/${encodeURIComponent(route.holdingId)}` : "#/portfolio";
     case "analysis":
       if (!route.projectId) return route.start ? `#/analysis?start=${route.start}` : "#/analysis";
       return `#/analysis/${encodeURIComponent(route.projectId)}` +
@@ -214,6 +223,8 @@ export function pageOf(route: Route): string {
       return `filing/${route.companyId}/${route.accessionNo}/${route.section ?? ""}`;
     case "workspace":
       return `workspace/${route.workspaceId}`;
+    case "portfolio":
+      return `portfolio/${route.import ? "import" : (route.holdingId ?? "")}`;
     case "report":
     case "thesis":
     case "model":

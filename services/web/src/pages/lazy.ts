@@ -23,6 +23,7 @@ const screens = {
   model: () => import("../models/ModelPage"),
   analysis: () => import("../analysis/AnalysisPage"),
   alerts: () => import("../alerts/AlertsPage"),
+  portfolio: () => import("../portfolio/PortfolioPage"),
 };
 
 export const ChartBuilder = lazy(() => screens.chart().then((m) => ({ default: m.ChartBuilder })));
@@ -41,6 +42,7 @@ export const ModelPage = lazy(() => screens.model().then((m) => ({ default: m.Mo
 export const AnalysisPage = lazy(() => screens.analysis().then((m) => ({ default: m.AnalysisPage })));
 export const FilingReader = lazy(() => screens.reader().then((m) => ({ default: m.FilingReader })));
 export const AlertsPage = lazy(() => screens.alerts().then((m) => ({ default: m.AlertsPage })));
+export const PortfolioPage = lazy(() => screens.portfolio().then((m) => ({ default: m.PortfolioPage })));
 
 /** Every screen's module, loaded (tests render lazy screens without waiting on imports). */
 export const loadScreens = () => Promise.all(Object.values(screens).map((load) => load()));

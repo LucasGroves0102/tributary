@@ -95,9 +95,10 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   // (and Settings: agent-api's pages have no "settings"; the assistant has no price tool; and
   // "Using the API": agent-api's pages have no "api")
   // an analysis project is a workspace to agent-api (its pages have no "analysis"): its thesis
-  // and model steps are those pages; the alerts list is about the user's companies, like Home
+  // and model steps are those pages; the alerts list is about the user's companies, like Home;
+  // the portfolio is the user's own and the agent has no part of it: an information page too
   const ctx: UiContext = {
-    page: route.view === "status" || route.view === "settings" || route.view === "api" ? "about"
+    page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio" ? "about"
       : route.view === "alerts" ? "home"
       : route.view === "analysis" ? (route.step === "thesis" || route.step === "model" ? route.step : "workspace")
       : route.view,

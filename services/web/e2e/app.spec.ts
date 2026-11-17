@@ -387,7 +387,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
   errors.length = 0; // signed in from here
-  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/settings", "#/status", "#/api"]) {
+  for (const hash of ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/analysis", "#/alerts", "#/portfolio", "#/portfolio/import", "#/settings", "#/status", "#/api"]) {
     await page.goto(`/${hash}`);
     await page.waitForLoadState("networkidle");
   }
@@ -397,7 +397,7 @@ test("#68: the main screens load with a clean console", async ({ page }) => {
 test("no screen scrolls sideways, on a phone, at 1024 or at 1440 with the panel open", async ({ page }) => {
   await mockApi(page);
   await startDemo(page);
-  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart"];
+  const screens = ["#/", "#/companies", `#/company/${NVDA}`, `#/company/${NVDA}/statements`, `#/company/${NVDA}/peers`, `#/compare?target=${PEP}&peers=${KO}`, "#/chart", "#/portfolio"];
   for (const [width, height, panel] of [[390, 844, false], [1024, 768, false], [1440, 900, true]] as const) {
     await page.setViewportSize({ width, height });
     await page.evaluate((open) => localStorage.setItem("tributary.assistant", open ? "open" : "closed"), panel);
@@ -589,4 +589,57 @@ test("Using the API is public: the front door links it, and its routes come from
   await expect(page.getByText("60 requests a minute and 10,000 a day")).toBeVisible();
   await page.locator(".status-home").click();
   await expect(page.getByRole("button", { name: "Try the demo" })).toBeVisible();
+});
+
+test("portfolio: a Fidelity export previewed then added, a holding by hand, and the journal's first entries", async ({ page }) => {
+  const fake = await mockApi(page);
+  await startDemo(page);
+  await page.goto("/#/portfolio");
+  await expect(page.locator(".portfolio-empty")).toContainText("Track what you own against the research behind it");
+
+  // the import: a preview first, nothing saved until Add; a missing cost is typed
+  await page.getByRole("link", { name: "Import from Fidelity" }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "Portfolio_Positions_Oct-21-2026.csv", mimeType: "text/csv",
+    buffer: Buffer.from("Account Number,Account Name,Symbol,Quantity,Cost Basis Total\nZ09876543,Individual,NVDA,1.25,$200.00\n"),
+  });
+  const rows = page.locator(".import-table tbody tr");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(2)).toContainText("Not covered: VANGUARD S&P 500 ETF");
+  expect(fake.calls.filter((c) => c === "POST /api/query/v1/portfolio/import")).toEqual([]);
+  const add = page.locator(".import-actions .btn.primary");
+  await expect(add).toBeDisabled();
+  await page.getByLabel("Cost of MSFT").fill("98.40");
+  await expect(add).toHaveText("Add 3 positions");
+  await add.click();
+  await expect(page).toHaveURL(/#\/portfolio$/);
+  const table = page.locator(".portfolio-table tbody tr");
+  await expect(table).toHaveCount(3);
+  await expect(table.first().locator("td").nth(3)).toHaveAttribute("title", "Your Fidelity export of Oct 21, 2026");
+  await expect(page.locator(".not-advice")).toContainText("Not investment advice");
+
+  // a holding by hand, with why it was bought: the journal's first entry
+  await page.getByRole("button", { name: "Add a holding" }).click();
+  await page.getByRole("radio", { name: "A fund or ETF" }).click();
+  await page.getByPlaceholder("VOO").fill("SCHD");
+  await page.getByPlaceholder("2.5").fill("3");
+  await page.getByPlaceholder("250.00").fill("81.00");
+  await page.getByPlaceholder("What you expect, and why now").fill("Dividend income while I learn.");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(table).toHaveCount(4);
+  expect(fake.journal.map((e) => [e.symbol, e.kind])).toEqual([["SCHD", "bought"]]);
+
+  // a holding's page: write a journal entry about the company
+  await table.first().locator("td.first a").click();
+  await page.getByRole("button", { name: "Write an entry" }).click();
+  await page.getByPlaceholder("Your reasons, in your words").fill("Data-centre demand outruns supply.");
+  await page.getByPlaceholder(/Margins below 50%/).fill("Gross margin under 60% two quarters running");
+  await page.getByRole("button", { name: "Add to the journal" }).click();
+  await expect(page.locator(".journal-item")).toHaveCount(1);
+  await expect(page.locator(".journal-item .entry-why")).toHaveText("Data-centre demand outruns supply.");
+  await expect(page.locator(".journal-item")).toContainText("Gross margin under 60% two quarters running");
+
+  // the company page says it quietly
+  await page.goto(`/#/company/${NVDA}`);
+  await expect(page.locator(".co-held")).toContainText("You hold 1.25 shares");
 });

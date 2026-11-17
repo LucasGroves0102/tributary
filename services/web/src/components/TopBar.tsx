@@ -92,18 +92,22 @@ export function TopBar(props: Props) {
           </span>
         )
       )}
-      {props.alerts && (
-        <a className={props.alerts.unread ? "btn ghost sm bell on" : "btn ghost sm bell"} href={href({ view: "alerts" })}
-          aria-label={bellLabel(props.alerts.unread)} title={bellLabel(props.alerts.unread)}
+      {props.alerts && (() => {
+        const reviews = props.alerts.reviews_due ?? 0;
+        const count = props.alerts.unread + reviews;
+        return (
+        <a className={count ? "btn ghost sm bell on" : "btn ghost sm bell"} href={href({ view: "alerts" })}
+          aria-label={bellLabel(props.alerts.unread, reviews)} title={bellLabel(props.alerts.unread, reviews)}
           aria-current={route.view === "alerts" ? "page" : undefined}>
           <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M8 1.5a4 4 0 0 0-4 4v2.6L2.6 11h10.8L12 8.1V5.5a4 4 0 0 0-4-4zM6.3 12.5a1.8 1.8 0 0 0 3.4 0"
               fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
           </svg>
           <span className="bell-word">Alerts</span>
-          {props.alerts.unread > 0 && <span className="count" aria-hidden="true">{props.alerts.unread > 99 ? "99+" : props.alerts.unread}</span>}
+          {count > 0 && <span className="count" aria-hidden="true">{count > 99 ? "99+" : count}</span>}
         </a>
-      )}
+        );
+      })()}
       <MenuButton className="btn ghost sm theme-btn more-btn" count={false}
         title={`Theme: ${THEME_WORD[theme].toLowerCase()}${theme === "system" ? " (your device's setting)" : ""}`}
         label={<><span className="theme-k">Theme</span> {THEME_WORD[theme]}</>}
@@ -164,6 +168,7 @@ function Breadcrumb({
     : route.view === "api" ? "Using the API"
     : route.view === "settings" ? "Settings"
     : route.view === "alerts" ? "Alerts"
+    : route.view === "portfolio" ? "Portfolio"
     : route.view === "workspace" ? "Workspace"
     : route.view === "report" ? "Report"
     : route.view === "thesis" ? "Thesis"

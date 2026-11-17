@@ -1802,7 +1802,7 @@ export interface TextKpiLatest {
 // --- filing alerts (F6; Query API /v1/alerts, query_api/alerts.py) ---------------------------
 
 export type AlertForm = "10-K" | "10-Q" | "8-K";
-export type AlertSource = "watchlist" | "analysis";
+export type AlertSource = "watchlist" | "analysis" | "portfolio";
 
 /** A key figure of a 10-K/10-Q alert, as read for this user when it became ready. Decimal
  * strings, exact; `pct_change` is null for ratios (their `change` is in ratio points). */
@@ -1881,6 +1881,8 @@ export interface AlertUnread {
   unread: number;
   latest: string | null;
   last_check: AlertCheck | null;
+  /** holdings with a new 10-K/10-Q since their last review (app 021; absent from an older API) */
+  reviews_due?: number;
 }
 
 export interface AlertCompany {
@@ -2017,4 +2019,202 @@ export interface RedLines {
   max_per_company: number;
   evaluation?: RedLineResult[];
   evaluated_at?: string;
+}
+
+// --- portfolio and decision journal (Query API query_api/portfolio.py, journal.py; app 021) ------
+// Amounts, shares and prices are exact decimal strings; money in `Portfolio.currency`.
+
+/** typed: the user typed it; fidelity: their Fidelity export's Last Price; provider: their own
+ * Connect-your-data close */
+export type PriceSource = "typed" | "fidelity" | "provider";
+
+export interface HoldingPrice {
+  value: string;
+  on: string;
+  source: PriceSource;
+  /** the market-data provider's id ("tiingo") when source is provider */
+  provider: string | null;
+  /** older than Portfolio.stale_after_days */
+  stale: boolean;
+}
+
+export interface HoldingLot {
+  id: string;
+  shares: string;
+  cost_total: string;
+  cost_per_share: string | null;
+  /** null: not known (a positions export has no buy dates) */
+  bought_on: string | null;
+  account_label: string | null;
+  source: "typed" | "fidelity";
+  created_at: string;
+}
+
+export interface HoldingSell {
+  id: string;
+  shares: string;
+  price: string;
+  proceeds: string;
+  sold_on: string;
+  created_at: string;
+}
+
+export interface HoldingLink {
+  kind: "project" | "thesis";
+  id: string;
+  name: string;
+}
+
+/** the 10-K or 10-Q a review is due for */
+export interface ReviewDue {
+  accession_no: string;
+  form: string;
+  filed: string;
+  period_end: string | null;
+  cik: string | null;
+}
+
+export interface Holding {
+  id: string;
+  /** null: a position Tributary doesn't cover (an ETF or a fund) */
+  company_id: string | null;
+  covered: boolean;
+  symbol: string | null;
+  /** a not-covered position's name from the broker (a company's comes from the directory) */
+  name: string | null;
+  added_at: string;
+  open: boolean;
+  shares: string;
+  cost_basis: string;
+  average_cost: string | null;
+  realised: string;
+  first_bought: string | null;
+  price: HoldingPrice | null;
+  value: string | null;
+  unrealised: string | null;
+  /** a fraction: 0.0667 is 6.67% */
+  unrealised_pct: string | null;
+  weight: string | null;
+  next_report: { form: string; period_end: string; expected_date: string | null } | null;
+  link: HoldingLink | null;
+  /** the user's Analysis projects and theses for the company, to link */
+  candidates: HoldingLink[];
+  review_due: ReviewDue | null;
+  lots: HoldingLot[];
+  sells: HoldingSell[];
+}
+
+export interface Portfolio {
+  holdings: Holding[];
+  currency: string;
+  /** how cost and realised gains are worked out */
+  method: "average_cost";
+  weight_basis: "value" | "cost";
+  stale_after_days: number;
+  today: string;
+  totals: {
+    open: number;
+    priced: number;
+    cost_basis: string;
+    value: string | null;
+    unrealised: string | null;
+    realised: string;
+  };
+  reviews_due: number;
+  /** the server has Connect your data on (prices from the user's own provider can count) */
+  prices_connected: boolean;
+  /** POST /v1/portfolio/prices/refresh exists */
+  refresh: boolean;
+}
+
+/** the company page's line: whether the user holds it */
+export interface HeldPosition {
+  holding_id: string;
+  shares: string;
+  open: boolean;
+  first_bought: string | null;
+  added_at: string;
+}
+
+export type JournalKind = "bought" | "added" | "trimmed" | "sold" | "review" | "note";
+
+/** a red line as the entry keeps it: what it said when the entry was written */
+export interface JournalRedLine {
+  rule_id: string;
+  label: string;
+  formula: string;
+  view: "quarter" | "ttm";
+  op: RedLineOp;
+  threshold: string;
+  display: string | null;
+}
+
+export interface JournalEntry {
+  id: string;
+  company_id: string | null;
+  symbol: string | null;
+  kind: JournalKind;
+  decided_on: string;
+  why: string;
+  sell_rules: string | null;
+  red_lines: JournalRedLine[];
+  /** 1 (low) to 5 (high) */
+  confidence: number | null;
+  /** the entry this one corrects */
+  corrects: string | null;
+  created_at: string;
+  edited_at: string | null;
+  editable_until: string;
+  /** past editable_until: kept as written, corrected only by a new entry */
+  kept: boolean;
+}
+
+export interface Journal {
+  entries: JournalEntry[];
+  has_more: boolean;
+  edit_hours: number;
+  kinds: JournalKind[];
+}
+
+export interface JournalEntryBody {
+  company_id?: string;
+  symbol?: string;
+  kind: JournalKind;
+  why: string;
+  sell_rules?: string | null;
+  red_line_ids?: string[];
+  confidence?: number | null;
+  decided_on?: string;
+  corrects?: string;
+}
+
+export interface ImportPosition {
+  row: number;
+  symbol: string;
+  description: string | null;
+  shares: string;
+  /** null: the export had none ("--"): typed in the preview */
+  cost_total: string | null;
+  last_price: string | null;
+  account_label: string | null;
+  company_id: string | null;
+  name: string | null;
+  covered: boolean;
+  /** what the user already holds of it */
+  held: { holding_id: string; shares: string } | null;
+}
+
+export type ImportSkip = "cash" | "pending" | "option" | "no_quantity" | "unreadable";
+
+export interface ImportPreview {
+  positions: ImportPosition[];
+  skipped: { symbol: string | null; description: string | null; reason: ImportSkip }[];
+  downloaded: string | null;
+  source: "fidelity";
+}
+
+export interface ImportResult {
+  holdings_added: number;
+  lots_added: number;
+  prices_saved: number;
 }

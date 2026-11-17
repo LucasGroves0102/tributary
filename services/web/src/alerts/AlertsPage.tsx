@@ -26,8 +26,14 @@ export function AlertsPage({ token }: { token: string }) {
           Mark all read
         </button>
       </div>
+      {(unread?.reviews_due ?? 0) > 0 && (
+        <p className="review-due-note" role="status">
+          {unread!.reviews_due === 1 ? "A holding has" : `${unread!.reviews_due} holdings have`} a review due: a new 10-K or 10-Q
+          landed since your last review. <a href={href({ view: "portfolio" })}>Review in your portfolio</a>
+        </p>
+      )}
       <p className="muted small">
-        New 10-K, 10-Q and material 8-K filings of the companies on your watchlist and in your analyses, checked every 10 minutes
+        New 10-K, 10-Q and material 8-K filings of the companies on your watchlist, in your analyses and in your portfolio, checked every 10 minutes
         {check ? `; last checked ${localTime(check.checked_at, true)}` : ""}. A 10-K or 10-Q shows its key figures and your red
         lines once the SEC's XBRL data has them.
       </p>
