@@ -83,6 +83,14 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: "Root filesystem is {{`{{ $value | humanizePercentage }}`}} full"
+        - alert: DiskSpaceUnder100GB
+          # Time to plan, before DiskSpaceLow: the foreign filers' documents (migration 095) and the
+          # parser catch-up grow the database; README "Disk space" says what to look at first.
+          expr: node_filesystem_avail_bytes{mountpoint="/"} < 100e9
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: "{{`{{ $value | humanize1024 }}`}}B free on the root filesystem (under 100 GB)"
         - alert: DiskSpaceLow
           # The document crawl pauses itself under 50 GB free (CRAWL_MIN_FREE_GB); this catches
           # everything else that fills the disk (WAL held by a slot, backups, the crawl's parser).

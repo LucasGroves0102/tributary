@@ -103,6 +103,15 @@ keeping `parsed_at` on an unchanged re-parse) and `scripts/fuzz.py` (3,000 docum
 tokens and 300 of up to 2,000, whose tokens now include table fragments, colspans and head rows;
 sections compared with their tables) against the debug `parser-rs` binary.
 
+Rules 12 and 13, foreign filers (2026-11-17, `rust-8` / `python-8`, migration 095): `HeadingMatch.sub`
+marks an item number followed by `.<letter>` (`sub_item`), `sub_item_20f` drops those and lettered
+numbers other than 4A and 16A-16K from a 20-F's headings, `split_3d` / `is_3d_heading` split Item 3
+at its risk factors line (byte ranges kept beside the sections), and `whole` makes a 6-K's or 40-F's
+document (or a 20-F without Item headings) one section. Written without a local build: unit cases in
+`heading_patterns`, `tests/sections.rs` `twenty_f_items_and_whole_documents` (a copy of the Python
+tests), and `fuzz.py`, which now also parses every document as a 20-F, 6-K and 40-F/A with 20-F
+tokens ("Item 3.D", "D. Risk Factors", "Item 5A", "Item 16F").
+
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from
 the libiconv lxml uses. Every stored document is ASCII.

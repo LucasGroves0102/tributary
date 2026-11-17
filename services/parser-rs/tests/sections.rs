@@ -736,3 +736,76 @@ fn tables_on_real_filings() {
         assert!(rows >= least, "{name}: {rows} rows");
     }
 }
+
+/// Rules 12 and 13: a 20-F's items with 3.D and its sub-items kept in their item; a 6-K's or
+/// 40-F's primary document as one section (sections.py's test_20f_items_with_3d_and_sub_items_
+/// kept_in_their_item and test_6k_and_40f_primary_documents_are_one_section_with_their_tables).
+#[test]
+fn twenty_f_items_and_whole_documents() {
+    let raw = concat!(
+        "<html><body><p>FORM 20-F</p><p>TABLE OF CONTENTS</p><table>",
+        "<tr><td>PART I</td></tr>",
+        "<tr><td>Item 1.</td><td>Identity of Directors, Senior Management and Advisers</td></tr>",
+        "<tr><td>Item 3.</td><td>Key Information</td></tr>",
+        "<tr><td>Item 3.D.</td><td>Risk Factors</td></tr>",
+        "<tr><td>Item 4.</td><td>Information on the Company</td></tr>",
+        "<tr><td>Item 4A.</td><td>Unresolved Staff Comments</td></tr>",
+        "<tr><td>Item 5.</td><td>Operating and Financial Review and Prospects</td></tr>",
+        "<tr><td>PART III</td></tr>",
+        "<tr><td>Item 18.</td><td>Financial Statements</td></tr>",
+        "<tr><td>Item 19.</td><td>Exhibits</td></tr></table>",
+        "<p>PART I</p>",
+        "<p>ITEM 1. IDENTITY OF DIRECTORS, SENIOR MANAGEMENT AND ADVISERS</p>",
+        "<p>Not applicable.</p>",
+        "<p>ITEM 3. KEY INFORMATION</p><p>3.A. [Reserved]</p><p>3.B. Capitalization and",
+        " Indebtedness</p><p>Not applicable.</p>",
+        "<p>3.D. RISK FACTORS</p><p>Risks Relating to Our Business</p>",
+        "<p>Demand for our wafers may fall.</p>",
+        "<p>ITEM 4. INFORMATION ON THE COMPANY</p><p>4.A. History and Development</p>",
+        "<p>We were founded in 1987.</p><p>Item 4.B. Business Overview</p><p>We make chips.</p>",
+        "<p>ITEM 4A. UNRESOLVED STAFF COMMENTS</p><p>None.</p>",
+        "<p>ITEM 5. OPERATING AND FINANCIAL REVIEW AND PROSPECTS</p>",
+        "<p>Item 5.A. Operating Results</p><p>Net revenue rose 31.6%.</p>",
+        "<p>Item 5.B. Liquidity and Capital Resources</p><p>Cash was NT$2.1 trillion.</p>",
+        "<p>PART III</p>",
+        "<p>ITEM 18. FINANCIAL STATEMENTS</p><p>See pages F-1 through F-90.</p>",
+        "<p>ITEM 19. EXHIBITS</p><p>1.1 Articles of Incorporation</p>",
+        "</body></html>",
+    );
+    let sections = parse(raw.as_bytes(), "20-F").unwrap();
+    assert_eq!(keys(&sections), ["1", "3", "3.D", "4", "4A", "5", "18", "19"]);
+    let risk = section(&sections, "3.D");
+    assert_eq!(risk.title, "3.D. RISK FACTORS");
+    assert_eq!(risk.part.as_deref(), Some("I"));
+    assert!(risk.text.ends_with("Demand for our wafers may fall."));
+    assert_eq!(section(&sections, "3").char_end, risk.char_start);
+    assert!(section(&sections, "4").text.contains("Business Overview\nWe make chips."));
+    assert!(section(&sections, "5").text.ends_with("Cash was NT$2.1 trillion."));
+    let text = html_to_text(raw.as_bytes()).unwrap();
+    for s in &sections {
+        assert_eq!(chars(&text, s.char_start, s.char_end).trim(), s.text);
+    }
+
+    let release = concat!(
+        "<html><body><p>TSMC Reports Third Quarter EPS of NT$17.44</p><p>Item 2. x</p>",
+        "<table><tr><td>Net revenue</td><td>989.92</td></tr>",
+        "<tr><td>Gross margin</td><td>59.5%</td></tr></table></body></html>",
+    );
+    for (form, key) in [("6-K", "6-K"), ("40-F", "40-F"), ("40-F/A", "40-F")] {
+        let sections = parse(release.as_bytes(), form).unwrap();
+        assert_eq!(keys(&sections), [key]);
+        assert_eq!(sections[0].title, format!("Form {key}"));
+        assert_eq!(sections[0].char_start, 0);
+        assert_eq!(sections[0].tables[0].rows.len(), 2);
+    }
+    assert!(parse(b"<html><body><p> </p></body></html>", "6-K").is_err());
+    let lettered = concat!(
+        "PART I\nItem 5. Operating Review\nItem 5A. Operating Results\nRevenue.\nPART II\n",
+        "Item 16A. Audit Committee\nx\nItem 16F. Change in Accountant\nNone.\nItem 16L. y\nz",
+    );
+    let found = find_sections(lettered, "20-F").unwrap();
+    assert_eq!(keys(&found), ["5", "16A", "16F"]);
+    assert!(found[2].text.ends_with("Item 16L. y\nz"));
+    let plain = "Annual Report and Form 20-F 2025\nRisk factors\nOur risks.";
+    assert_eq!(keys(&find_sections(plain, "20-F/A").unwrap()), ["20-F"]);
+}

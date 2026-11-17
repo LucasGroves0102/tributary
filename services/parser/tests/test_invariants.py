@@ -17,7 +17,7 @@ from filing_parser import invariants
 from filing_parser.sections import exhibit_section, parse
 
 FIXTURES = Path(__file__).parent / "fixtures"
-MIGRATION = Path(__file__).parents[3] / "db" / "migrations" / "072_data_trust_checks.sql"
+MIGRATION = Path(__file__).parents[3] / "db" / "migrations" / "095_foreign_filers.sql"
 # every stored filing in fixtures/, with its form
 FILINGS = sorted((p.name.removesuffix(".htm.gz"), p.name.split("-", 1)[1].removesuffix(".htm.gz")
                   .removesuffix("-prior").removesuffix("-year-ago"))
@@ -72,7 +72,14 @@ def test_the_rules_catch_what_the_parity_tests_missed():
     assert invariants.valid_key("10-K", "4A") and invariants.valid_key("10-K/A", "9C")
     assert invariants.valid_key("8-K", "EX-99.1") and invariants.valid_key("8-K/A", "5.07")
     assert not invariants.valid_key("8-K", "EX-99.1 PRESS")
-    assert invariants.valid_key("20-F", "anything")
+    assert invariants.valid_key("20-F", "3.D") and invariants.valid_key("20-F/A", "16K")
+    assert not invariants.valid_key("20-F", "5A") and not invariants.valid_key("20-F", "3D")
+    assert invariants.valid_key("6-K", "6-K") and invariants.valid_key("40-F/A", "40-F")
+    assert invariants.valid_key("40-F", "EX-99.2") and not invariants.valid_key("6-K", "1")
+    assert invariants.valid_key("F-4", "anything")
+    assert invariants.missing_core("20-F", ["3", "4", "5"]) == ["3.D", "18"]
+    assert invariants.missing_core("20-F", ["20-F"]) == []
+    assert invariants.missing_core("20-F/A", ["1"]) == []
     assert invariants.missing_core("10-K", ["1", "7"]) == ["1A", "8"]
     assert invariants.missing_core("10-K/A", []) == []
     assert invariants.missing_core("10-Q", ["II-1"]) == ["I-1", "I-2"]
@@ -81,15 +88,15 @@ def test_the_rules_catch_what_the_parity_tests_missed():
 
 
 def test_the_patterns_are_the_databases():
-    """ops.section_key_valid (072) and ops.core_section_keys say the same, pattern for pattern."""
+    """ops.section_key_valid (095) and ops.core_section_keys say the same, pattern for pattern."""
     sql = MIGRATION.read_text()
-    body = sql[sql.index("CREATE FUNCTION ops.section_key_valid"):]
+    body = sql[sql.index("CREATE OR REPLACE FUNCTION ops.section_key_valid"):]
     body = body[:body.index("$$;")]
     found = dict(re.findall(r"WHEN p_form ~ '\^([0-9A-Z-]+)' THEN p_key ~ '([^']+)'", body))
     assert found == invariants.KEY_PATTERNS
     assert re.search(r"THEN p_key ~ '([^']+)'", body).group(1) == invariants.EXHIBIT
-    core = sql[sql.index("CREATE FUNCTION ops.core_section_keys"):]
+    core = sql[sql.index("CREATE OR REPLACE FUNCTION ops.core_section_keys"):]
     core = core[:core.index("$$;")]
-    assert {form: tuple(re.findall(r"'([0-9A-Z-]+)'", keys)) for form, keys in
+    assert {form: tuple(re.findall(r"'([0-9A-Z.-]+)'", keys)) for form, keys in
             re.findall(r"WHEN '([0-9A-Z-]+)' THEN ARRAY\[([^\]]+)\]", core)} == \
         invariants.CORE_KEYS

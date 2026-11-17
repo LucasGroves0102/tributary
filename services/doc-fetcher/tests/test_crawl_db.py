@@ -177,3 +177,74 @@ def test_catchup_status_reads_every_kind(conn):
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
                          "check_segments", "check_sections", "statements", "known"}
     assert all(isinstance(r[4], float) for r in rows.values())
+
+
+# foreign filers (migration 095) ------------------------------------------------------------------
+
+def results(conn, period, filed, fye, document, description=None) -> bool:
+    return conn.execute("SELECT ops.results_release(%s, %s, %s, %s, %s)",
+                        (period, filed, fye, document, description)).fetchone()[0]
+
+
+def test_results_release_rule(conn):
+    d = date.fromisoformat
+    # A: a fiscal quarter's end (52-53 week quarters too), filed 8-120 days on
+    assert results(conn, d("2026-09-30"), d("2026-10-15"), "1231", "tsm-20261015x6k.htm")
+    assert results(conn, d("2025-09-28"), d("2025-10-15"), "1231", "form6-k.htm", "6-K")  # ASML
+    assert results(conn, d("2026-04-30"), d("2026-06-13"), "1031", "form6xk.htm")  # FYE October
+    assert not results(conn, d("2026-04-30"), d("2026-06-13"), "1231", "form6xk.htm")
+    assert results(conn, d("2026-03-31"), d("2026-05-08"), None, "x.htm")  # no FYE: December
+    assert not results(conn, d("2026-09-30"), d("2026-10-05"), "1231", "x.htm")  # 5 days: monthly
+    assert not results(conn, d("2026-06-30"), d("2026-11-01"), "1231", "x.htm")  # 124 days
+    assert not results(conn, d("2026-09-15"), d("2026-10-15"), "1231", "x.htm")
+    assert not results(conn, d("2026-11-12"), d("2026-11-12"), "1231", "board.htm", "6-K")
+    # B: the name or description says results, and nothing a notice says
+    for document, description in (("a8880w.htm", "1ST QUARTER RESULTS"),
+                                  ("a0058u.htm", "PRELIMINARY RESULTS"),
+                                  ("a8492c.htm", "3RD QUARTER TRADING STATEMENT"),
+                                  ("a2q26earningsreleaseerpt.htm", "6-K"),
+                                  ("a0595o.htm", "HALF-YEAR FINANCIAL REPORT"),
+                                  ("x.htm", "Q3 2026 TRADING UPDATE")):
+        assert results(conn, d("2026-07-28"), d("2026-07-28"), "1231", document, description), \
+            description
+    for document, description in (("a2523b.htm", "NOTICE OF Q1 2023 RESULTS"),
+                                  ("nomad2026agmvotingresults.htm", "6-K"),
+                                  ("a7916f.htm", "2016 EU-WIDE STRESS TEST RESULTS"),
+                                  ("a4972s.htm", "ANNUAL FINANCIAL REPORT ON FORM 20-F 2025"),
+                                  ("a6kalamosdeclaresquarterly.htm", "6-K"),
+                                  ("ntz_3q_2025_dates1.htm", "6-K"),
+                                  ("a6-kxq126conferencecall.htm", "6-K"),
+                                  ("crh201603316k4.htm", "BLOCKLISTING INTERIM REVIEW")):
+        assert not results(conn, d("2026-07-28"), d("2026-07-28"), "1231", document,
+                           description), description
+    assert not results(conn, None, None, None, None, None)
+    # C: never a Brazilian CVM 358 insider report (monthly, so at quarter ends too) or a notice
+    assert not results(conn, d("2026-09-30"), d("2026-10-13"), "1231", "bakcvm358sep26_6k1.htm")
+    assert not results(conn, d("2026-10-01"), d("2026-10-02"), "1231",
+                       "notification_of_q326_er_.htm", "6-K")
+    assert not results(conn, d("2021-03-01"), d("2021-03-03"), "1231",
+                       "q12021boughtdealclosingmcr.htm", "6-K")
+
+
+def test_plan_adds_foreign_annual_reports_and_results_releases(conn):
+    s = submission
+    s(conn, "tc-20f", OPERATING, "20-F", date(2026, 4, 16))
+    s(conn, "tc-20fa", OPERATING, "20-F/A", date(2026, 5, 20))
+    s(conn, "tc-40f", OPERATING, "40-F", date(2026, 3, 10))
+    s(conn, "tc-40fa", OPERATING, "40-F/A", date(2026, 3, 30))
+    s(conn, "tc-20f-no-gold", NO_GOLD, "20-F", date(2026, 4, 16))
+    for acc, period, filed, primary, description in (
+            ("tc-6k-q3", "2026-09-30", "2026-10-15", "tsm-20261015x6k.htm", "6-K"),
+            ("tc-6k-rns", "2026-07-28", "2026-07-28", "a0595o.htm", "HALF-YEAR FINANCIAL REPORT"),
+            ("tc-6k-board", "2026-11-12", "2026-11-12", "board.htm", "6-K"),
+            ("tc-6k-notice", "2026-04-11", "2026-04-11", "a2171c.htm", "NOTICE OF RESULTS")):
+        conn.execute(
+            "INSERT INTO bronze.submission_filings (accession_no, cik, form, filing_date,"
+            " report_date, primary_document, primary_doc_description) VALUES"
+            " (%s, %s, '6-K', %s, %s, %s, %s)", (acc, OPERATING, filed, period, primary,
+                                                description))
+    s(conn, "tc-6ka", OPERATING, "6-K/A", date(2026, 10, 20))
+    crawl_db.plan(conn, SINCE, ITEMS)
+    got = {a: f for a, (_, f, _, _) in queued(conn).items()}
+    assert got == {"tc-20f": "20-F", "tc-20fa": "20-F/A", "tc-40f": "40-F", "tc-40fa": "40-F/A",
+                   "tc-6k-q3": "6-K", "tc-6k-rns": "6-K"}

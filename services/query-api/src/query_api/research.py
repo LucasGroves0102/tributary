@@ -31,7 +31,7 @@ from query_api.store import SearchTooBroad, Store
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 Accession = Annotated[str, Path(pattern=r"^\d{10}-\d{2}-\d{6}$")]
 SECTION = r"^[A-Z0-9.?-]{1,8}$"
-FORM = r"^(10-K|10-Q|8-K)(/A)?$"
+FORM = r"^(10-K|10-Q|8-K|20-F|40-F|6-K)(/A)?$"
 Kind = Literal["new", "removed", "rewritten"]
 View = Literal["reading", "ranked"]
 Basis = Literal["prior", "year_ago"]

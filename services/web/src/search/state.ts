@@ -4,7 +4,7 @@
 import { day } from "../format";
 import type { SectionHit, SectionSearch } from "../types";
 
-export const SEARCH_FORMS = ["10-K", "10-Q", "8-K"] as const;
+export const SEARCH_FORMS = ["10-K", "10-Q", "8-K", "20-F", "40-F", "6-K"] as const;
 export type SearchForm = (typeof SEARCH_FORMS)[number];
 
 export interface SearchState {

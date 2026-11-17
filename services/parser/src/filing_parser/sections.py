@@ -29,9 +29,10 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
    insensitive; either apostrophe). Splitting the text at end lines, the stretch with the most
    MD&A lines (at least 2; the earliest on a tie) becomes Item 7: from its first MD&A line to
    the end line that closes the stretch, or the end of the text. Key and title are unchanged.
-8. Exhibits (8-K EX-99.x, a 10-K's EX-13: whatever doc-fetcher stores) are parsed on their own:
-   one section per exhibit, key the exhibit type ("EX-99.1"), item its number, title the index
-   description or "Exhibit 99.1", text html_to_text of the exhibit, offsets into that text.
+8. Exhibits (8-K EX-99.x, a 10-K's EX-13, a 6-K's or 40-F's EX-99.x: whatever doc-fetcher
+   stores) are parsed on their own: one section per exhibit, key the exhibit type ("EX-99.1"),
+   item its number, title the index description or "Exhibit 99.1", text html_to_text of the
+   exhibit, offsets into that text.
 9. Title headings, for filings that title their items without numbering them ("RISK
    FACTORS"): only when the form starts with "10-K" or "10-Q" and rule 2 finds no Item
    heading. A title heading is a line (the text split at "\n"; it starts at the line's first
@@ -97,6 +98,32 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
       text; a table with at least 2 such rows is kept, from its rows' smallest start to their
       largest end. Each keeps all its rows' cells (empty ones and spans too) in order. An
       exhibit's (rule 8) are those of its own text.
+12. Form 20-F (forms starting "20-F"). Its items are numbered like a 10-K's (1-19, 4A, 16A-16K,
+   unique across Parts), with lettered sub-items ("3.D Risk Factors", "Item 5.A Operating
+   Results"):
+   a. Sub-item headings are dropped from rule 2's headings before rule 3: they stay in their
+      item's text, and a table of contents listing sub-items isn't taken for a repeat. A sub-item
+      heading is an Item heading whose item number (the `\\d{1,2}[a-z]?` branch) is followed
+      directly by "." and one ASCII letter that is not followed by a word character ("Item 3.D",
+      "ITEM 5.A."), or whose item number, upper-cased, ends in something other than a decimal
+      digit and isn't 4A or 16A-16K ("Item 5A", "Item 3D").
+   b. Item 3.D, Risk Factors: when a section "3" is kept, the first line of it after its first line
+      (the text split at "\\n") that is a 3.D heading ends section "3" there and starts section
+      "3.D" (key and item "3.D", section 3's part), which runs to section 3's old end; section 3's
+      text and 3.D's are their stretches stripped, as in rule 6. A 3.D heading is a line of at most
+      120 characters whose rule 9 core, folded, ends with "risk factors" and before it has either
+      nothing, or a prefix that loses at least one trailing character of " .:-–—" and, without
+      those and without whitespace (str.isspace), is "d", "3d", "3.d", "item3d" or "item3.d"
+      ("D. Risk Factors", "3.D RISK FACTORS", "Item 3.D. Risk factors", "Risk Factors"). Its title
+      is the line through rule 10 (a-c, e).
+   c. A 20-F with no Item heading left after (a) (an annual report laid out by a cross-reference
+      index) is one section, as rule 13.
+13. Whole documents. A 6-K's or 40-F's primary document (forms starting "6-K" or "40-F": a
+   results release or cover page; a 40-F's annual information form, MD&A and statements are
+   exhibits, rule 8), and a 20-F's under rule 12c, is one section: key and item the form without
+   "/A" ("6-K", "40-F", "20-F"), no part, title "Form 6-K" (the key after "Form "), text the whole
+   text, offsets 0 to its length. Rules 2-10 don't apply; rule 11's tables do. A document with no
+   text raises, as one without headings does.
 """
 
 import re
@@ -105,10 +132,11 @@ from dataclasses import dataclass, field, replace
 
 from lxml import html
 
-# 7: tables beside the text (rule 11; the text is 6's); 6: "Item 7.01Regulation" is 7.01
+# 8: 20-F items with 3.D and sub-item headings dropped (rule 12), 6-K / 40-F whole documents
+# (rule 13); 7: tables beside the text (rule 11; the text is 6's); 6: "Item 7.01Regulation" is 7.01
 # (rule 2); 5: clean titles (rule 10); 4: title headings
 # (rule 9); 3: MD&A by reference, exhibits, SGML
-PARSER_VERSION = "python-7"
+PARSER_VERSION = "python-8"
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
@@ -188,6 +216,14 @@ TITLES_10Q = {
     "other information": ("II", "5"),
     "exhibits": ("II", "6"),
 }
+# rule 12a: a sub-item letter right after an item number ("Item 3.D", "ITEM 5.A.")
+_SUB_ITEM = re.compile(r"\.[A-Za-z](?!\w)")
+# rule 12a: the lettered items of a 20-F (any other letter makes a sub-item: "Item 5A")
+_LETTERED_20F = frozenset({"4A"} | {f"16{c}" for c in "ABCDEFGHIJK"})
+# rule 12b: what may come before "risk factors" on a 3.D heading line, its separators and
+# whitespace taken out
+_RISK_PREFIXES = frozenset({"d", "3d", "3.d", "item3d", "item3.d"})
+_SEPARATORS = " .:-\u2013\u2014"
 _FOLD = str.maketrans({**{chr(c): chr(c + 32) for c in range(ord("A"), ord("Z") + 1)},
                        "\u0130": "i", "\u0131": "i", "\u017f": "s", "\u212a": "k",
                        "\u2019": "'"})
@@ -435,10 +471,17 @@ class _Heading:
     title_part: str | None = None  # rule 9 title heading: the Part its title belongs to
     xref: bool = False  # Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
     title_end: int = 0  # rule 10: where the title's line ends (its "\n", or the text's end)
+    sub: bool = False  # rule 12a: an item number followed by ".<letter>" ("Item 3.D")
 
 
 def find_sections(text: str, form: str) -> list[Section]:
+    if form.startswith(("6-K", "40-F")):
+        return [_whole(text, form)]  # rule 13
     headings = list(_headings(text))
+    if form.startswith("20-F"):
+        headings = [h for h in headings if not _sub_item_20f(h)]  # rule 12a
+        if all(h.item is None for h in headings):
+            return [_whole(text, form)]  # rule 12c
     if form.startswith(("10-K", "10-Q")) and all(h.item is None for h in headings):
         titles = list(_title_headings(text, form))  # rule 9
         if titles:
@@ -469,7 +512,59 @@ def _sections(text: str, body: list[_Heading], form: str) -> list[Section]:
                                 text[h.start:end].strip(), h.start, end))
     if form.startswith("10-K"):
         sections = [_mdna_by_reference(text, s) if s.key == "7" else s for s in sections]
+    if form.startswith("20-F"):
+        sections = _risk_factors_3d(text, sections, form)
     return sections
+
+
+def _sub_item_20f(h: _Heading) -> bool:
+    """Rule 12a."""
+    if h.item is None:
+        return False
+    return h.sub or not (h.item[-1].isdecimal() or h.item in _LETTERED_20F)
+
+
+def _whole(text: str, form: str) -> Section:
+    """Rule 13."""
+    if not text:
+        raise ValueError("document has no text")
+    key = form.split("/", 1)[0]
+    return Section(key, None, key, f"Form {key}", text, 0, len(text))
+
+
+def _risk_factors_3d(text: str, sections: list[Section], form: str) -> list[Section]:
+    """Rule 12b."""
+    at = next((i for i, s in enumerate(sections) if s.key == "3"), None)
+    if at is None:
+        return sections
+    item3 = sections[at]
+    first = text.find("\n", item3.char_start)
+    p = first + 1 if first != -1 else item3.char_end
+    while p < item3.char_end:
+        nl = text.find("\n", p)
+        line = text[p:nl if nl != -1 else len(text)]
+        if _is_3d_heading(line):
+            h = _Heading(p, item3.part, "3.D", line, title_end=p + len(line))
+            risk = Section("3.D", item3.part, "3.D", _title(h, text, form),
+                           text[p:item3.char_end].strip(), p, item3.char_end)
+            item3 = replace(item3, text=text[item3.char_start:p].strip(), char_end=p)
+            return sections[:at] + [item3, risk] + sections[at + 1:]
+        p += len(line) + 1
+    return sections
+
+
+def _is_3d_heading(line: str) -> bool:
+    """Rule 12b: "D. Risk Factors", "3.D RISK FACTORS", "Item 3.D. Risk factors", "Risk Factors"."""
+    if len(line) > 120:
+        return False
+    core = _title_core(line).translate(_FOLD)
+    if not core.endswith("risk factors"):
+        return False
+    head = core[:-len("risk factors")]
+    if not head:
+        return True
+    bare = head.rstrip(_SEPARATORS)
+    return len(bare) < len(head) and "".join(bare.split()) in _RISK_PREFIXES
 
 
 def _mdna_by_reference(text: str, item7: Section) -> Section:
@@ -510,12 +605,13 @@ def _headings(text: str):
             continue
         inline = title = m.group("rest").strip()
         title_end = m.end()
+        sub = "." not in m.group("item") and _SUB_ITEM.match(text, m.end("item")) is not None
         if not title:  # title on the next line, as in many tables of contents
             nxt = text.find("\n", m.end() + 1)
             title_end = nxt if nxt != -1 else len(text)
             title = text[m.end() + 1 : title_end].strip()
         yield _Heading(m.start(), None, m.group("item").upper(), title[:200], inline,
-                       title_end=title_end)
+                       title_end=title_end, sub=sub)
 
 
 def _title_headings(text: str, form: str):

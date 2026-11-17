@@ -1,7 +1,7 @@
 # parser
 
 FR3, week 1. Consumes `documents.fetched` (from [doc-fetcher](../doc-fetcher)), reads the
-document from `bronze.filing_documents` and its 8-K exhibits from `bronze.filing_exhibits`,
+document from `bronze.filing_documents` and its exhibits from `bronze.filing_exhibits`,
 splits it into Part/Item sections and writes `silver.filing_sections` (`parser = python`,
 `parser_version` = `PARSER_VERSION`). The [Query API](../query-api) reads sections with
 citations from the `gold.filing_sections` view.
@@ -12,7 +12,8 @@ citations from the `gold.filing_sections` view.
 | Output | `silver.filing_sections`: key, part, item, title, text, character offsets into the document text; `silver.filing_tables`: each section's HTML tables, rows and cells with offsets into its text (rule 11, migration 067) |
 | Metrics | `tributary_documents_parsed_total{form}`, `tributary_parse_failures_total{form}`, `tributary_parse_duration_seconds{form}` |
 
-Section keys: 10-K `1A`, 10-Q `II-1A`, 8-K `2.02`, 8-K exhibits `EX-99.1`. Re-parsing an
+Section keys: 10-K `1A`, 10-Q `II-1A`, 8-K `2.02`, 20-F `3.D` (its items 1-19 like a 10-K's),
+6-K and 40-F `6-K` / `40-F` (the whole primary document), exhibits `EX-99.1`. Re-parsing an
 accession replaces its rows from either parser, so a document always has one parser's sections
 ([parser-rs](../parser-rs) is the Rust build of this service). Production runs the Rust build
 (`services.parser.image: parser-rs` in the Helm values, since 2026-10-20); this service is the
@@ -25,7 +26,9 @@ handles tables of contents, running page headers, 10-Qs without a "Part I" headi
 incorporated by reference (JPMorgan, Exxon: rule 7), SGML exhibit envelopes, and 10-K/10-Qs
 that title their items without numbering them (rule 9: Molina, Edison International, TriNet
 write "RISK FACTORS", never "Item 1A"). Rule 9 runs only when a document has no "Item N"
-heading at all ([DESIGN.md](DESIGN.md#items-titled-but-not-numbered-rule-9)).
+heading at all ([DESIGN.md](DESIGN.md#items-titled-but-not-numbered-rule-9)). Foreign filers
+(migration 095, [below](#foreign-filers-rules-12-and-13)): a 20-F's items with Item 3.D, its risk
+factors (rule 12), and a 6-K's or 40-F's primary document as one section beside its exhibits (rule 13).
 
 Why each rule is what it is, what each version measured on production's stored filings, and the
 runbooks: [DESIGN.md](DESIGN.md).
@@ -35,6 +38,7 @@ runbooks: [DESIGN.md](DESIGN.md).
 | `python-5` / `rust-5` | section titles cleaned (rule 10: separators, quotes, dot leaders, wrapped titles); [DESIGN.md](DESIGN.md#section-titles-rule-10) |
 | `python-6` / `rust-6` | a decimal item run into its title ("Item 7.01Regulation") keeps its number (rule 2); [DESIGN.md](DESIGN.md#a-decimal-item-run-into-its-title-rule-2-python-6--rust-6) |
 | `python-7` / `rust-7` | tables recorded beside the text (rule 11, migration 067); text, keys, titles and offsets unchanged |
+| `python-8` / `rust-8` | Form 20-F items and 3.D (rule 12), 6-K and 40-F documents whole (rule 13); 10-K, 10-Q and 8-K output unchanged |
 
 ## Run
 
@@ -60,6 +64,24 @@ Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `loc
 `parser-python`). The chart's `parser-backfill` sets them to `documents.backfill` /
 `parser-backfill` for the [document crawl](../doc-fetcher/README.md#document-crawl), so crawled
 documents are parsed by a separate consumer and never queue ahead of live filings.
+
+## Foreign filers (rules 12 and 13)
+
+doc-fetcher stores covered foreign filers' 20-F and 40-F (+ /A) and their results-release 6-Ks
+(migration 095). A 20-F numbers its items like a 10-K (1-19, 4A, 16A-16K, keys without a Part) and
+letters sub-items under them: "Item 3.D" / "D. Risk Factors", "Item 5.A Operating Results".
+Rule 12 drops sub-item headings ("Item N.X", or a lettered number other than 4A and 16A-16K) before
+the table of contents is found, so a sub-item stays in its item and a contents table listing them
+isn't read as the body; then Item 3 is split at its first 3.D line ("D. Risk Factors", "3.D RISK
+FACTORS", "Item 3.D. Risk factors", a bare "Risk Factors"), giving the `3.D` section. A 20-F with
+no Item heading (an annual report with a Form 20-F cross-reference index) is one `20-F` section.
+Rule 13: a 6-K's or 40-F's primary document is one section keyed by the form (a 6-K's release is
+often its EX-99.1; a 40-F's annual information form, MD&A and statements are its EX-99.x, rule 8).
+The checks (072, replaced in 095) know their keys; an original 20-F's core items are 3.D, 4, 5 and
+18 unless it is laid out by a cross-reference index. Not yet: Item 18 pointing to F-pages placed
+after Item 19 (the statements then sit in section 19), What changed for 20-Fs, peers by business
+from Item 4. The test documents are shaped like real 20-Fs, 6-Ks and 40-Fs, not copied: none was
+stored on hermes when the rules were written; replace them with stored ones once the crawl has some.
 
 ## Tables in the text
 
@@ -213,7 +235,10 @@ UPDATE ops.catchup SET paused = false WHERE kind = 'parser';   -- `true` pauses 
 
 From the next `section-index` run (hourly at :40) it re-queues 3,000 documents an hour, which
 `doc-crawler` publishes within about 30 minutes and `parser-backfill` parses: on 2026-11-16, 595,775
-documents predated rust-7, about 8 days. Passages are not paused: 433,157 filings predated
+documents predated rust-7, about 8 days. Version 8 (rules 12 and 13) restarts that count: every stored
+document is re-queued once more (a 10-K, 10-Q or 8-K re-parses to the same rows, kept with their
+`parsed_at`, so nothing is re-indexed), about a day more than finishing v7 would have taken; the
+re-queue also waits while the crawl has over 1,000 targets pending (its first foreign plan). Passages are not paused: 433,157 filings predated
 `furniture-1` (hours).
 Cost and index size: [DESIGN.md](DESIGN.md#section-diffs-and-search-index-cost).
 

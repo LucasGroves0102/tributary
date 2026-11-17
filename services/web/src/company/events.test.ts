@@ -74,6 +74,11 @@ describe("earnings releases", () => {
     expect(quarterName({ ...q, estimated: true })).toBe("Quarter ended Sep 30, 2026 (expected)");
     expect(firstQuarter([{ ...q, release: null }, { ...q, period_end: "2026-06-30" }])!.period_end).toBe("2026-06-30");
     expect(firstQuarter([])).toBeNull();
+    // a foreign filer's (migration 095): its 20-F year, a period its 6-K release reports
+    const rel = { ...q.release!, form: "6-K", items: [] };
+    expect(quarterName({ ...q, report: { accession_no: "a", form: "20-F", filed: "2026-04-16" }, period_end: "2025-12-31" }))
+      .toBe("Fiscal year ended Dec 31, 2025");
+    expect(quarterName({ ...q, report: null, release: rel })).toBe("Period ended Sep 30, 2026");
   });
 
   it("reads a release's outlook as lines: heading, bullets, sub-bullets, text", () => {

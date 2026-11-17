@@ -56,19 +56,28 @@ def test_config_from_env():
 
 
 class FakeResult:
+    def __init__(self, row=None):
+        self.row = row
+
     def fetchone(self):
-        return None
+        return self.row
 
 
 class FakeConn:
-    """Records each statement as "VERB table", and whether it ran inside a transaction."""
+    """Records each statement as "VERB table", and whether it ran inside a transaction; answers
+    ops.results_release (migration 095's 6-K rule, tested in test_crawl_db) with `results`."""
 
-    def __init__(self):
+    def __init__(self, results: bool = False):
         self.statements: list[str] = []
         self.in_tx: list[str] = []
+        self.results = results
+        self.asked: list[tuple] = []
         self._depth = 0
 
     def execute(self, sql, params=()):
+        if "ops.results_release" in sql:
+            self.asked.append(params)
+            return FakeResult((self.results,))
         words = sql.split()
         statement = words[0] + " " + words[2]
         self.statements.append(statement)
@@ -290,3 +299,78 @@ def test_owed_rows_whose_document_is_gone_never_block_the_outbox():
                             ).fetchone() == (["tm-here"],)
         up = FakeProducer()
         assert sweep(conn, up) == 1 and [e["accession_no"] for e in up.events] == ["tm-here"]
+
+
+# foreign filers (migration 095) ------------------------------------------------------------------
+
+# A 6-K's filing index, shaped like EDGAR's (the 8-K fixture's page with a 6-K's rows): the cover
+# page as the 6-K document, the results release as EX-99.1.
+ROW = b'</td>\n            <td scope="row"><a href="/ix?doc='
+INDEX_6K = (INDEX_8K
+            .replace(b'<td scope="row">8-K' + ROW, b'<td scope="row">FORM 6-K' + ROW)
+            .replace(b'<td scope="row">8-K</td>\n            <td scope="row">26457',
+                     b'<td scope="row">6-K</td>\n            <td scope="row">26457')
+            .replace(b'<div class="infoHead">Period of Report</div>\n         '
+                     b'<div class="info">2026-08-26</div>',
+                     b'<div class="infoHead">Period of Report</div>\n         '
+                     b'<div class="info">2026-06-30</div>'))
+
+
+def test_scope_takes_foreign_forms_from_the_live_feed():
+    cov = Coverage(tracked=frozenset(), operating=frozenset({OTHER}))
+    for form in ("20-F", "40-F", "6-K"):
+        assert cov.scope(event(cik=OTHER, form=form)) == "live"
+    assert cov.scope(event(cik=OTHER, form="20-F/A")) is None  # amendments: the crawl's
+    assert cov.scope(event(cik=OTHER, form="6-K/A")) is None
+
+
+def foreign_client(requests: list[str], index: bytes) -> httpx.Client:
+    def respond(request: httpx.Request) -> httpx.Response:
+        name = request.url.path.rsplit("/", 1)[-1]
+        requests.append(name)
+        if name.endswith("-index.htm"):
+            return httpx.Response(200, content=index)
+        return httpx.Response(200, content=b"<html>results</html>")
+    return httpx.Client(transport=httpx.MockTransport(respond))
+
+
+def test_a_6k_results_release_is_stored_with_its_press_release():
+    assert b"FORM 6-K" in INDEX_6K and b'<div class="info">2026-06-30</div>' in INDEX_6K
+    requests: list[str] = []
+    conn, producer = FakeConn(results=True), FakeProducer()
+    assert handle(conn, foreign_client(requests, INDEX_6K), producer, event(form_type="6-K"))
+    assert requests == ["0001045810-26-000073-index.htm", "nvda-20260826.htm",
+                        "q2fy27pr.htm", "q2fy27cfocommentary.htm"]
+    # the rule's inputs: period of report, filing date, the CIK, document name, description
+    (period, filed, cik, name, description), = conn.asked
+    assert (str(period), str(filed), cik, name, description) == (
+        "2026-06-30", "2026-08-26", NVDA, "nvda-20260826.htm", "FORM 6-K")
+    assert conn.in_tx == ["INSERT bronze.filing_documents", "INSERT bronze.filing_exhibits",
+                          "INSERT bronze.filing_exhibits", "INSERT ops.document_outbox"]
+    assert [e["form"] for e in producer.events] == ["6-K"]
+
+
+def test_a_6k_that_is_not_a_results_release_stops_at_the_index():
+    requests: list[str] = []
+    conn, producer = FakeConn(results=False), FakeProducer()
+    assert handle(conn, foreign_client(requests, INDEX_6K), producer,
+                  event(form_type="6-K")) is False
+    assert requests == ["0001045810-26-000073-index.htm"]
+    assert not any(s.startswith("INSERT") for s in conn.statements) and producer.events == []
+
+
+def test_a_20f_is_its_document_and_a_40f_has_its_exhibits():
+    index_20f = INDEX_6K.replace(b'<td scope="row">6-K</td>', b'<td scope="row">20-F</td>')
+    index_40f = INDEX_6K.replace(b'<td scope="row">6-K</td>', b'<td scope="row">40-F</td>')
+    requests: list[str] = []
+    conn = FakeConn()
+    assert handle(conn, foreign_client(requests, index_20f), FakeProducer(),
+                  event(form_type="20-F"))
+    assert requests == ["0001045810-26-000073-index.htm", "nvda-20260826.htm"]
+    assert conn.asked == []  # the 6-K rule only
+    requests.clear()
+    conn = FakeConn()
+    assert handle(conn, foreign_client(requests, index_40f), FakeProducer(),
+                  event(form_type="40-F"))
+    assert requests[-2:] == ["q2fy27pr.htm", "q2fy27cfocommentary.htm"]
+    assert conn.in_tx.count("INSERT bronze.filing_exhibits") == 2

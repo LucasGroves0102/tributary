@@ -27,6 +27,19 @@ def operating_ciks(conn: psycopg.Connection) -> set[str]:
     return {r[0] for r in rows}
 
 
+def results_release(conn: psycopg.Connection, cik: str, index: FilingIndex) -> bool:
+    """Whether a 6-K is a results release (migration 095's ops.results_release, the crawl plan's
+    rule), from its index page: the period of report, the primary document's name and description,
+    and the company's fiscal year end."""
+    row = conn.execute(
+        "SELECT ops.results_release(%s, %s, (SELECT c.fiscal_year_end FROM silver.company_ciks k"
+        " JOIN silver.companies c ON c.company_id = k.company_id WHERE k.cik = %s LIMIT 1),"
+        " %s, %s)",
+        (index.period_of_report, index.filed, cik, index.document_name, index.description),
+    ).fetchone()
+    return bool(row and row[0])
+
+
 def already_fetched(conn: psycopg.Connection, accession_no: str) -> bool:
     return conn.execute(
         "SELECT 1 FROM bronze.filing_documents WHERE accession_no = %s", (accession_no,)

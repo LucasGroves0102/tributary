@@ -48,8 +48,20 @@ last), else the latest; the others are listed as `other_releases`. Its text is t
 EX-99 exhibit (EX-99.1, EX-99.01), else the 8-K's "2.02" section; headline, outlook and
 adjustments come from query_api.releases. Quarters: the latest `quarters` period ends that have a
 report or a release, newest first. No beat or miss: Tributary holds no estimates.
+
+Foreign filers (migration 095). A company with no 10-Q filed in the window reports on 20-F or 40-F
+and furnishes its results on 6-K: its period ends are its 20-F/40-F period ends plus each stored
+6-K's own (doc-fetcher stores a 6-K only when ops.results_release calls it a results release): the
+6-K's period of report when that is a fiscal quarter's end (within 7 days before the end of a
+quarter month: the latest annual report's period-end month and every third month from it) at most
+RELEASE_WINDOW_DAYS before its filing, else the last quarter month's end before its filing. A
+quarter's release is the first 6-K mapped to it (the announcement; the interim statements behind it
+come later and are listed in `other_releases`), its text the lowest-numbered EX-99 exhibit, else
+the 6-K's own document (section "6-K"). `report` is the 20-F/40-F for its fiscal year, none for an
+interim period.
 """
 
+import calendar
 import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
@@ -129,6 +141,7 @@ CROSS_REFERENCE = re.compile(
     r"\b.{0,200}?\bincorporated\b", re.I | re.S)
 EXHIBIT_99 = re.compile(r"^EX-99(?:\.(\d{1,2}))?$")
 PERIODIC = ("10-K", "10-Q", "10-KT", "10-QT")
+FOREIGN_ANNUAL = ("20-F", "40-F")  # a foreign filer's annual reports (095), originals only
 MAX_EVENTS = 25
 RECENT_DAYS = 400
 RELEASE_WINDOW_DAYS = 120
@@ -153,7 +166,9 @@ METHOD_EARNINGS = (
     "exhibit. Outlook passages are the blocks under the release's own Outlook or Guidance "
     "headings; adjustments are its reconciliation tables and the notes under its figures that "
     "state a dollar amount. Quoted as written, found by fixed rules: a release without such a "
-    "heading or table shows none. No beat or miss: Tributary holds no estimates.")
+    "heading or table shows none. A foreign filer's results release is a 6-K Tributary stores as "
+    "one (period of report at a quarter end, or a document named or described as results), "
+    "beside its 20-F or 40-F. No beat or miss: Tributary holds no estimates.")
 
 
 # --- items and events ------------------------------------------------------------------------
@@ -215,11 +230,12 @@ def exhibit_rank(key: str) -> tuple[int, int] | None:
 
 
 def release_section(keys: list[str]) -> str | None:
-    """The press release of an 8-K: its lowest-numbered EX-99 exhibit, else its "2.02" item."""
+    """The press release of an 8-K or 6-K: its lowest-numbered EX-99 exhibit, else an 8-K's "2.02"
+    item or a 6-K's own document ("6-K", parser rule 13)."""
     ranked = sorted((r, k) for k in keys if (r := exhibit_rank(k)) is not None)
     if ranked:
         return ranked[0][1]
-    return "2.02" if "2.02" in keys else None
+    return next((k for k in ("2.02", "6-K") if k in keys), None)
 
 
 def opening(head: str, item: str) -> int:
@@ -374,9 +390,44 @@ def periods(reports: list[dict], releases: list[dict]) -> list[dict]:
     return out
 
 
+def fiscal_quarter_end(d: date, fiscal_month: int) -> bool:
+    """Within 7 days before the end of a month a whole number of quarters from `fiscal_month`
+    (52-53 week quarters too): ops.results_release's rule A (migration 095)."""
+    return (d + timedelta(days=8)).month != d.month and (d.month - fiscal_month) % 3 == 0
+
+
+def quarter_end_before(d: date, fiscal_month: int) -> date:
+    """The last month end before `d` whose month is a whole number of quarters from
+    `fiscal_month` (the fiscal year's last month)."""
+    y, m = (d.year, d.month - 1) if d.month > 1 else (d.year - 1, 12)
+    while (m - fiscal_month) % 3:
+        y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+    return date(y, m, calendar.monthrange(y, m)[1])
+
+
+def foreign_periods(reports: list[dict], releases: list[dict]) -> list[dict]:
+    """A foreign filer's period ends, newest first (module docstring, foreign filers): its 20-F
+    and 40-F periods, then each 6-K release's own period or the quarter end before it."""
+    by_end: dict[date, dict | None] = {}
+    for r in sorted((r for r in reports if r["form"] in FOREIGN_ANNUAL and r.get("period_end")),
+                    key=lambda r: (r["filing_date"], r["accession_no"])):
+        by_end.setdefault(r["period_end"], r)
+    fiscal_month = max(by_end).month if by_end else 12
+    for r in releases:
+        own = r.get("report_date")
+        if own and own < r["filing_date"] and fiscal_quarter_end(own, fiscal_month) \
+                and (r["filing_date"] - own).days <= RELEASE_WINDOW_DAYS:
+            by_end.setdefault(own, None)
+        else:
+            by_end.setdefault(quarter_end_before(r["filing_date"], fiscal_month), None)
+    return [{"period_end": end, "report": rep, "estimated": False}
+            for end, rep in sorted(by_end.items(), key=lambda kv: kv[0], reverse=True)]
+
+
 def assign_releases(quarters: list[dict], releases: list[dict]) -> None:
-    """Each 2.02 8-K to the latest period end before its filing date (within
-    RELEASE_WINDOW_DAYS); then each quarter's `release` and `other_releases`."""
+    """Each 2.02 8-K (or 6-K results release) to the latest period end before its filing date
+    (within RELEASE_WINDOW_DAYS); then each quarter's `release` and `other_releases`: an 8-K
+    quarter's last release before its report, a 6-K quarter's first."""
     ends = sorted((q["period_end"] for q in quarters), reverse=True)
     mapped: dict[date, list[dict]] = {}
     for r in releases:
@@ -390,7 +441,8 @@ def assign_releases(quarters: list[dict], releases: list[dict]) -> None:
         report = q["report"]
         before = [r for r in found
                   if report and r["filing_date"] <= report["filing_date"] + timedelta(days=1)]
-        chosen = (before or found)[-1] if found else None
+        pool = before or found
+        chosen = None if not pool else pool[0] if pool[0]["form"] == "6-K" else pool[-1]
         q["release_row"] = chosen
         q["others"] = [r for r in found if r is not chosen]
 
@@ -510,16 +562,26 @@ def add_event_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
         tables: Annotated[bool, Query(description="outlook and reconciliation passages with "
                                                    "their tables as grids (`parts`)")] = False,
     ) -> dict:
-        """Each quarter's earnings release (8-K Item 2.02), newest first: the release, its
-        headline, the outlook it states and management's adjustments, each passage quoted with
-        its offsets in the release. No beat or miss. Rules: query_api/events.py, releases.py;
-        `tables`: release_tables.py (without it the answer is the same as before parser v7)."""
+        """Each quarter's earnings release (8-K Item 2.02; a foreign filer's 6-K results
+        release), newest first: the release, its headline, the outlook it states and
+        management's adjustments, each passage quoted with its offsets in the release. No beat
+        or miss. Rules: query_api/events.py, releases.py; `tables`: release_tables.py (without it
+        the answer is the same as before parser v7)."""
         require(user_id, "filings", company_id)
         reports = store.periodic_reports(user_id, company_id)
         since = today() - timedelta(days=quarters * 92 + RELEASE_WINDOW_DAYS + 31)
         rows = store.company_8ks(user_id, company_id, since)
         releases = [r for r in rows if r["form"] == "8-K" and "2.02" in items_of(r)[0]]
-        found = periods(reports, releases)
+        if any(r["form"] == "10-Q" and r["filing_date"] >= since for r in reports):
+            found = periods(reports, releases)
+        else:  # no recent 10-Q: a foreign filer's 20-F/40-F and 6-K releases (095)
+            reports = reports + store.foreign_reports(user_id, company_id)
+            sixks = store.results_6ks(user_id, company_id, since)
+            if any(r["form"] in FOREIGN_ANNUAL for r in reports) or sixks:
+                releases = releases + sixks
+                found = foreign_periods(reports, releases)
+            else:
+                found = periods(reports, releases)
         assign_releases(found, releases)
         shown = [q for q in found if q["report"] or q.get("release_row")][:quarters]
         chosen = [q["release_row"] for q in shown if q.get("release_row")]

@@ -1,4 +1,4 @@
-"""The parser-output checks in the database (migration 072: ops.check_sections, run by
+"""The parser-output checks in the database (migrations 072, 095: ops.check_sections, run by
 section-index and the catch-up); skipped unless TEST_DATABASE_URL is set. Every test runs inside a
 transaction that is rolled back."""
 
@@ -85,6 +85,22 @@ def test_core_items_missing_unless_amended_or_cross_referenced(conn):
         ("q", "missing_core_item"): ("warning", {"missing": ["I-1"]})}
 
 
+def test_foreign_forms_keys_and_core_items(conn):
+    # 095: a 20-F's items with 3.D (parser rule 12), or one section keyed 20-F (rule 12c); a 6-K's
+    # and a 40-F's primary document is one section (rule 13), beside its exhibits
+    doc(conn, "20f", "20-F", {"3": LONG, "3.D": LONG + "a", "4": LONG + "b", "5": LONG + "c",
+                              "16K": LONG + "d", "5A": LONG + "e"})
+    doc(conn, "20fx", "20-F", {"20-F": "Annual Report and Form 20-F. " + LONG})
+    doc(conn, "20fa", "20-F/A", {"16F": LONG})
+    doc(conn, "6k", "6-K", {"6-K": LONG, "EX-99.1": LONG + "a"})
+    doc(conn, "40f", "40-F/A", {"40-F": LONG, "EX-99.2": LONG + "a", "1": LONG + "b"})
+    check(conn, "20f", "20fx", "20fa", "6k", "40f")
+    assert findings(conn) == {
+        ("20f", "invalid_key"): ("error", {"keys": ["5A"], "count": 1}),
+        ("20f", "missing_core_item"): ("warning", {"missing": ["18"]}),
+        ("40f", "invalid_key"): ("error", {"keys": ["1"], "count": 1})}
+
+
 def test_empty_and_repeated_sections(conn):
     doc(conn, "8k", "8-K", {"2.02": "Item 2.02.", "7.01": "Item 7.01 " + LONG,
                            "EX-99.1": "", "EX-99.2": LONG, "EX-99.3": LONG})
@@ -104,7 +120,7 @@ def test_a_document_with_no_sections_and_the_stamps(conn):
     assert findings(conn) == {("none", "no_sections"): ("error", {})}
     stamps = {r[0]: r[1:] for r in conn.execute(
         "SELECT accession_no, form, version, sections, findings FROM ops.section_checks")}
-    assert stamps == {"none": ("8-K", 72, 0, 1), "ok": ("8-K", 72, 1, 0)}
+    assert stamps == {"none": ("8-K", 95, 0, 1), "ok": ("8-K", 95, 1, 0)}
     # parsed later: checked again, the finding goes
     doc(conn, "late", "8-K")
     conn.execute("INSERT INTO silver.filing_sections (accession_no, section_key, parser,"

@@ -124,8 +124,16 @@ export function keyStatFlag(key: string, periodEnd: string | null, flags: StaleF
   return flag;
 }
 
-export const quarterName = (q: Pick<EarningsQuarter, "period_end" | "estimated">): string =>
-  `Quarter ended ${day(q.period_end, true)}${q.estimated ? " (expected)" : ""}`;
+/** A foreign filer's period (migration 095): its 20-F or 40-F year, or a period its 6-K release
+ * reports (a quarter or a half: the release says which). */
+export function foreignForm(form: string | null | undefined): boolean {
+  return /^(20-F|40-F|6-K)/.test(form ?? "");
+}
+
+export const quarterName = (q: Pick<EarningsQuarter, "period_end" | "estimated"> & Partial<Pick<EarningsQuarter, "report" | "release">>): string =>
+  foreignForm(q.report?.form) ? `Fiscal year ended ${day(q.period_end, true)}`
+    : foreignForm(q.release?.form) ? `Period ended ${day(q.period_end, true)}`
+      : `Quarter ended ${day(q.period_end, true)}${q.estimated ? " (expected)" : ""}`;
 
 /** The quarter a page opens on: the newest with a release, else the newest. */
 export function firstQuarter(qs: EarningsQuarter[]): EarningsQuarter | null {
