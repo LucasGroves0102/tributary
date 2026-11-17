@@ -383,6 +383,13 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
   Ambarella ($418M) for CoreWeave and Microsoft; JPMorgan's is unchanged (Bank of America and Wells
   Fargo in it; Goldman 14th; Citigroup has no Item 1 to compare); a target under $500M keeps every
   candidate.
+- **Size fallback** (the owner, Riley 28): after the business-matched peers, up to 5 large companies
+  of the same 4-digit SIC with no business profile the caller can see and TTM revenue of at least 25%
+  of the target's and $5B (`Store.size_peers`, the screener's stored readings), closest in size
+  first, never one already listed; `match.size_peer`. Only for a target of $5B or more. On the 38:
+  ten get some (JPMorgan and Bank of America: Citigroup; Exxon: BP, Phillips 66, Valero, Equinor;
+  NextEra: five utilities), NVIDIA and every target under $5B none. Goldman (SIC 6211, profiled)
+  isn't one.
 - **`match`** says why: `similarity`, `terms` (the shared terms that add the most), `named_by_target` /
   `names_target` (the sentence: accession, section, offsets, to cite), `sic_level`, `same_sector`,
   `same_industry`, `same_filer_category`, `revenue_band`, `same_revenue_band`. `business` is the

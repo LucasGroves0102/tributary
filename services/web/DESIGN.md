@@ -720,7 +720,7 @@ then SIC division and size: Query API README "Peers"), and the page only words i
 (`compare/peers.ts`): each peer's "Why" says how alike the two Business sections read ("very similar",
 "similar", "somewhat similar"), the shared terms ("business: footwear, wholesale channel, dtc"), "named
 as a competitor in Vertiv's 10-K" or "its 10-K names Vertiv as a competitor" (a link that opens that
-sentence in the reader), the same industry and a similar size. Above the table, the company's own most
+sentence in the reader), the same industry and a similar size; a large company of the same SIC listed after them for its size has no Business section to compare, and says so (`size_peer`). Above the table, the company's own most
 distinctive terms. The columns are the answer's: a bank is compared on a bank's lines. Each median says
 how many of the peers it uses ("3 of 4"), and its hover why the others are left out, in the blanks
 vocabulary (not reported, not applicable, not meaningful or not reported since an earlier period,

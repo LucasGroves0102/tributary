@@ -41,6 +41,12 @@ describe("why a peer was suggested", () => {
     const match: PeerMatch = { sic_level: 3, same_filer_category: true, revenue_band: "$1B-$10B", same_revenue_band: true };
     expect(whyText(whyParts(match, ETN, VRT))).toBe("same 3-digit SIC group; same filer category; similar size ($1B-$10B)");
   });
+
+  it("a size-fallback peer says there was no Business section to compare", () => {
+    const match: PeerMatch = { sic_level: 4, same_filer_category: true, revenue_band: "$10B-$100B", same_revenue_band: false, size_peer: true };
+    expect(whyText(whyParts(match, ETN, VRT))).toBe(
+      "same SIC, a large company with at least a quarter of the revenue; no Business section to compare");
+  });
 });
 
 describe("peers by SIC and size say why there is no business text", () => {

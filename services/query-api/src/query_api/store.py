@@ -388,6 +388,33 @@ class Store:
                 """, {"ids": company_ids, "granted": granted})
             return {r.pop("company_id"): r for r in cur.fetchall()}
 
+    def size_peers(self, user_id: str, company_id: str, sic: str, granted: list[str] | None,
+                   revenue: Decimal, floor: Decimal, limit: int) -> list[dict]:
+        """The size fallback's peers (query_api/peers.py): companies of this 4-digit SIC with no
+        business profile the caller can see, TTM revenue read as the screener reads it (stored
+        figures, gold.screen_reading: a value only when current or behind) of at least `floor`,
+        closest to `revenue` first. Values only for `granted` (None: RLS alone, the catalog
+        public); the profile under RLS at filings. One SIC's companies, never the catalog."""
+        gate = "" if granted is None else "AND c.company_id = ANY(%(granted)s)"
+        with self._session(user_id) as cur:
+            cur.execute(
+                f"""
+                SELECT c.company_id, r.value AS revenue
+                FROM silver.companies c
+                CROSS JOIN LATERAL gold.screen_company(c.company_id) s
+                CROSS JOIN LATERAL gold.screen_reading(c.company_id, 'ttm', 'revenue', c.sic,
+                                                       s.latest, s.cached, s.equity, s.currency,
+                                                       s.recent) r
+                WHERE c.sic = %(sic)s AND c.company_id <> %(company)s {gate}
+                  AND (r.status IS NULL OR r.status = 'behind') AND r.value >= %(floor)s
+                  AND NOT EXISTS (SELECT 1 FROM gold.business_profiles b
+                                  WHERE b.company_id = c.company_id)
+                ORDER BY abs(ln(r.value / %(revenue)s::numeric)), c.company_id
+                LIMIT %(limit)s
+                """, {"sic": sic, "company": company_id, "granted": granted, "floor": floor,
+                      "revenue": revenue, "limit": limit})
+            return cur.fetchall()
+
     def sectors(self, user_id: str) -> list[dict]:
         """The sector classification (migration 046): one row per SIC range, and how many
         companies with financials each covers (public metadata, like the SIC codes)."""

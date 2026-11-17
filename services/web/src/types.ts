@@ -1109,6 +1109,9 @@ export interface PeerMatch {
   names_target?: MentionCite | null;
   same_sector?: boolean;
   same_industry?: boolean;
+  /** the size fallback: a large company of the same SIC code with no Business section to compare,
+   * listed after the business-matched peers (query_api/peers.py) */
+  size_peer?: boolean;
 }
 
 /** /v1/companies/{id}/peers: suggested peers, screener-style rows, values only where the caller

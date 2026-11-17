@@ -314,15 +314,17 @@ def test_a_value_merely_behind_says_so_and_still_counts(conn, token):
     assert row_of(body, "Stale Co")["readings"]["operating_margin_ttm"]["status"] == "behind"
 
 
-VENUE, MINER, MAKER = "9200000010", "9200000011", "9200000012"
+VENUE, MINER, MAKER, THIN = "9200000010", "9200000011", "9200000012", "9200000013"
 
 
 def gross_sales(conn):
     """083: a venue booking gross crypto sales (Bullish's 2025: $244.81B, cost $244.73B), a
-    miner at the same SIC at a gross loss, and a maker with a thin margin outside those SICs."""
+    miner at the same SIC at a gross loss, one at a 4.1% gross margin (Cango's 95.9%: under the
+    owner's 97%), and a maker with a thin margin outside those SICs."""
     for cid, name, sic, cost in ((VENUE, "Venue Co", "6199", 244_733_087_000),
                                  (MINER, "Miner Co", "6199", 300_000_000_000),
-                                 (MAKER, "Maker Co", "3674", 244_000_000_000)):
+                                 (MAKER, "Maker Co", "3674", 244_000_000_000),
+                                 (THIN, "Thin Co", "6199", 234_774_000_000)):
         conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
                      " VALUES (%s, %s, %s, %s)", (cid, name, cid, sic))
         conn.execute("INSERT INTO authz.public_access (company_id, tier)"
@@ -337,15 +339,16 @@ def test_gross_sales_at_a_trading_venue_read_not_meaningful(conn, token):
     """Riley 42: Bullish ranked among the largest US companies on gross crypto sales."""
     gross_sales(conn)
     body = screen(conn, token, columns=["revenue_ttm", "revenue_q"], sort="-revenue_ttm")
-    assert set(names(body)[:2]) == {"Maker Co", "Miner Co"}  # equal revenue
+    assert set(names(body)[:3]) == {"Maker Co", "Miner Co", "Thin Co"}  # equal revenue
     venue = row_of(body, "Venue Co")
     for key in ("revenue_ttm", "revenue_q"):
         assert venue["readings"][key]["status"] == "not_meaningful"
-        assert venue["readings"][key]["reason"].startswith("cost of revenue is over 95% of revenue")
+        assert venue["readings"][key]["reason"].startswith("cost of revenue is over 97% of revenue")
     assert Decimal(str(venue["values"]["revenue_ttm"])) == 244_811_387_000  # the figure stays
     assert names(body).index("Venue Co") > names(body).index("Normal Co")
     # a gross loss is revenue earned; a maker's thin margin isn't a venue's
     assert row_of(body, "Miner Co")["readings"] == row_of(body, "Maker Co")["readings"] == {}
+    assert row_of(body, "Thin Co")["readings"] == {}  # 95.9%: a margin, not gross sales
     # no size band, so no band filter
     assert "Venue Co" not in names(screen(conn, token, columns=["revenue_ttm"],
                                           revenue_band="gte100b", sort="name"))
@@ -353,6 +356,37 @@ def test_gross_sales_at_a_trading_venue_read_not_meaningful(conn, token):
     rows = api(conn).get(f"/v1/companies/{VENUE}/financials", headers=token(USER),
                          params={"metrics": ["revenue"], "readings": "true"}).json()["rows"]
     assert rows and all(r.get("not_meaningful") is None for r in rows)
+
+
+def test_size_peers_are_large_same_sic_companies_without_a_profile(conn):
+    """peers.py's size fallback through Store.size_peers, as query_api under RLS: JPMorgan's
+    case (Citigroup has no Item 1; Bank of America has one; a smaller bank and a bank of another
+    SIC don't qualify)."""
+    target, citi, bofa, small, other = (f"92000002{i:02d}" for i in range(1, 6))
+    conn.execute("INSERT INTO authz.user_tiers (user_id, tier) VALUES (%s, 'filings')", (USER,))
+    for cid, sic, rev in ((target, "6021", 203e9), (citi, "6021", 93e9), (bofa, "6021", 120e9),
+                          (small, "6021", 8e9), (other, "6022", 90e9)):
+        conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
+                     " VALUES (%s, %s, %s, %s)", (cid, f"Bank {cid[-1]}", cid, sic))
+        for tier in ("financials", "filings"):
+            conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, %s)",
+                         (cid, tier))
+        reported(conn, cid, "revenue", LATEST, int(rev / 4))
+        derived(conn, cid, "revenue", LATEST, int(rev), {"quarters": []}, unit="USD")
+    conn.execute(
+        "INSERT INTO gold.business_profiles (company_id, accession_no, section_key, filed, parser,"
+        " terms, algorithm) VALUES (%s, 'b', '1', '2026-02-20', 'rust', '{bank}', 'x')", (bofa,))
+    store = Store(OneConnection(conn))
+    floor = Decimal("50.75e9")
+    got = store.size_peers(USER, target, "6021", None, Decimal("203e9"), floor, 5)
+    assert [r["company_id"] for r in got] == [citi]
+    assert Decimal(str(got[0]["revenue"])) == Decimal("93e9")
+    # a closed catalog: values only for what the caller is granted
+    assert store.size_peers(USER, target, "6021", [target], Decimal("203e9"), floor, 5) == []
+    # without the filings tier the profile can't be seen: Bank of America then reads as one
+    conn.execute("DELETE FROM authz.user_tiers WHERE user_id = %s AND tier = 'filings'", (USER,))
+    got = store.size_peers(USER, target, "6021", None, Decimal("203e9"), floor, 5)
+    assert [r["company_id"] for r in got] == [bofa, citi]  # closest in size first
 
 
 def test_a_bank_reads_not_applicable_with_or_without_a_figure(conn, token):

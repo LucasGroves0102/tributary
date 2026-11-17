@@ -22,11 +22,11 @@ from fastapi.responses import Response
 from query_api.authorizer import Readable
 from query_api.csv_export import csv_response
 from query_api.peers import FALLBACK_METHOD as PEER_FALLBACK_METHOD
+from query_api.peers import SIZE_PEER_MAX, sic_match, size_peer_floor
 from query_api.peers import TEXT_MAX_AGE_DAYS as PEER_TEXT_DAYS
 from query_api.peers import Candidate as PeerCandidate
 from query_api.peers import fallback_reason as peer_fallback_reason
 from query_api.peers import rank as rank_peers
-from query_api.peers import sic_match
 from query_api.screener import (
     COLUMNS,
     FILER_CATEGORIES,
@@ -537,6 +537,29 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                     "same_revenue_band": own_band is not None and c.readable
                     and band_of(c.revenue) == own_band,
                 }
+            # the size fallback (peers.py): large same-SIC companies the text can't compare,
+            # after the business-matched ones; read only where the caller reads both revenues
+            floor = size_peer_floor(revenue)
+            if matches and floor is not None and target_sic:
+                big = [p for p in store.size_peers(user_id, company_id, target_sic, granted,
+                                                   revenue, floor, SIZE_PEER_MAX + len(matches))
+                       if p["company_id"] not in matches][:SIZE_PEER_MAX]
+                more = store.peer_facts(user_id, [p["company_id"] for p in big], granted) \
+                    if big else {}
+                for p in big:
+                    f = more.get(p["company_id"]) or {}
+                    matches[p["company_id"]] = {
+                        "size_peer": True, "sic_level": 4,
+                        "same_industry": bool(f.get("sector_industry"))
+                        and f.get("sector_industry") == target[0].get("sector_industry"),
+                        "same_sector": bool(f.get("sector"))
+                        and f.get("sector") == target[0].get("sector"),
+                        "same_filer_category": f.get("filer_category") is not None
+                        and f.get("filer_category") == target[0]["filer_category"],
+                        "revenue_band": band_label(band_of(p["revenue"])),
+                        "same_revenue_band": own_band is not None
+                        and band_of(p["revenue"]) == own_band,
+                    }
         basis = "business" if matches else "sic"
         if basis == "sic":
             ranked = store.peers(user_id, company_id, granted, revenue, limit,
@@ -555,7 +578,10 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         if basis == "business":
             method = ("By business: how alike the two 10-Ks' Business sections (Item 1) are, "
                       "competitors either one names there, then SIC division and TTM revenue size "
-                      "(companies you can read) as weak signals.")
+                      "(companies you can read) as weak signals."
+                      + (" Then large companies of the same SIC code, with at least a quarter of "
+                         "its revenue, that have no Business section to compare."
+                         if any(m.get("size_peer") for m in matches.values()) else ""))
         else:
             # why there is no business text to rank by (peers.py's docstring); the 10-K's Item 1
             # is read only with the filings tier, under RLS

@@ -130,11 +130,63 @@ class BusinessStore(PeerStore):
 
     def peer_facts(self, user_id, ids, granted):
         self.calls.append(("peer_facts", tuple(ids), granted))
-        sic = {AMD: "3674", TSLA: "3711", SHELL: "6770"}
-        return {c: {"sic": sic[c], "sector": "Technology" if c == AMD else "Other",
-                    "sector_industry": "Semiconductors" if c == AMD else "Other",
+        sic = {AMD: "3674", TSLA: "3711", SHELL: "6770", BIG: "3674"}
+        return {c: {"sic": sic[c], "sector": "Technology" if c in (AMD, BIG) else "Other",
+                    "sector_industry": "Semiconductors" if c in (AMD, BIG) else "Other",
                     "filer_category": "large_accelerated", "revenue": Decimal("3e10")}
                 for c in ids}
+
+    def size_peers(self, user_id, company_id, sic, granted, revenue, floor, limit):
+        self.calls.append(("size_peers", company_id, sic, revenue, floor, limit))
+        return []
+
+
+BIG = "0000831001"  # a large company of NVDA's SIC with no business profile (Citigroup's role)
+
+
+class SizeStore(BusinessStore):
+    """The size fallback's answer: AMD (already a business peer) and BIG."""
+
+    def size_peers(self, user_id, company_id, sic, granted, revenue, floor, limit):
+        super().size_peers(user_id, company_id, sic, granted, revenue, floor, limit)
+        return [{"company_id": AMD, "revenue": Decimal("3e10")},
+                {"company_id": BIG, "revenue": Decimal("8e10")}]
+
+    def screen(self, user_id, compiled):
+        rows = super().screen(user_id, compiled)
+        if BIG in compiled.params.get("ids", []):
+            rows.append({**meta(BIG, "BIG CO"), "total": 4,
+                         **{f"v{i}": Decimal("8e10") for i in compiled.slots.values()},
+                         **{f"src{i}": {"period_end": "2026-09-30", "accession_no": "b",
+                                        "form": "10-Q", "filed": "2026-11-04"}
+                            for i in compiled.slots.values()}})
+        return rows
+
+
+def test_large_same_sic_companies_without_a_profile_follow_the_business_peers(token):
+    """The owner's size fallback (Riley 28: Citigroup, no Item 1, missing from JPMorgan's)."""
+    c = client({"alice": {NVDA: {"financials", "filings"}, AMD: {"financials"},
+                          BIG: {"financials"}}}, SizeStore())
+    body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert [p["company_id"] for p in body["peers"]] == [AMD, TSLA, BIG]  # AMD once, BIG last
+    big = body["peers"][2]["match"]
+    assert big["size_peer"] is True and big["sic_level"] == 4 and big["same_industry"] is True
+    assert "similarity" not in big and big["revenue_band"] == "$10B-$100B"
+    assert "same SIC code" in body["method"]
+    revenue = Decimal("130497000000")
+    assert ("size_peers", NVDA, "3674", revenue, revenue * P.SIZE_PEER_SHARE, 7) in c.store.calls
+    assert "size_peer" not in body["peers"][0]["match"]
+    # the plain BusinessStore finds none: the method says nothing of it
+    plain = client({"alice": {NVDA: {"financials", "filings"}}}).get(
+        f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert "same SIC code" not in plain["method"]
+
+
+def test_the_size_fallback_is_for_large_companies_only():
+    assert P.size_peer_floor(None) is None
+    assert P.size_peer_floor(Decimal("4.9e9")) is None  # a small company's peers are its text's
+    assert P.size_peer_floor(Decimal("1e10")) == P.SIZE_PEER_MIN
+    assert P.size_peer_floor(Decimal("2.0315e11")) == Decimal("2.0315e11") * Decimal("0.25")
 
 
 def client(grants, store=None):
