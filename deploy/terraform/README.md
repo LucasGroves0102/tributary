@@ -19,6 +19,27 @@ production and isn't covered. The Query API's own per-address limits and lockout
 A change here reaches Cloudflare only when the owner runs `terraform -chdir=deploy/terraform/cloudflare
 plan` (only the rule's description and expression should change) and `apply`.
 
+## Spreadsheets and the Cloudflare zone
+
+The Google Sheets script calls the Query API from Google's servers (Apps Script `UrlFetchApp`, user
+agent `Mozilla/5.0 (compatible; Google-Apps-Script; beanserver; ...)`); the Excel add-in calls from
+the user's own Office, like the web app. On 2026-11-17 that user agent passed the zone from outside
+Google (200 on a public route, 401 from the API itself on a fake key), while Python's default
+`Python-urllib/3.x` gets Cloudflare's 1010 (the browser signature check). Google's shared addresses
+couldn't be tested from here. Recommended, not applied (an owner decision): a WAF custom rule,
+action Skip, components Browser Integrity Check and Security Level (and Super Bot Fight Mode on a
+paid plan), expression
+
+```
+starts_with(http.request.uri.path, "/api/query/v1/") and
+any(http.request.headers["authorization"][*] contains "Bearer trb_")
+```
+
+(check it in the dashboard's expression editor; Terraform would add a second `cloudflare_ruleset`,
+phase `http_request_firewall_custom`). Requests it lets past still meet the API's own checks: a key is verified on every request and
+limited per key (60 a minute, 10,000 a day). Without it, a blocked Sheets cell reads "the site
+answered 403 without the API's answer (a proxy or firewall page)".
+
 ## Fresh server
 
 ```bash

@@ -2,7 +2,6 @@
 OpenFGA first (layer 1), then Postgres row-level security (layer 2, in Store)."""
 
 import logging
-import re
 import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime
@@ -64,8 +63,9 @@ from query_api.sandbox import (
     sandbox_workspaces,
 )
 from query_api.screener import MetricColumn, ScreenError, metric_column, metric_datasets
-from query_api.shapes import filing_url
+from query_api.shapes import currency_of, filing_url
 from query_api.shapes import period as _period
+from query_api.sheets import add_sheet_routes
 from query_api.status import add_status_routes
 from query_api.store import QUERY_TIMEOUT, Store
 from query_api.text_kpis import add_text_kpi_routes
@@ -442,6 +442,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
 
     add_components_routes(app, store=store, current_user=current_user, require=require,
                           metric_names=metric_names)
+    add_sheet_routes(app, store=store, current_user=current_user, allowed=allowed,
+                     metric_names=metric_names, today=today or today_eastern)
 
     @app.get("/v1/companies/{company_id}/financials", response_model=dict)
     def financials(
@@ -870,12 +872,6 @@ def _no_default(at: tuple[int, int]) -> FormulaError:
 
 
 MONEY_UNITS = ("USD", "USD/shares")
-
-
-def currency_of(unit: str | None) -> str | None:
-    """The currency of a unit: "EUR" of "EUR" and "EUR/shares"; None for shares and ratios."""
-    code = (unit or "").split("/")[0]
-    return code if re.fullmatch(r"[A-Z]{3}", code) else None
 
 
 def _input_currencies(rows: list[dict]) -> dict[int, set[str]]:

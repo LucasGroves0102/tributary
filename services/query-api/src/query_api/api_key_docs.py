@@ -134,6 +134,17 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "currencies can't be combined. `as_of` in the body (a past day): the inputs as they stood "
         "at its end. `mine.<dataset>.<field>` reads your own uploaded data; its points carry "
         "`value_source` \"yours\" and the day each value was known instead of a filing."),
+    ("POST", "/v1/sheets/values"): (
+        "Many figures at once",
+        "Up to 200 figures in one request, for spreadsheets; counts as one request. Body: "
+        "`requests`, each `company` (ticker or CIK), `metric`, `period` (latest, TTM, FY, FY2024, "
+        "FY2024 Q3, CY2024 Q3, a quarter's end day, TTM before a quarter), optional `as_of`, "
+        "`currency` (default USD), `shares` (adjusted or as_filed, for EPS) and `count` (a series "
+        "of up to 40 periods back from latest, TTM or FY). At most 25 companies per request. Each "
+        "answer, in order, has `status`; `value` only when it is a number to show (current, "
+        "behind or ok), else `reason` says why: stale, old, not_meaningful, not_applicable, "
+        "not_computed, other_currency (never converted), no_figure, not_permitted or invalid. "
+        "Every figure has its period, unit and `citation` (filing, form, filed, EDGAR link)."),
 
     # --- read: filings and text -------------------------------------------------------------
     ("GET", "/v1/companies/{company_id}/filings"): (

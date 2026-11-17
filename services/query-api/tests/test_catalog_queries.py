@@ -61,7 +61,14 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
 POSTS = [(f"/v1/companies/{NVDA}/model",
           {"companyId": NVDA, "historyYears": 8, "ytd": True,
            "assumptions": [{"growth": 30, "margin": 55}, {"growth": 20, "margin": 50}],
-           "price": {"value": 180, "date": "2026-11-06"}})]
+           "price": {"value": 180, "date": "2026-11-06"}}),
+         # spreadsheets: many figures of one company, a day and a series among them
+         ("/v1/sheets/values",
+          {"requests": [{"company": "NVDA", "metric": "net_debt"},
+                        {"company": "NVDA", "metric": "dividends_paid", "period": "FY2025",
+                         "as_of": "2024-06-30"},
+                        {"company": "NVDA", "metric": "net_debt", "period": "TTM", "count": 8},
+                        {"company": "NVDA", "metric": "dividends_paid", "period": "FY2019 Q3"}]})]
 MODEL_INPUTS = Path(__file__).parent / "fixtures" / "model" / "nvda.json"
 
 
@@ -184,6 +191,15 @@ class RecordingStore:
 
     def answer_annual_reports(self, *_):
         return {"sic": "3711", "annual": {"10-K": date(2026, 1, 29)}, "has_financials": True}
+
+    def answer_resolve_companies(self, user_id, names):
+        return {n: NVDA for n in names}
+
+    def answer_sheet_readings(self, *_):
+        return {"latest": {}, "ages": {}}
+
+    def answer_not_computed(self, *_):
+        return {}
 
     def answer_model_inputs(self, *_):
         """NVIDIA's production inputs (fixtures/model/nvda.json, Store shape)."""

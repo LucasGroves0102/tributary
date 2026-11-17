@@ -1,11 +1,18 @@
 """Small response helpers shared by app.py and ui.py."""
 
+import re
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal, InvalidOperation, localcontext
 from urllib.parse import quote
 
 EDGAR = "https://www.sec.gov/Archives/edgar/data"
+
+
+def currency_of(unit: str | None) -> str | None:
+    """The currency of a unit: "EUR" of "EUR" and "EUR/shares"; None for shares and ratios."""
+    code = (unit or "").split("/")[0]
+    return code if re.fullmatch(r"[A-Z]{3}", code) else None
 
 
 def filing_url(cik: str | None, accession_no: str) -> str | None:

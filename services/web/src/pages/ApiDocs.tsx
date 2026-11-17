@@ -4,6 +4,7 @@ import { keyRoutes } from "../api";
 import { apiBase, keyRouteList, LIMITS_TEXT, mcpUrl, type KeyRoute } from "../apikeys/apiKeys";
 import { Folio } from "../components/Folio";
 import { Seal } from "../components/Seal";
+import { InYourSpreadsheet } from "./Spreadsheets";
 import { TableScroll } from "../components/TableScroll";
 import { href } from "../route";
 import type { KeyRoutesDoc } from "../types";
@@ -15,15 +16,17 @@ type State = { kind: "loading" } | { kind: "ok"; doc: KeyRoutesDoc } | { kind: "
 
 const SCOPE_WORDS: Record<KeyRoute["scope"], string> = { read: "Read", write: "Write", public: "No key" };
 
-/** "Using the API": how to make a key and use it, with curl and Python, the routes a key can use
- * and the limits. Public (shown signed out too, like Data status). The route list and the limits
+/** "Using the API": how to make a key and use it, with curl and Python, in a spreadsheet, the routes
+ * a key can use and the limits. Public (shown signed out too, like Data status). The route list and the limits
  * come from the Query API's own generated OpenAPI of the key routes (GET /v1/openapi-keys.json);
  * nothing about a route is written here by hand. */
-export function ApiDocs({ load = keyRoutes, signedOut = false, origin }: {
+export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScript }: {
   load?: () => Promise<KeyRoutesDoc | null>;
   signedOut?: boolean;
   /** the site's origin (tests); the page's own by default */
   origin?: string;
+  /** the Google Sheets script's text (tests); fetched from the site by default */
+  loadScript?: () => Promise<string>;
 }) {
   const [state, setState] = useState<State>({ kind: "loading" });
   const fetchDoc = useCallback(() => {
@@ -138,6 +141,8 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin }: {
           client that can send the key as a header.
         </p>
       </Folio>
+
+      <InYourSpreadsheet origin={origin} loadScript={loadScript} />
 
       <Folio name="What a key can do" line="Read, or read and write">
         <dl className="api-scopes">

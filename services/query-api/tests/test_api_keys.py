@@ -470,6 +470,7 @@ def test_every_listed_route_exists_and_is_signed_in():
     assert set(KEY_ROUTES) <= routes, set(KEY_ROUTES) - routes
     assert READ_ROUTES.isdisjoint(WRITE_ROUTES)
     assert all(m == "GET" or (m, p) in WRITE_ROUTES or p.startswith(("/v1/formulas/",))
+               or p == "/v1/sheets/values"
                or p.endswith("/model") for m, p in READ_ROUTES)
     public = {(m, r.path) for r in app.routes if isinstance(r, APIRoute) for m in r.methods}
     assert PUBLIC_ROUTES <= public and PUBLIC_ROUTES.isdisjoint(routes)

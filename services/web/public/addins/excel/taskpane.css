@@ -1,0 +1,168 @@
+/* The Excel task pane. A separate page from the app (no build step): Seal's light and dark values,
+   copied from src/tokens.css by name (--page --sheet --ink --rule --action --error), square corners,
+   no all-caps. Task panes are about 320px wide. */
+:root {
+  --page: #fbfaf8;
+  --sheet: #ffffff;
+  --ink: #161314;
+  --ink-2: #4c4646;
+  --ink-3: #706965;
+  --rule: #e6e0db;
+  --rule-2: #d3cbc4;
+  --action: #161314;
+  --action-ink: #ffffff;
+  --error: #b3111e;
+  --link: #161314;
+  --focus: #161314;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #131011;
+    --sheet: #1a1617;
+    --ink: #ede6dc;
+    --ink-2: #b9b0a6;
+    --ink-3: #958c83;
+    --rule: #2f2829;
+    --rule-2: #433a3b;
+    --action: #ede6dc;
+    --action-ink: #131011;
+    --error: #e05a63;
+    --link: #ede6dc;
+    --focus: #ede6dc;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.pane {
+  max-width: 420px;
+  padding: 16px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h1 {
+  margin: 0;
+  font: 600 20px/1.2 Georgia, "Source Serif 4", serif;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font: 600 15px/1.3 Georgia, "Source Serif 4", serif;
+}
+
+.lede {
+  margin: 8px 0 16px;
+  color: var(--ink-2);
+}
+
+section {
+  padding: 16px 0;
+  border-top: 1px solid var(--rule);
+}
+
+form {
+  margin-top: 12px;
+}
+
+label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-2);
+}
+
+input {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 0;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: var(--action);
+  background: var(--action);
+  color: var(--action-ink);
+}
+
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+a {
+  color: var(--link);
+}
+
+code {
+  font-family: Consolas, "SF Mono", monospace;
+  font-size: 12.5px;
+}
+
+.state {
+  min-height: 1.5em;
+  margin: 8px 0 0;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--error);
+}
+
+.muted {
+  margin: 8px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.fns {
+  margin: 0;
+}
+
+.fns dt {
+  margin-top: 12px;
+}
+
+.fns dd {
+  margin: 4px 0 0;
+  color: var(--ink-2);
+}

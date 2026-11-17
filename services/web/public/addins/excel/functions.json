@@ -1,0 +1,46 @@
+{
+  "functions": [
+    {
+      "id": "VALUE",
+      "name": "VALUE",
+      "description": "A company's figure from its SEC filings, as Tributary reads it. #N/A says why when there is no number to show (stale, n/m, another currency).",
+      "helpUrl": "https://tributary.lucasgroves.dev/#/api",
+      "result": { "type": "any" },
+      "parameters": [
+        { "name": "company", "description": "A ticker (NVDA) or a CIK (1045810).", "type": "any" },
+        { "name": "metric", "description": "A metric name: revenue, net_income, gross_margin, eps_diluted...", "type": "string" },
+        { "name": "period", "description": "latest (default), TTM, FY, FY2024, FY2024 Q3, CY2024 Q3, a quarter's end day, or TTM before a quarter.", "type": "any", "optional": true },
+        { "name": "as_of", "description": "A past day: the figure as it stood at its end, from the filings filed by then.", "type": "any", "optional": true },
+        { "name": "currency", "description": "The currency you accept (default USD). Tributary never converts.", "type": "string", "optional": true }
+      ]
+    },
+    {
+      "id": "SERIES",
+      "name": "SERIES",
+      "description": "A company's figures for its newest periods, oldest first: the period and the figure on each row (spills).",
+      "helpUrl": "https://tributary.lucasgroves.dev/#/api",
+      "result": { "type": "any", "dimensionality": "matrix" },
+      "parameters": [
+        { "name": "company", "description": "A ticker (NVDA) or a CIK (1045810).", "type": "any" },
+        { "name": "metric", "description": "A metric name: revenue, net_income, gross_margin, eps_diluted...", "type": "string" },
+        { "name": "count", "description": "How many periods, 1 to 40 (default 8).", "type": "number", "optional": true },
+        { "name": "span", "description": "quarter (default), TTM or FY.", "type": "string", "optional": true },
+        { "name": "currency", "description": "The currency you accept (default USD). Tributary never converts.", "type": "string", "optional": true }
+      ]
+    },
+    {
+      "id": "SOURCE",
+      "name": "SOURCE",
+      "description": "Where a figure comes from: its filing on EDGAR, or another field (period, filed, form, accession, unit, status, reason).",
+      "helpUrl": "https://tributary.lucasgroves.dev/#/api",
+      "result": { "type": "string" },
+      "parameters": [
+        { "name": "company", "description": "A ticker (NVDA) or a CIK (1045810).", "type": "any" },
+        { "name": "metric", "description": "A metric name: revenue, net_income, gross_margin, eps_diluted...", "type": "string" },
+        { "name": "period", "description": "As in TRIBUTARY.VALUE (default latest).", "type": "any", "optional": true },
+        { "name": "as_of", "description": "As in TRIBUTARY.VALUE.", "type": "any", "optional": true },
+        { "name": "field", "description": "url (default), period, period_end, filed, form, accession, unit, status or reason.", "type": "string", "optional": true }
+      ]
+    }
+  ]
+}

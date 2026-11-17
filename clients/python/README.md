@@ -27,6 +27,11 @@ t.watch(nvda)  # a write key only
   to this machine); a redirect is never followed (it would carry the key elsewhere). `repr()` and
   errors show the key's first 8 characters at most.
 
+In a spreadsheet instead: Tributary's Excel add-in and Google Sheets script (the "Using the API"
+page, "In your spreadsheet") take the same key. Their route, `POST /v1/sheets/values`, carries up to
+200 figures in one request and is open to this client too:
+`t.post("/v1/sheets/values", {"requests": [{"company": "NVDA", "metric": "revenue"}]})`.
+
 Tests: `tests/test_tributary_client.py`, against a fake API on a local port (no network), run by
 the root `make test` (`pytest` collects `clients/`). Packaging it (`pip install tributary-client`)
 is for later.

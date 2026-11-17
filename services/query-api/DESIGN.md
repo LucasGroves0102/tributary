@@ -11,6 +11,7 @@ carry the README's headings, so a README section's "Design notes" link lands on 
 - [Public metadata vs permissioned data](#public-metadata-vs-permissioned-data)
 - [Screener](#screener)
 - [Per-share figures on one share basis](#per-share-figures-on-one-share-basis)
+- [Spreadsheets](#spreadsheets)
 - [Filing recap](#filing-recap)
 - [Peers](#peers)
 - [Workspaces (saved work)](#workspaces-saved-work)
@@ -371,6 +372,42 @@ the 10-K's per-share facts (036) and its restatement findings, under RLS after `
   since 2019), so those companies' per-share history now reads on one basis.
 
 `/annual-per-share` stays (the 10-K's own figures; MCP's tools read it).
+
+## Spreadsheets
+
+`POST /v1/sheets/values` (query_api/sheets.py, its docstring is the spec; roadmap A, 2026-11-17)
+feeds the Excel add-in and the Google Sheets script (web `public/addins`, README "Spreadsheet
+add-ins"). A sheet asks for many single figures at once; the route answers each ask on its own so
+one bad cell never fails the rest, and computes nothing new.
+
+- **Access as the single routes.** Names resolve through `silver.resolve_company` (ticker or CIK:
+  public identity). One `allowed(financials)` per distinct company, all before any read; then Store's
+  own reads under RLS as the caller: `financials` (gold's rows, as of a day through
+  `company_financials_at`), `per_share_inputs` + `per_share.compute` for EPS and weighted shares,
+  `not_computed`, and `sheet_readings` (one query: `gold.latest_reading` per span and metric, and
+  `gold.period_status` of given period ends). An unknown name and an unreadable company get the same
+  answer, the single routes' 403 words, with no company id. OpenFGA down is a 503 for the request.
+- **Readings, not thresholds.** Latest and TTM take `gold.latest_reading`'s status as is. FY and
+  per-share figures (no SQL reading of their own) take its verdicts on the metric (not_applicable,
+  not_computed, stale, old), the row's own n/m and `gold.period_status` of their period. A period
+  asked for by name is a historical figure: n/m and n/a apply, stale and old don't, which is how a
+  stale figure is read anyway. `value` is set only for current, behind and ok.
+- **Currency.** An amount is a number only in the currency asked (`currency`, default USD); a
+  latest amount asked in its own currency reads its age alone (`period_status`, model_inputs'
+  precedent, so stale isn't said there). Never converted: a spreadsheet sums what it is given.
+- **Periods.** FY2024 is gold's TTM row at fiscal Q4 (a balance: its Q4 row), as the Statements'
+  annual view; per-share years are the 10-K's own figure, named by the fourth quarter ending within
+  `MATCH_DAYS` of it. Labels read back as periods (FY2027 Q2, TTM CY2026 Q2, FY2026).
+- **Cost.** One request counts once against a key's limits; at most 200 asks, 25 distinct (name,
+  as_of) pairs (counted on the names sent: no oracle) and 40 periods a series. Per company and day:
+  one `financials` call per span and basis (1 row per metric for latest, 120 for a named period),
+  one readings query, per-share inputs only when asked.
+- **Clients.** Excel batches cells for 50 ms into requests within those limits, one at a time, and
+  keeps answers 10 minutes; Google Sheets sends a range's cells together (`fetchAll` for several
+  requests) and caches six hours. Both send the key only in `Authorization`, to this site.
+- Tests: `test_sheets.py` (fakes: access, readings, periods, per-share, as_of, limits),
+  `test_sheets_db.py` (Postgres, catalog closed: two users, layer 2 alone and both layers),
+  `test_catalog_queries.py` POSTS, web `src/addins/addins.test.ts` (both clients, the manifest).
 
 ## Filing recap
 
