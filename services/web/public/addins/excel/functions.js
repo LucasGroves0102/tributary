@@ -210,8 +210,11 @@
       timer = null;
       var items = queue;
       queue = [];
-      // one batch at a time: never two requests of this workbook racing the key's limits
-      sending = sending.then(function () { return sendAll(items); });
+      // one batch at a time: never two requests of this workbook racing the key's limits. Whatever
+      // goes wrong, every cell of the batch settles and the queue keeps going.
+      sending = sending.then(function () { return sendAll(items); }).catch(function () {
+        items.forEach(function (it) { it.reject(refusal(0, null, null)); });
+      });
     }
 
     function ask(a) {
@@ -276,10 +279,14 @@
 
   var SPANS = { "": "latest", quarter: "latest", q: "latest", latest: "latest", ttm: "TTM", fy: "FY", year: "FY", annual: "FY" };
 
-  /** A series' rows, oldest first: [period, value] (a value it won't show is that point's #N/A). */
+  /** A series' rows, oldest first: [period, value] (a value it won't show is that point's #N/A).
+   * No points: the whole cell's Problem (thrown), never a half-empty spill. */
   function seriesRows(answer) {
-    if (!answer.points) return [[cellValue(answer), ""]];
-    if (!answer.points.length) return [[new Problem("na", "no figure: nothing on file"), ""]];
+    if (!answer.points) {
+      var why = cellValue(answer);
+      throw why instanceof Problem ? why : new Problem("na", "no figure: nothing on file");
+    }
+    if (!answer.points.length) throw new Problem("na", "no figure: nothing on file");
     return answer.points.slice().reverse().map(function (p) {
       return [p.period || p.period_end || "", cellValue(p)];
     });
@@ -314,7 +321,9 @@
           a = makeAsk(company, metric, s, null, currency, n);
         } catch (e) { return Promise.reject(toError(e)); }
         return client.ask(a).then(function (ans) {
-          return seriesRows(ans).map(function (row) {
+          var rows;
+          try { rows = seriesRows(ans); } catch (e) { return fail(e); }
+          return rows.map(function (row) {
             return row.map(function (v) { return v instanceof Problem ? toError(v) : v; });
           });
         }, fail);

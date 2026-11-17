@@ -251,6 +251,23 @@ describe("Excel functions: cells", () => {
       ["FY2027 Q2", 46743000000],
     ]);
     expect(h.sent[0].asks[0]).toMatchObject({ period: "TTM", count: 3 });
+    // nothing to spill: the whole cell says why
+    const denied = settle(fns.series("NOPE", "revenue", 3));
+    await h.flushNow();
+    expect(await denied).toEqual({ error: { error: "na", message: "not permitted: not permitted to read financials for this company" } });
+  });
+
+  it("a batch that throws settles its cells and the queue keeps going", async () => {
+    const h = harness({ reply: (asks, n) => {
+      if (n === 1) throw new Error("boom");
+      return response(200, { values: asks.map(answerFor) });
+    } });
+    const first = settle(h.client.ask(NVDA_REV));
+    await h.flushNow();
+    expect(await first).toMatchObject({ error: { kind: "na" } });
+    const second = settle(h.client.ask({ ...NVDA_REV, company: "TSLA" }));
+    await h.flushNow();
+    expect(await second).toMatchObject({ ok: { status: "current" } });
   });
 
   it("the source is the filing's link, or the field asked for, even where the figure isn't shown", async () => {
