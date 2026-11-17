@@ -152,7 +152,7 @@ class SizeStore(BusinessStore):
         return [{"company_id": AMD, "revenue": Decimal("3e10")},
                 {"company_id": BIG, "revenue": Decimal("8e10")}]
 
-    def screen(self, user_id, compiled):
+    def screen(self, user_id, compiled, known_on=None):
         rows = super().screen(user_id, compiled)
         if BIG in compiled.params.get("ids", []):
             rows.append({**meta(BIG, "BIG CO"), "total": 4,

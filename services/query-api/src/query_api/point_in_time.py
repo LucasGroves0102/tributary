@@ -102,17 +102,21 @@ def restatement_rows(company_id: str, rows: list[dict]) -> list[dict]:
     } for r, kind in zip(rows, found, strict=True)]
 
 
-def originals(company_id: str, rows: list[dict], changes: list[dict]) -> dict[tuple, dict]:
+def originals(company_id: str, view: str, rows: list[dict],
+              changes: list[dict]) -> dict[tuple, dict]:
     """(metric, period_end) -> `original` for each financials row whose value differs from the
-    first value believed for its period (module docstring, 3). rows: the route's rows (value,
-    source_tag, accession_no, filed); changes: gold.restatements' rows for them
-    (Store.originals)."""
+    first value believed for its period (module docstring, 3). rows: the route's rows of `view`
+    (value, value_source, source_tag, accession_no, filed); changes: gold.restatements' rows for
+    them (Store.originals). A TTM view's balance rows are their quarters (value_source reported or
+    derived), the rest its TTM sums."""
     first: dict[tuple, dict] = {}
     for c in changes:  # oldest change first per period: its original is the first version
-        first.setdefault((c["metric"], c["period_end"]), c)
+        first.setdefault((c["span"], c["metric"], c["period_end"]), c)
     pairs = []
     for r in rows:
-        c = first.get((r["metric"], r["period_end"]))
+        span = "quarter" if view == "quarter" or r["value_source"] in ("reported", "derived") \
+            else "ttm"
+        c = first.get((span, r["metric"], r["period_end"]))
         if c is not None and c["original"] != r["value"]:
             pairs.append((r, c))
     found = kinds(company_id, [

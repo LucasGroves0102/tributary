@@ -484,7 +484,7 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                                 for c in statement_callouts(m, s)]
         found: dict[tuple, dict] = {}
         if originals and fmt == "json" and rows:
-            found = point_in_time.originals(company_id, rows, store.originals(
+            found = point_in_time.originals(company_id, view, rows, store.originals(
                 user_id, company_id, view, sorted({r["metric"] for r in rows}), known_on))
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
