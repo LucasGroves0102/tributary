@@ -26,6 +26,7 @@ import hashlib
 import io
 import os
 import re
+import tempfile
 import threading
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager, suppress
@@ -147,9 +148,13 @@ class Store:
         if not directory.is_dir():
             directory.mkdir(parents=True, exist_ok=True)
             _fsync_dir(self.root)
-        tmp = directory / f".{body.sha256}.{os.getpid()}.{threading.get_ident()}.tmp"
+        # a unique temporary name (O_EXCL): two pods storing the same body at once (both PID 1)
+        # must not write into one file
+        fd, name = tempfile.mkstemp(prefix=f".{body.sha256}.", suffix=".tmp", dir=directory)
+        tmp = Path(name)
         try:
-            with open(tmp, "wb") as f:
+            with os.fdopen(fd, "wb") as f:
+                os.fchmod(f.fileno(), 0o644)
                 f.write(body.data)
                 f.flush()
                 os.fsync(f.fileno())

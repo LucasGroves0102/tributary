@@ -50,6 +50,7 @@ def test_put_writes_the_file_under_its_hash_and_read_returns_the_body(tmp_path):
     assert store.verify(body.sha256, len(HTML))
     assert not store.verify(body.sha256, len(HTML) + 1)
     assert [p.name for p in path.parent.iterdir()] == [path.name]  # no temporary left
+    assert path.stat().st_mode & 0o777 == 0o644
 
 
 def test_put_of_a_stored_body_only_touches_it(tmp_path):

@@ -71,7 +71,10 @@ a failed transaction leaves at most an orphan file, which the daily sweep remove
 README "Document bodies"). Rows stored before 150 keep their gzip in `content_gzip` until the
 `bodies` catch-up moves them; every reader takes either. Every writer needs `BODIES_DIR`
 (`uses: bodies` in Helm; `make up-all` mounts the `bodies` volume); the consumer, the crawl and
-`doc-fetcher-exhibits` refuse to start without it.
+`doc-fetcher-exhibits` refuse to start without it. Tools run on the host (`make exhibits`, `make
+segments`, `make section-index`) read `BODIES_DIR` from `.env`, unset by default: the compose
+services' store is the `bodies` volume, so leave it unset (segments and section-index then skip
+moved bodies and the move; `doc-fetcher-exhibits` won't start) or run them in compose.
 
 `doc-fetcher-bodies` checks every moved row's file and, with `--refetch [--limit N]`, downloads
 the missing ones by their stored URL (SEC class from `SEC_CALLER_CLASS`; Helm's suspended

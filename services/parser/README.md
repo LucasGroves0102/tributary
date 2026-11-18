@@ -267,8 +267,9 @@ Reading is no slower (2026-11-17; 635 random hermes documents and 346 exhibits i
 `load_document` + `load_exhibits` per document, laptop): from the gzip column mean 1.22 ms cold /
 1.12 ms warm, p95 4.7 / 4.5 ms, max 30-42 ms; from the zstd files 0.83 / 0.49 ms, p95 1.9 / 1.35
 ms, max 12 / 7 ms. Only the median, small document is 0.15 ms slower cold (a file open where
-Postgres read a few TOAST pages). zstd decompresses ~3x faster than gzip (Rust: the `rust` CI job's
-`read_path_timing`). The Query API never reads bodies (`query_api` has no grant on
+Postgres read a few TOAST pages). parser-rs (the `rust` CI job's `read_path_timing`, release build,
+the NVIDIA and Edison fixtures): gzip from the column 1,621 MB/s, the zstd file read and decompressed
+4,243 MB/s (a 10-K 1.46 ms -> 0.56 ms, an 8-K 0.028 -> 0.027 ms). The Query API never reads bodies (`query_api` has no grant on
 `content_gzip`; the reader's page reads sections), so no route changes.
 
 Once a day the same step first sweeps the store: a file no moved row references and older than a
@@ -280,7 +281,10 @@ and over 1% of the files trashes nothing and says `(held)` (`BODIES_DIR` pointin
 database's store must not empty it). Its counts are the run's `note` (`swept: ...`).
 
 Postgres reuses a moved body's TOAST pages itself; the disk gets them back only when the two tables
-are rewritten. When the move is done (`state` `current` for `bodies` and this returns two zeros):
+are rewritten, so during the move the files (~27 GB in all) sit beside the TOAST they replace: on
+hermes free space dips from ~118 GB to ~90 GB (`DiskSpaceUnder100GB` may fire) until the rewrite. The
+move locks the rows it takes `FOR NO KEY UPDATE`: parsers and loaders inserting rows that reference
+them are never blocked. When the move is done (`state` `current` for `bodies` and this returns two zeros):
 
 ```sql
 SELECT (SELECT count(*) FROM bronze.filing_documents WHERE content_gzip IS NOT NULL) AS documents,

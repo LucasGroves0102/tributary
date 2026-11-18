@@ -129,7 +129,7 @@ def move(conn: psycopg.Connection, store: Store, deadline: float, *, batch: int 
                 "SELECT accession_no, filed, content_sha256, size_bytes"
                 " FROM bronze.filing_documents"
                 " WHERE content_gzip IS NOT NULL AND (filed, accession_no) > (%s, %s)"
-                " ORDER BY filed, accession_no LIMIT %s FOR UPDATE SKIP LOCKED",
+                " ORDER BY filed, accession_no LIMIT %s FOR NO KEY UPDATE SKIP LOCKED",
                 (*after, batch)).fetchall()
             for accession_no, _, sha256, size in rows:
                 _move(conn, store, DOCUMENTS, (accession_no,), sha256, size, moved)
@@ -137,7 +137,7 @@ def move(conn: psycopg.Connection, store: Store, deadline: float, *, batch: int 
                         "SELECT exhibit_type, content_sha256, size_bytes"
                         " FROM bronze.filing_exhibits"
                         " WHERE accession_no = %s AND content_gzip IS NOT NULL"
-                        " ORDER BY exhibit_type FOR UPDATE", (accession_no,)).fetchall():
+                        " ORDER BY exhibit_type FOR NO KEY UPDATE", (accession_no,)).fetchall():
                     _move(conn, store, EXHIBITS, (accession_no, exhibit_type), esha, esize,
                           moved)
         if not rows:
@@ -150,7 +150,7 @@ def move(conn: psycopg.Connection, store: Store, deadline: float, *, batch: int 
                 "SELECT accession_no, exhibit_type, content_sha256, size_bytes"
                 " FROM bronze.filing_exhibits"
                 " WHERE content_gzip IS NOT NULL AND (accession_no, exhibit_type) > (%s, %s)"
-                " ORDER BY accession_no, exhibit_type LIMIT %s FOR UPDATE SKIP LOCKED",
+                " ORDER BY accession_no, exhibit_type LIMIT %s FOR NO KEY UPDATE SKIP LOCKED",
                 (*after, batch)).fetchall()
             for accession_no, exhibit_type, sha256, size in rows:
                 _move(conn, store, EXHIBITS, (accession_no, exhibit_type), sha256, size, moved)
