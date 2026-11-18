@@ -1,7 +1,9 @@
 # parser
 
 FR3, week 1. Consumes `documents.fetched` (from [doc-fetcher](../doc-fetcher)), reads the
-document from `bronze.filing_documents` and its exhibits from `bronze.filing_exhibits`,
+document from `bronze.filing_documents` and its exhibits from `bronze.filing_exhibits` (each body
+from its zstd file in the body store, or from `content_gzip` until it moves: [Document
+bodies](#document-bodies)),
 splits it into Part/Item sections and writes `silver.filing_sections` (`parser = python`,
 `parser_version` = `PARSER_VERSION`). The [Query API](../query-api) reads sections with
 citations from the `gold.filing_sections` view.
@@ -58,7 +60,8 @@ To re-parse only some documents (those without sections, or one form and item) w
 `--reparse-all`, re-queue them through the document crawl's outbox:
 [DESIGN.md](DESIGN.md#re-parsing-only-some-documents-production) has the SQL.
 
-Config (env): `DATABASE_URL` (required), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
+Config (env): `DATABASE_URL` (required), `BODIES_DIR` (the body store; without it a body that is
+a file is skipped as missing), `KAFKA_BOOTSTRAP_SERVERS` (default `localhost:9092`),
 `METRICS_PORT`, `LOG_LEVEL`, the Kafka authentication variables of [libs/kafka](../../libs/kafka)
 (SASL/SCRAM on k3s), `PARSER_TOPIC` / `PARSER_GROUP` (default `documents.fetched` /
 `parser-python`). The chart's `parser-backfill` sets them to `documents.backfill` /
@@ -221,7 +224,9 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
    the next hour's run is never skipped), oldest filing first, under the same lock as
    `section-passages` (one waits for the other; both take the same filings, so they can overlap in
    time without harm);
-5. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
+5. measures diffs of an older `ALGORITHM` (the run itself recomputes them);
+6. moves document bodies out of Postgres for up to `BODIES_SECONDS` (kind `bodies`, migration 150,
+   [below](#document-bodies)), never past the job's 50 minutes.
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
 Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,
@@ -242,6 +247,67 @@ document is re-queued once more (a 10-K, 10-Q or 8-K re-parses to the same rows,
 re-queue also waits while the crawl has over 1,000 targets pending (its first foreign plan). Passages are not paused: 433,157 filings predated
 `furniture-1` (hours).
 Cost and index size: [DESIGN.md](DESIGN.md#section-diffs-and-search-index-cost).
+
+### Document bodies
+
+Since migration 150 a document's or exhibit's body is a zstd file in the body store
+([libs/bodies](../../libs/bodies): `<BODIES_DIR>/<sha[:2]>/<sha>.zst`, the row keeps the hash and
+`body_bytes`); both parsers and facts-fetcher's segments job read it from there, or from
+`content_gzip` while a row still has it. Bodies stored before 150 move by themselves: the catch-up
+kind `bodies` (`bodies.py`, ships running), after the rest of each hourly `section-index` run, for up
+to `BODIES_SECONDS` (900), oldest filing first, 50 documents (with their exhibits) a transaction:
+gunzip, check the SHA-256 and size, write the file (fsync, rename), read it back from disk and check
+again, then NULL `content_gzip` in the same transaction. A body that fails a check stays where it
+is and counts in `failed` (logged with its accession). About 8 ms a document on one core: ~110,000
+an hour, so the ~650,000 documents and ~365,000 exhibits of 2026-11-17 move in roughly 8-10 runs.
+Pause: `UPDATE ops.catchup SET paused = true WHERE kind = 'bodies';` (`false` resumes; a paused kind
+is only measured). Without `BODIES_DIR` the kind records `skipped: no body store (BODIES_DIR)`.
+
+Reading is no slower (2026-11-17; 635 random hermes documents and 346 exhibits in a local Postgres,
+`load_document` + `load_exhibits` per document, laptop): from the gzip column mean 1.22 ms cold /
+1.12 ms warm, p95 4.7 / 4.5 ms, max 30-42 ms; from the zstd files 0.83 / 0.49 ms, p95 1.9 / 1.35
+ms, max 12 / 7 ms. Only the median, small document is 0.15 ms slower cold (a file open where
+Postgres read a few TOAST pages). parser-rs (the `rust` CI job's `read_path_timing`, release build,
+the NVIDIA and Edison fixtures): gzip from the column 1,621 MB/s, the zstd file read and decompressed
+4,243 MB/s (a 10-K 1.46 ms -> 0.56 ms, an 8-K 0.028 -> 0.027 ms). The Query API never reads bodies (`query_api` has no grant on
+`content_gzip`; the reader's page reads sections), so no route changes.
+
+Once a day the same step first sweeps the store: a file no moved row references and older than a
+day (a writer's transaction that never committed; a database restored from an older dump, whose rows
+hold their bodies again) goes to `trash/`, deleted a week later; a moved row whose file is missing
+gets it back from the trash, else counts as missing in `failed` (`doc-fetcher-bodies --refetch`
+downloads it again: doc-fetcher README "Document bodies"). A sweep that finds more than 1,000 orphans
+and over 1% of the files trashes nothing and says `(held)` (`BODIES_DIR` pointing at another
+database's store must not empty it). Its counts are the run's `note` (`swept: ...`).
+
+Postgres reuses a moved body's TOAST pages itself; the disk gets them back only when the two tables
+are rewritten, so during the move the files (~27 GB in all) sit beside the TOAST they replace: on
+hermes free space dips from ~118 GB to ~90 GB (`DiskSpaceUnder100GB` may fire) until the rewrite. The
+move locks the rows it takes `FOR NO KEY UPDATE`: parsers and loaders inserting rows that reference
+them are never blocked. When the move is done (`state` `current` for `bodies` and this returns two zeros):
+
+```sql
+SELECT (SELECT count(*) FROM bronze.filing_documents WHERE content_gzip IS NOT NULL) AS documents,
+       (SELECT count(*) FROM bronze.filing_exhibits WHERE content_gzip IS NOT NULL) AS exhibits,
+       pg_size_pretty(pg_total_relation_size('bronze.filing_documents')) AS documents_size,
+       pg_size_pretty(pg_total_relation_size('bronze.filing_exhibits')) AS exhibits_size;
+```
+
+the owner rewrites them on hermes, at a quiet time (not during a section-index or segments run):
+
+```bash
+sudo -u postgres psql -d tributary -v ON_ERROR_STOP=1 -c "SET lock_timeout = '5s'" \
+  -c "VACUUM (FULL, ANALYZE, VERBOSE) bronze.filing_exhibits" \
+  -c "VACUUM (FULL, ANALYZE, VERBOSE) bronze.filing_documents"
+```
+
+Each holds an ACCESS EXCLUSIVE lock on its table while it copies the live rows (heaps of 126 MB and
+175 MB, TOAST nearly empty, indexes rebuilt): seconds to a minute each, during which document
+reads (the parsers, the Query API's filing metadata) and doc-fetcher's inserts wait. It needs free
+space for the new copy only (well under 1 GB each) and returns ~35 GB (the two TOAST tables, 29 GB
+and 4.9 GB, and their indexes, 2026-11-17). `lock_timeout` makes it give up rather than queue
+behind a long reader; run it again. Dumps don't wait for it: pg_dump reads live rows only, so the
+weekly full dump loses the bodies as soon as they move.
 
 ## Peers by business
 

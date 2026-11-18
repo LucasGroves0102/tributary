@@ -2,8 +2,9 @@
 
 FR2b, week 1. Consumes `filings.raw`; for 10-K, 10-Q and 8-K filings, and foreign filers' 20-F,
 40-F and results-release 6-Ks (migration 095, [below](#foreign-filers)), fetches the filing index
-page, then the primary document, stores it gzip-compressed in `bronze.filing_documents` and
-publishes `documents.fetched` for the [parser](../parser). For 8-Ks and 6-Ks it also stores the
+page, then the primary document, stores it in `bronze.filing_documents` (its body as a zstd file
+in the [body store](#document-bodies)) and publishes `documents.fetched` for the
+[parser](../parser). For 8-Ks and 6-Ks it also stores the
 EX-99.x exhibits (press releases), for 40-Fs the EX-99.x (annual information form, MD&A,
 statements), for 10-Ks the EX-13 (the annual report to shareholders, where IBM, Wells Fargo and
 others print their statements, Item 8 only pointing to it; 076), in `bronze.filing_exhibits`
@@ -11,8 +12,8 @@ others print their statements, Item 8 only pointing to it; 076), in `bronze.fili
 and 5 in the same feed are queued and stored as [insider filings](#insider-filings-forms-3-4-5).
 
 A filing is stored whole or not at all (migration 059): the index, the document and every exhibit
-are fetched first, then the document, its exhibits and an `ops.document_outbox` row commit in one
-transaction. The outbox row is deleted when Kafka confirms `documents.fetched`; an unconfirmed
+are fetched first, their bodies' files written (migration 150), then the document, its exhibits and
+an `ops.document_outbox` row commit in one transaction. The outbox row is deleted when Kafka confirms `documents.fetched`; an unconfirmed
 event (Kafka down, a crash in between) is sent again at start and every minute
 (`tributary_documents_republished_total`). The oldest owed rows are taken among those whose
 document is still there, and a row whose document was deleted is cleared, so no number of those
@@ -58,6 +59,29 @@ Documents are referenced, not embedded, in `documents.fetched`: a 10-K is ~2 MB 
 over Kafka's default 1 MB message limit. Event shapes are in
 [streaming/topics.md](../../streaming/topics.md).
 
+## Document bodies
+
+Since migration 150 every document and exhibit body is a file, not a Postgres column: zstd
+level 12 (with a frame checksum) of the bytes as fetched, named by their SHA-256 (the row's
+`content_sha256`), `<BODIES_DIR>/<sha[:2]>/<sha>.zst` ([libs/bodies](../../libs/bodies)). The row
+keeps the hash, the raw size (`size_bytes`) and the file's size (`body_bytes`); `content_gzip` is
+NULL. Writers put the files first (a temporary name, fsync, rename, the directory fsynced; a body
+already there is only touched), then commit the rows, so a committed row always has its file and
+a failed transaction leaves at most an orphan file, which the daily sweep removes (services/parser
+README "Document bodies"). Rows stored before 150 keep their gzip in `content_gzip` until the
+`bodies` catch-up moves them; every reader takes either. Every writer needs `BODIES_DIR`
+(`uses: bodies` in Helm; `make up-all` mounts the `bodies` volume); the consumer, the crawl and
+`doc-fetcher-exhibits` refuse to start without it. Tools run on the host (`make exhibits`, `make
+segments`, `make section-index`) read `BODIES_DIR` from `.env`, unset by default: the compose
+services' store is the `bodies` volume, so leave it unset (segments and section-index then skip
+moved bodies and the move; `doc-fetcher-exhibits` won't start) or run them in compose.
+
+`doc-fetcher-bodies` checks every moved row's file and, with `--refetch [--limit N]`, downloads
+the missing ones by their stored URL (SEC class from `SEC_CALLER_CLASS`; Helm's suspended
+`bodies-refetch` runs it in the bulk class) and stores each only if it is still the stored body's
+hash: a file the SEC changed since is reported, never stored. Body files have no backup of their
+own (deploy/host README "Document bodies"): this is how a lost one comes back.
+
 ## Jobs
 
 | Command | Make target | Does |
@@ -67,11 +91,12 @@ over Kafka's default 1 MB message limit. Event shapes are in
 | `doc-fetcher-exhibits` | `make exhibits` | fetches EX-99.x exhibits for stored 8-Ks that have none, then `make exhibits` re-parses |
 | `doc-crawler` | `make crawl` | the document crawl below: every operating company's filings, not just tracked ones |
 | `doc-fetcher-insiders` | (Helm `insiders-backfill`, `insiders-catchup`) | the bounded insider backfill below, and its daily 7-day catch-up |
+| `doc-fetcher-bodies` | (Helm `bodies-refetch`) | counts document bodies missing from the body store; `--refetch` downloads them ([above](#document-bodies)) |
 
 On k3s, `seed-documents` is a suspended CronJob for filling a new database
 (`kubectl -n tributary create job --from=cronjob/seed-documents seed-1`).
 
-Config (env): `SEC_USER_AGENT`, `DATABASE_URL` (both required), `KAFKA_BOOTSTRAP_SERVERS`
+Config (env): `SEC_USER_AGENT`, `DATABASE_URL`, `BODIES_DIR` (all required), `KAFKA_BOOTSTRAP_SERVERS`
 (default `localhost:9092`), `FETCH_OPERATING` (default `true`), `FETCH_8K_ITEMS` (default the
 material items above; `all` for every 8-K), `FETCH_INSIDERS` (default `true`), `METRICS_PORT`, `LOG_LEVEL`, and the Kafka authentication variables of [libs/kafka](../../libs/kafka) (SASL/SCRAM on k3s).
 The insider job reads `INSIDERS_DAYS` and `INSIDERS_LIMIT` ([below](#insider-filings-forms-3-4-5)),
@@ -157,7 +182,7 @@ results-release 6-K primary documents, 8-K, 6-K and 40-F EX-99.x and 10-K EX-13 
 6-K or 40-F reads its index first: one more request) of
 every company with gold financials (the operating companies, ~6,000) for the last `CRAWL_YEARS`
 years (or since `CRAWL_SINCE`, a date, when that is earlier: a backfill's fixed start), into the same
-bronze tables, in the same gzip format the live doc-fetcher writes and
+bronze tables, as the same zstd body files the live doc-fetcher writes and
 both parsers read. 8-Ks only with an item in `CRAWL_8K_ITEMS` (default `2.02,7.01,8.01`:
 results, Reg FD and other events, where the press releases are; `all` for every 8-K).
 Production also takes the material-event items (1.01-1.03, 1.05, 2.01, 2.03-2.06, 3.01-3.03, 4.01,
@@ -199,7 +224,7 @@ How it runs:
   (one request); 8-Ks read the filing index for the primary document and exhibits, like
   doc-fetcher. All through `sec_client` with `SEC_CALLER_CLASS=bulk`, so the crawl only gets
   tokens the live and batch callers leave and the shared limit keeps the host under the SEC's
-  10 req/s. Bodies are gzipped and hashed while they stream; files over
+  10 req/s. Bodies are zstd-compressed and hashed while they stream; files over
   `CRAWL_MAX_DOCUMENT_MB` (100) or empty are skipped. 404s fail at once; other errors retry
   with backoff (10 min, doubling) up to `CRAWL_MAX_ATTEMPTS` (4); a batch where everything
   fails backs off 5 minutes (`erroring`). Requeue failures with
@@ -217,9 +242,10 @@ How it runs:
   `CRAWL_MIN_FREE_GB` (50), else the crawler pauses (`disk_low`) and rechecks every 5 minutes.
 - **Pause** without a deploy: `UPDATE ops.doc_crawl_control SET paused = true` (and `false`).
 
-Sizes, from samples (gzip -9 as stored, measured on the NVIDIA fixtures): 10-K 1.97 MB →
-166 KB (11.9×), 10-Q 1.52 MB → 95 KB (16.0×), 8-K 29 KB → 5.6 KB (5.3×). xz -9 would save
-another ~28% on 10-K/10-Q (~5-7 GB in total), not worth a second format in both parsers.
+Sizes, from samples (gzip -9 as stored until migration 150, measured on the NVIDIA fixtures):
+10-K 1.97 MB → 166 KB (11.9×), 10-Q 1.52 MB → 95 KB (16.0×), 8-K 29 KB → 5.6 KB (5.3×). Since 150
+the files are zstd-12: 0.72 of the gzip bytes on 635 sampled hermes documents, 0.77 on exhibits
+(migration 150's header).
 Section text is 9-21% of the HTML. Tracked-company averages in bronze (parser-rs README):
 10-K 3.3 MB, 10-Q 2.3 MB, 8-K 44 KB, EX-99 exhibit 310 KB. `ops.doc_crawl_status` reports the
 measured compression ratio and the projected final stored size as the crawl goes.

@@ -11,6 +11,7 @@ import pytest
 from facts_fetcher.ixbrl import extract_chunks, extract_gzip, parse_value, plain
 from facts_fetcher.labels import member_label, words
 from facts_fetcher.segments import build_row, decompress, fact_dict, project
+from tributary_bodies import Body, MissingBody, Store
 
 HERE = Path(__file__).parent
 PARSER = HERE.parents[1] / "parser" / "tests" / "fixtures"
@@ -255,3 +256,19 @@ def test_build_row_without_inline_xbrl_or_broken():
     assert build_row("a", "1", "s", plain_html, AXES).status == "no_ixbrl"
     broken = build_row("a", "1", "s", b"not gzip", AXES)
     assert broken.status == "error" and broken.error
+
+
+def test_build_row_reads_a_body_file(tmp_path):
+    """Migration 150: the same extract from the zstd file as from the column; a corrupt file is
+    an error row, a missing one raises (the run skips it and tries again)."""
+    raw = (IXBRL / "pep-10-K-2025.htm.gz").read_bytes()
+    store = Store(tmp_path)
+    body = Body.of(gzip.decompress(raw))
+    store.put(body)
+    from_file = build_row("p", "0000077476", body.sha256, None, AXES, store)
+    assert from_file == build_row("p", "0000077476", body.sha256, raw, AXES)
+    store.path(body.sha256).write_bytes(b"not zstd")
+    assert build_row("p", "1", body.sha256, None, AXES, store).status == "error"
+    store.path(body.sha256).unlink()
+    with pytest.raises(MissingBody):
+        build_row("p", "1", body.sha256, None, AXES, store)

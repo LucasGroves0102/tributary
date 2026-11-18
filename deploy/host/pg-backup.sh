@@ -14,8 +14,9 @@
 # finds them empty and the hourly catch-up replays every company (about a day). Each dump lists its schema-only tables
 # in <db>.schema-only-tables and comes with <db>.rowcounts, every table's row count in the dump's
 # own snapshot, which pg-restore-test.sh checks the restore against. Dumps are compressed with
-# COMPRESS (zstd:1): document bodies are already gzip, and pg_dump's default gzip spent most of
-# a full dump's ~70 minutes recompressing them on one core.
+# COMPRESS (zstd:1): document bodies were gzip, and pg_dump's default gzip spent most of a full
+# dump's ~70 minutes recompressing them on one core. Since migration 150 the bodies are files in
+# the body store, in no dump (README "Document bodies"); rows not moved yet still carry theirs.
 set -euo pipefail
 cd /
 

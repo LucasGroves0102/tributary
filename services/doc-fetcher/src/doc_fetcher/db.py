@@ -1,12 +1,12 @@
 """Tracked-company lookups and bronze document writes."""
 
-import gzip
-import hashlib
+import os
 from dataclasses import dataclass
 
 import psycopg
 
 from doc_fetcher.index import Exhibit, FilingIndex
+from tributary_bodies import Body, Store
 
 
 def tracked_ciks(conn: psycopg.Connection) -> set[str]:
@@ -46,51 +46,61 @@ def already_fetched(conn: psycopg.Connection, accession_no: str) -> bool:
     ).fetchone() is not None
 
 
+def body_store() -> Store:
+    """The body store every writer needs (BODIES_DIR, migration 150)."""
+    store = Store.from_env()
+    if store is None:
+        raise SystemExit("BODIES_DIR is not set: document bodies are files (migration 150)")
+    os.makedirs(store.root, exist_ok=True)
+    return store
+
+
 @dataclass(frozen=True)
-class Blob:
-    """A fetched file as stored: gzip bytes, plus SHA-256 and size of the uncompressed bytes."""
-    content_gzip: bytes
+class Stored:
+    """A body whose file is in the store (`put`): what its row records."""
     sha256: str
     size: int
+    body_bytes: int
 
-    @classmethod
-    def of(cls, content: bytes) -> "Blob":
-        return cls(gzip.compress(content), hashlib.sha256(content).hexdigest(), len(content))
+
+def put(store: Store, body: Body) -> Stored:
+    """Write the body's file (durable, idempotent by hash). Call BEFORE the transaction that
+    inserts its row: a committed row always has its file; a file whose row never commits is an
+    orphan the sweep removes (services/parser bodies.py)."""
+    return Stored(body.sha256, body.size, store.put(body))
 
 
 def insert_document(
     conn: psycopg.Connection, accession_no: str, cik: str, form: str,
-    index: FilingIndex, content: bytes | Blob,
+    index: FilingIndex, body: Stored,
 ) -> str:
-    """Store the document; returns its SHA-256. A concurrent duplicate is ignored."""
-    blob = content if isinstance(content, Blob) else Blob.of(content)
+    """Store the document's row; returns its SHA-256. A concurrent duplicate is ignored."""
     conn.execute(
         """
         INSERT INTO bronze.filing_documents
             (accession_no, cik, form, filed, period_of_report, document_name, url,
-             content_gzip, content_sha256, size_bytes)
+             content_sha256, size_bytes, body_bytes)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (accession_no) DO NOTHING
         """,
         (accession_no, cik, form, index.filed, index.period_of_report, index.document_name,
-         index.url, blob.content_gzip, blob.sha256, blob.size),
+         index.url, body.sha256, body.size, body.body_bytes),
     )
-    return blob.sha256
+    return body.sha256
 
 
 def insert_exhibit(conn: psycopg.Connection, accession_no: str, exhibit: Exhibit,
-                   content: bytes | Blob) -> None:
-    blob = content if isinstance(content, Blob) else Blob.of(content)
+                   body: Stored) -> None:
     conn.execute(
         """
         INSERT INTO bronze.filing_exhibits
-            (accession_no, exhibit_type, description, document_name, url, content_gzip,
-             content_sha256, size_bytes)
+            (accession_no, exhibit_type, description, document_name, url, content_sha256,
+             size_bytes, body_bytes)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (accession_no, exhibit_type) DO NOTHING
         """,
         (accession_no, exhibit.exhibit_type, exhibit.description, exhibit.document_name,
-         exhibit.url, blob.content_gzip, blob.sha256, blob.size),
+         exhibit.url, body.sha256, body.size, body.body_bytes),
     )
 
 

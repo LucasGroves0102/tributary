@@ -34,6 +34,7 @@ from psycopg.types.json import Jsonb
 
 from filing_parser import statements
 from filing_parser.diff import ALGORITHM, Diff, diff
+from tributary_bodies import Store
 from tributary_telemetry.logs import configure_logging
 
 log = logging.getLogger("parser_index")
@@ -360,6 +361,10 @@ def main(argv: Iterable[str] | None = None) -> None:
                         default=float(os.environ.get("CATCHUP_SECONDS", 1200)),
                         help="after a run that finished its work: seconds of older passages"
                              " rebuilt (default: $CATCHUP_SECONDS or 1200)")
+    parser.add_argument("--bodies-seconds", type=float,
+                        default=float(os.environ.get("BODIES_SECONDS", 900)),
+                        help="... then seconds of document bodies moved out of Postgres into the"
+                             " body store, BODIES_DIR (default: $BODIES_SECONDS or 900)")
     parser.add_argument("--parser-catchup", type=int,
                         default=int(os.environ.get("PARSER_CATCHUP_PER_RUN", 3000)),
                         help="... and documents of an older parser re-queued for parser-backfill"
@@ -383,7 +388,9 @@ def main(argv: Iterable[str] | None = None) -> None:
             from filing_parser import catchup  # imports this module
 
             catchup.run(conn, catchup.budget(args.catchup_seconds, time.monotonic() - started),
-                        args.parser_catchup, stats.diffed)
+                        args.parser_catchup, stats.diffed, store=Store.from_env(),
+                        bodies_seconds=args.bodies_seconds,
+                        job_deadline=started + catchup.JOB_SECONDS)
         elif stats.locked_out:  # a hand-run job holds the lock: the status says so (079)
             from filing_parser import catchup
 

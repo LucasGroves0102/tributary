@@ -14,6 +14,7 @@ from prometheus_client import Counter, Histogram
 
 from filing_parser.db import all_accessions, load_document, load_exhibits, write_sections
 from filing_parser.sections import exhibit_section, parse
+from tributary_bodies import Store
 from tributary_kafka import client_config
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, serve_metrics
 
@@ -32,13 +33,13 @@ PARSE_SECONDS = Histogram("tributary_parse_duration_seconds",
                           ["form"], buckets=(0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30))
 
 
-def parse_one(conn: psycopg.Connection, accession_no: str) -> None:
-    form, content = load_document(conn, accession_no)
+def parse_one(conn: psycopg.Connection, accession_no: str, store: Store | None = None) -> None:
+    form, content = load_document(conn, accession_no, store)
     t0 = time.perf_counter()
     try:
         sections = parse(content, form)
         sections += [exhibit_section(t, d, raw)
-                     for t, d, raw in load_exhibits(conn, accession_no)]
+                     for t, d, raw in load_exhibits(conn, accession_no, store)]
     except Exception:
         PARSE_FAILURES.labels(form).inc()
         raise
@@ -58,20 +59,21 @@ def main() -> None:
                     help="re-parse every stored document without Kafka, then exit")
     args = ap.parse_args()
     configure_logging()
+    store = Store.from_env()  # BODIES_DIR: bodies the catch-up moved out of Postgres (150)
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
         if args.reparse_all:
-            # a document the parser can't split (no headings) is logged and passed, as the
-            # consumer does; anything else stops the run
+            # a document the parser can't split (no headings) or whose body is missing is
+            # logged and passed, as the consumer does; anything else stops the run
             for accession_no in all_accessions(conn):
                 try:
-                    parse_one(conn, accession_no)
+                    parse_one(conn, accession_no, store)
                 except (ValueError, KeyError) as e:
                     log.error("skipping %s: %s", accession_no, e)
             return
-        consume(conn)
+        consume(conn, store)
 
 
-def consume(conn: psycopg.Connection) -> None:
+def consume(conn: psycopg.Connection, store: Store | None = None) -> None:
     topic = os.environ.get("PARSER_TOPIC") or TOPIC
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
@@ -95,7 +97,7 @@ def consume(conn: psycopg.Connection) -> None:
                 raise KafkaException(msg.error())
             CONSUMED.labels(topic).inc()
             try:
-                parse_one(conn, json.loads(msg.value())["accession_no"])
+                parse_one(conn, json.loads(msg.value())["accession_no"], store)
             except (ValueError, KeyError) as e:
                 # TODO: route to a dead-letter topic instead of dropping
                 SKIPPED.labels(topic, "invalid").inc()

@@ -7,14 +7,14 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher", "facts_fetcher", "filing_parser", "authz_sync", "query_api", "tributary_agent", "tributary_mcp", "adversarial_harness", "adversarial_cases", "citation_cases", "tributary_authz", "tributary_sec", "tributary_telemetry", "tributary_kafka"]
+known-first-party = ["poller", "bronze_loader", "company_loader", "doc_fetcher", "facts_fetcher", "filing_parser", "authz_sync", "query_api", "tributary_agent", "tributary_mcp", "adversarial_harness", "adversarial_cases", "citation_cases", "tributary_authz", "tributary_sec", "tributary_telemetry", "tributary_kafka", "tributary_bodies"]
 
 [tool.pytest.ini_options]
 testpaths = ["libs", "services", "tests", "clients"]
 addopts = "--import-mode=importlib"
 
 [tool.pyright]
-include = ["libs/sec/src", "libs/authz/src", "libs/telemetry/src", "libs/kafka/src", "services/*/src", "deploy/platform-setup", "clients/python/tributary_client.py"]
+include = ["libs/sec/src", "libs/authz/src", "libs/telemetry/src", "libs/kafka/src", "libs/bodies/src", "services/*/src", "deploy/platform-setup", "clients/python/tributary_client.py"]
 exclude = ["**/node_modules", "services/web"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"

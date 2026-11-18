@@ -2,19 +2,16 @@
 
 10-K / 10-Q: the primary document named in the submissions history, one request. 8-K, or a
 filing whose primary document is unknown or not HTML: the filing index first (exhibits and the
-primary document's name), like doc-fetcher. Bodies are gzip-compressed and hashed while they
-stream in, so a worker holds the compressed bytes only, and files over `max_bytes` are refused
-without being read to the end.
+primary document's name), like doc-fetcher. Bodies are zstd-compressed and hashed while they
+stream in (tributary_bodies.Compressing), so a worker holds the compressed bytes only, and files
+over `max_bytes` are refused without being read to the end.
 """
 
-import hashlib
-import zlib
 from dataclasses import dataclass, field
 from datetime import date
 
 import httpx
 
-from doc_fetcher.db import Blob
 from doc_fetcher.index import (
     EXHIBITS,
     SEC_BASE,
@@ -24,6 +21,7 @@ from doc_fetcher.index import (
     parse_exhibits,
     parse_index,
 )
+from tributary_bodies import Body, Compressing
 
 CHUNK = 1 << 16
 
@@ -42,8 +40,8 @@ class Target:
 @dataclass
 class Fetched:
     index: FilingIndex
-    document: Blob
-    exhibits: list[tuple[Exhibit, Blob]] = field(default_factory=list)
+    document: Body
+    exhibits: list[tuple[Exhibit, Body]] = field(default_factory=list)
     requests: int = 0
 
     @property
@@ -56,7 +54,7 @@ class Fetched:
 
     @property
     def stored_bytes(self) -> int:
-        return len(self.document.content_gzip) + sum(len(b.content_gzip) for _, b in self.exhibits)
+        return len(self.document.data) + sum(len(b.data) for _, b in self.exhibits)
 
 
 class Unusable(Exception):
@@ -73,24 +71,18 @@ def needs_index(target: Target) -> bool:
     return target.form in EXHIBITS or "/" in name or not name.endswith((".htm", ".html"))
 
 
-def download(client: httpx.Client, url: str, max_bytes: int) -> Blob:
-    """Stream url into a gzip Blob; Unusable if it's empty or over max_bytes uncompressed."""
-    gz = zlib.compressobj(9, zlib.DEFLATED, 31)  # wbits 31: gzip container, as gzip.compress
-    digest = hashlib.sha256()
-    size = 0
-    parts = []
+def download(client: httpx.Client, url: str, max_bytes: int) -> Body:
+    """Stream url into a compressed Body; Unusable if it's empty or over max_bytes uncompressed."""
+    body = Compressing()
     with client.stream("GET", url) as resp:
         resp.raise_for_status()
         for chunk in resp.iter_bytes(CHUNK):
-            size += len(chunk)
-            if size > max_bytes:
+            if body.size + len(chunk) > max_bytes:
                 raise Unusable(f"over {max_bytes // 2**20} MB: {url}")
-            digest.update(chunk)
-            parts.append(gz.compress(chunk))
-    if size == 0:
+            body.update(chunk)
+    if body.size == 0:
         raise Unusable(f"empty document: {url}")
-    parts.append(gz.flush())
-    return Blob(b"".join(parts), digest.hexdigest(), size)
+    return body.finish()
 
 
 def fetch_target(client: httpx.Client, target: Target, max_bytes: int) -> Fetched:

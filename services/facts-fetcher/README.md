@@ -247,7 +247,7 @@ Postgres only.
 
 | | |
 |---|---|
-| Input | `bronze.filing_documents` (10-K, 10-K/A, 10-Q, 10-Q/A) |
+| Input | `bronze.filing_documents` (10-K, 10-K/A, 10-Q, 10-Q/A): each body from its zstd file in the body store (`BODIES_DIR`, migration 150) or `content_gzip` until it moves |
 | Output | `bronze.filing_xbrl` → `silver.segment_facts` → `gold.segment_financials` (view `gold.segments`), `ops.quality_findings` (`segment_sum_*`) |
 | Ops | `ops.segment_load_status` (per form: documents, extracted, pending, ok / no_ixbrl / errors) |
 
@@ -267,7 +267,9 @@ or each filing's separate instance file.
 
 How it runs (module docstrings hold the exact rules):
 
-- **Extraction** (`ixbrl.py`, `EXTRACTOR_VERSION`): the gzip body is decompressed and fed to
+- **Extraction** (`ixbrl.py`, `EXTRACTOR_VERSION`): the body (`tributary_bodies.open_body`: zstd
+  file or gzip column; a missing file is logged and left pending, never an error row) is
+  decompressed and fed to
   an HTML tokenizer in 1 MB chunks; contexts (period, explicit/typed members), units and every
   `ix:nonFraction` are collected and resolved at the end (header anywhere). Values: `format`
   (num-dot-decimal, num-comma-decimal, zero dash), `scale`, `sign`, kept as exact decimals.

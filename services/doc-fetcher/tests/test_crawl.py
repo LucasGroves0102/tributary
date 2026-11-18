@@ -27,8 +27,8 @@ from doc_fetcher.crawl import (
 )
 from doc_fetcher.crawl_db import Control
 from doc_fetcher.crawl_fetch import Fetched, Target, Unusable, download, fetch_target, needs_index
-from doc_fetcher.db import Blob
 from doc_fetcher.index import FilingIndex
+from tributary_bodies import Body, decompress
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PARSER_FIXTURES = Path(__file__).parents[2] / "parser" / "tests" / "fixtures"
@@ -64,8 +64,8 @@ def test_10q_fetches_the_primary_document_directly():
     assert fetched.requests == 1
     assert fetched.index == FilingIndex(date(2026, 2, 25), date(2026, 1, 25),
                                         "nvda-20260125.htm", url)
-    # stored exactly like doc-fetcher's gzip.compress: both parsers gunzip it
-    assert gzip.decompress(fetched.document.content_gzip) == DOC_8K
+    # a zstd body named by its hash, as doc-fetcher's Body.of: every reader decompresses either
+    assert decompress(fetched.document.data) == DOC_8K
     assert fetched.document.sha256 == hashlib.sha256(DOC_8K).hexdigest()
     assert fetched.document.size == len(DOC_8K)
     assert fetched.exhibits == []
@@ -86,7 +86,7 @@ def test_10k_reads_its_index_for_an_annual_report_exhibit():
         fetched = fetch_target(mock_client(pages, calls), t, 10**8)
         assert calls == list(pages)[:2 + len(exhibits)]
         assert fetched.requests == 2 + len(exhibits)
-        assert [(e.exhibit_type, gzip.decompress(b.content_gzip))
+        assert [(e.exhibit_type, decompress(b.data))
                 for e, b in fetched.exhibits] == exhibits
 
 
@@ -102,12 +102,12 @@ def test_8k_reads_the_index_then_document_and_exhibits():
     assert calls == list(pages)
     assert fetched.requests == 4
     assert fetched.index.document_name == "nvda-20260826.htm"
-    assert [(e.exhibit_type, gzip.decompress(b.content_gzip)) for e, b in fetched.exhibits] == [
+    assert [(e.exhibit_type, decompress(b.data)) for e, b in fetched.exhibits] == [
         ("EX-99.1", b"<html>press release</html>"),
         ("EX-99.2", b"<html>cfo commentary</html>")]
     assert fetched.files == 3
     assert fetched.raw_bytes == len(DOC_8K) + 26 + 27
-    assert fetched.stored_bytes == sum(len(b.content_gzip) for b in
+    assert fetched.stored_bytes == sum(len(b.data) for b in
                                        [fetched.document, *(b for _, b in fetched.exhibits)])
 
 
@@ -294,7 +294,7 @@ class FakeProducer:
 def fetched(t: Target) -> Fetched:
     doc = f"<html>{t.accession_no}</html>".encode()
     return Fetched(FilingIndex(t.filing_date, None, "doc.htm", f"https://sec/{t.accession_no}"),
-                   Blob.of(doc), [], 1)
+                   Body.of(doc), [], 1)
 
 
 def crawler(queue, fetch=fetched, producer=None, free=10**12, **config):

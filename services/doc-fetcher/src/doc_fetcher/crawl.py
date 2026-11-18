@@ -35,6 +35,8 @@ from prometheus_client import Counter, Gauge
 
 from doc_fetcher import crawl_db
 from doc_fetcher.crawl_fetch import Fetched, Target, Unusable, fetch_target
+from doc_fetcher.db import body_store
+from tributary_bodies import Store
 from tributary_kafka import client_config
 from tributary_sec import sec_client
 from tributary_telemetry import configure_logging, count_delivery, serve_metrics
@@ -46,7 +48,7 @@ STATES = ("running", "idle", "paused", "disk_low", "erroring", "stopped")
 FILINGS = Counter("tributary_doc_crawl_filings_total",
                   "Crawl targets handled, by form and outcome", ["form", "outcome"])
 FILES = Counter("tributary_doc_crawl_files_total", "Files stored (documents and exhibits)")
-BYTES = Counter("tributary_doc_crawl_bytes_total", "Bytes stored, uncompressed (raw) and gzip",
+BYTES = Counter("tributary_doc_crawl_bytes_total", "Bytes stored, uncompressed (raw) and zstd",
                 ["kind"])
 PUBLISHED = Counter("tributary_doc_crawl_events_published_total",
                     "documents.backfill events confirmed by Kafka")
@@ -132,8 +134,9 @@ class Queue(Protocol):
 class PgQueue:
     """Queue on one autocommit connection (crawl_db)."""
 
-    def __init__(self, conn: psycopg.Connection) -> None:
+    def __init__(self, conn: psycopg.Connection, bodies: Store) -> None:
         self.conn = conn
+        self.bodies = bodies
 
     def plan(self, since: date, eight_k_items: list[str] | None) -> int:
         return crawl_db.plan(self.conn, since, eight_k_items)
@@ -148,7 +151,7 @@ class PgQueue:
         crawl_db.mark_already_stored(self.conn, accessions)
 
     def store(self, target: Target, fetched: Fetched) -> None:
-        crawl_db.store(self.conn, target, fetched)
+        crawl_db.store(self.conn, self.bodies, target, fetched)
 
     def finish(self, accession_no: str, status: str, error: str) -> None:
         crawl_db.finish(self.conn, accession_no, status, error)
@@ -368,6 +371,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     producer = Producer(client_config({"enable.idempotence": True}))
     user_agent = os.environ["SEC_USER_AGENT"]
+    store = body_store()
     local = threading.local()
 
     def fetch(target: Target) -> Fetched:
@@ -381,7 +385,7 @@ def main() -> None:
              config.topic, config.workers, config.batch, config.min_free_bytes / 1e9,
              config.disk_path)
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
-        crawler = Crawler(PgQueue(conn), fetch, producer, config,
+        crawler = Crawler(PgQueue(conn, store), fetch, producer, config,
                           free_bytes=lambda: disk_free(config.disk_path), stop=stop)
         crawler.run()
     producer.flush(10)
