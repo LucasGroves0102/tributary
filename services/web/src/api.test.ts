@@ -9,7 +9,9 @@ import {
   earnings,
   failureReason,
   financialsView,
+  historyKept,
   itemVersions,
+  perShare,
   noDetail,
   NOT_ANSWERING,
   olderState,
@@ -106,6 +108,15 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     expect(await earnings("t", "0001674101")).toBeNull();
     older(() => Response.json({ detail: "not permitted to read filings for this company" }, { status: 403 }));
     await expect(companyEvents("t", "0001674101")).rejects.toMatchObject({ status: 403 });
+    vi.unstubAllGlobals();
+  });
+
+  it("UI audit (Riley, test 10): the history flag and per-share read as unavailable (null) from an API without them", async () => {
+    older(() => Response.json({ detail: "Not Found" }, { status: 404 }));
+    expect(await historyKept("t", "0001045810", "2025-06-30")).toBeNull();
+    expect(await perShare("t", "0001045810", "ttm", "fiscal", false, 1)).toBeNull();
+    older((s) => Response.json({ company_id: "0001045810", as_of: "", history: false, rows: [], ...(s.url.searchParams.get("as_of") ? { known_on: "2025-06-30" } : {}) }));
+    expect(await historyKept("t", "0001045810", "2025-06-30")).toBe(false);
     vi.unstubAllGlobals();
   });
 
