@@ -24,6 +24,7 @@ closed): one world per module per state. It needs TEST_DATABASE_URL and APP_TEST
 import io
 import os
 import re
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -172,8 +173,9 @@ def public_address(*_a: Any, **_k: Any) -> list:
     return [(2, 1, 6, "", ("151.101.1.1", 443))]
 
 
-class NoGitHub:
-    """GitHub sign-in is enumerated, never used here."""
+class Unreachable:
+    """A client the suite never calls (GitHub sign-in, client metadata documents): their routes
+    are enumerated, not exercised."""
 
 
 def full_app(app_pool: Any, data_pool: Any, authorizer: Any) -> Any:
@@ -188,14 +190,14 @@ def full_app(app_pool: Any, data_pool: Any, authorizer: Any) -> Any:
         watchlists=AppWatchlists(app_pool), sandboxes=AppSandboxes(app_pool),
         sandbox_config=SandboxConfig(enabled=True), clock=lambda: datetime.now(UTC),
         workspaces=AppWorkspaces(app_pool), views=AppViews(app_pool),
-        github_config=GitHubConfig("test-client", "test-secret"), github=NoGitHub(),
+        github_config=GitHubConfig("test-client", "test-secret"), github=Unreachable(),
         github_accounts=AppAccounts(app_pool), thesis_checks=AppThesisChecks(app_pool),
         market_data=market, password_accounts=AppPasswordAccounts(app_pool),
         alerts=AppAlerts(app_pool), webhook_sender=NoSend(), webhook_resolver=public_address,
         api_keys=AppApiKeys(app_pool), api_key_limits=LIMITS, portfolio=AppPortfolio(app_pool),
         userdata=AppUserData(data_pool), watches=AppWatches(app_pool), oauth=AppOAuth(app_pool),
-        oauth_config=OAuthConfig(ISSUER, RESOURCE), client_documents=NoGitHub(),
-        monotonic=__import__("time").monotonic)
+        oauth_config=OAuthConfig(ISSUER, RESOURCE), client_documents=Unreachable(),
+        monotonic=time.monotonic)
 
 
 FULL_APP_PARAMS = ("authorizer", "store", "jwt_secret", "demo_users", "today", "watchlists",
