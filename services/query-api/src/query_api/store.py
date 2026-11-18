@@ -278,11 +278,16 @@ class Store:
             cur.execute(
                 """
                 SELECT r.*,
-                       gold.not_meaningful(r.metric, r.value, (
+                       -- 155: a ratio the company's kind doesn't make first (a lender's gross
+                       -- margin), as gold.reading reads it
+                       coalesce(gold.not_meaningful_for(r.metric, (
+                                    SELECT c.sic FROM silver.companies c
+                                    WHERE c.company_id = %(company)s)),
+                                gold.not_meaningful(r.metric, r.value, (
                            SELECT d.inputs FROM gold.derived_financials d
                            WHERE d.company_id = %(company)s AND d.span = r.span
                              AND d.metric = r.metric AND d.period_end = r.period_end),
-                           NULL, gold.amount_currency(%(company)s))  -- 057
+                           NULL, gold.amount_currency(%(company)s)))  -- 057
                            AS not_meaningful
                 FROM gold.filing_recap(
                     %(company)s,

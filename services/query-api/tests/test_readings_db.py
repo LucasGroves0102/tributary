@@ -168,7 +168,8 @@ def conn():
             Decimal("2787.1"),
             {"revenue": 3e6, "revenue_year_ago": 1000},
         )
-        # a margin high and real, and growth huge and real (Moderna's)
+        # a margin high and real, and growth high and real on a base (155: over 400%, Moderna's
+        # +2,200%, reads n/m; +350% from $803M stays a figure)
         derived(conn, GENUINE, "gross_margin", LATEST, Decimal("0.95"), rev)
         derived(conn, GENUINE, "operating_margin", LATEST, Decimal("0.78"), rev)
         derived(
@@ -176,8 +177,8 @@ def conn():
             GENUINE,
             "revenue_growth",
             LATEST,
-            22,
-            {"revenue": 18.5e9, "revenue_year_ago": 803e6},
+            Decimal("3.5"),
+            {"revenue": 3.6135e9, "revenue_year_ago": 803e6},
         )
         # net debt and margin from 2020, with revenue through 2026
         derived(
@@ -789,10 +790,13 @@ def test_a_us_filer_whose_figures_stopped_is_old_not_once_a_year(conn, token):
         ("operating_margin", "12", {"revenue": 5e4}, "KRW", "larger than revenue"),
         ("net_margin", "-11", {"revenue": 5e10}, "JPY", "ten times revenue"),
         ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "USD", "under $10M"),
-        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "JPY", None),
+        # 155's bound is a ratio, in every currency; the dollar bases still apply only to dollars
+        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "JPY", "a fifth"),
+        ("revenue_growth", "3", {"revenue_year_ago": 4.9e4}, "USD", "under $100K"),
+        ("revenue_growth", "3", {"revenue_year_ago": 4.9e4}, "JPY", None),
         ("revenue_growth", "0.5", {"revenue_year_ago": 5e4}, "EUR", None),
         ("revenue_growth", "-1.4", {"revenue_year_ago": 5e8}, "JPY", "negative"),
-        ("net_income_growth", "15", {"net_income_year_ago": 9e6}, "KRW", None),
+        ("net_income_growth", "15", {"net_income_year_ago": 9e6}, "KRW", "a fifth"),  # 155
         ("net_income_growth", "-3", {"net_income_year_ago": 5e8}, "KRW", "profit to a loss"),
         ("debt_to_equity", "563", {}, "JPY", "over 100 times"),
     ],
@@ -820,7 +824,8 @@ YEN = "9200000011"
 
 def yen_co(conn, revenue):
     """Toyota's shape after 056: every amount in yen, here a ¥50,000 revenue (a small base in
-    dollars it isn't) with a 40% margin and +2,270% growth from ¥4.9M."""
+    dollars it isn't) with a 40% margin and +300% growth from ¥49,000 (155: over 400% is n/m in
+    any currency, so the dollar bases are tested below it)."""
     conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
                  " sic_description) VALUES (%s, 'Yen Co', %s, '3711', 'Motor Vehicles')",
                  (YEN, YEN))
@@ -829,7 +834,7 @@ def yen_co(conn, revenue):
                  (YEN,))
     reported(conn, YEN, "revenue", LATEST, revenue, unit="JPY")
     derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": revenue})
-    derived(conn, YEN, "revenue_growth", LATEST, Decimal("22.7"), {"revenue_year_ago": 4.9e6})
+    derived(conn, YEN, "revenue_growth", LATEST, Decimal("3"), {"revenue_year_ago": 4.9e4})
 
 
 def test_a_yen_companys_small_base_is_not_a_dollar_one(conn, token):
@@ -877,8 +882,9 @@ def test_an_annual_only_yen_filers_currency_is_yen(conn, token):
     derived(conn, YEN, "revenue", LATEST, 50_000, None, unit="JPY")
     derived(conn, YEN, "net_income", LATEST, 20_000, None, unit="JPY")
     derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": 50_000})
-    derived(conn, YEN, "net_income_growth", LATEST, Decimal("22.7"),
-            {"net_income_year_ago": 4.9e6 / 5})
+    # 155: +300% (over 400% reads n/m in any currency); under $100K wouldn't be a dollar base
+    derived(conn, YEN, "net_income_growth", LATEST, Decimal("3"),
+            {"net_income_year_ago": 5_000})
     with conn.cursor() as cur:
         cur.execute("SET LOCAL ROLE query_api")
         cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
