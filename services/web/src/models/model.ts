@@ -238,8 +238,9 @@ export function resizeAssumptions(list: Assumption[], n: number): Assumption[] {
 
 export const fyLabel = (fy: number, forecast = false) => `FY${fy}${forecast ? "E" : ""}`;
 
-/** "5-yr CAGR 8.1%" / "5-yr avg 22.0%", or why there's none. */
-export function statLabel(value: number | null, years: number, what: "CAGR" | "avg"): string {
+/** "5-yr CAGR 8.1%" / "5-yr median 22.0%", or why there's none (the long run's margins are medians since
+ * Morgan 16: query-api model_maths, Statistics). */
+export function statLabel(value: number | null, years: number, what: "CAGR" | "median"): string {
   if (value === null || years === 0) return `no ${what === "CAGR" ? "growth" : "margin"} history`;
   return `${years}-yr ${what} ${(value * 100).toFixed(1)}%`;
 }

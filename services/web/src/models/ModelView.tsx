@@ -142,23 +142,37 @@ export function ModelView({
                   )}
                 </th>
               </tr>
-              {lines.filter((l) => l.group === g).map((l) => (
-                <Fragment key={l.key}>
-                  {shown.map((c, k) => (
-                    <tr key={`${l.key}-${c}`} className={`${k === 0 ? "line-start" : ""}${c === selected && shown.length > 1 ? " selected" : ""}`}>
-                      {k === 0 && <th className="first" scope="row" rowSpan={shown.length}>{l.label}</th>}
-                      {shown.length > 1 && <td className={`case ${c}`}>{caseLabel(c)}</td>}
-                      {columns.map((col) => {
-                        if (col.kind !== "forecast") {
-                          return k === 0 ? <Fact key={col.key} run={run} line={l} col={col} rows={shown.length} /> : null;
-                        }
-                        const p = run.cases[c]?.years[col.index!];
-                        return <Forecast key={col.key} line={l} p={p} c={c} i={col.index!} preview={preview.includes(c)} currency={amountUnit(run)} />;
-                      })}
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
+              {lines.filter((l) => l.group === g).map((l) => {
+                // with several cases the filed figures get their own "Reported" row: history is no case's
+                // (Morgan 29: spanning the cases' rows from the first, it sat in the row labelled "Bear")
+                const several = shown.length > 1;
+                return (
+                  <Fragment key={l.key}>
+                    {several && (
+                      <tr className="line-start reported">
+                        <th className="first" scope="row" rowSpan={shown.length + 1}>{l.label}</th>
+                        <td className="case reported">Reported</td>
+                        {columns.map((col) => col.kind !== "forecast"
+                          ? <Fact key={col.key} run={run} line={l} col={col} rows={1} />
+                          : <td key={col.key} className="n forecast" />)}
+                      </tr>
+                    )}
+                    {shown.map((c) => (
+                      <tr key={`${l.key}-${c}`} className={`${several ? "" : "line-start"}${c === selected && several ? " selected" : ""}`}>
+                        {!several && <th className="first" scope="row">{l.label}</th>}
+                        {several && <td className={`case ${c}`}>{caseLabel(c)}</td>}
+                        {columns.map((col) => {
+                          if (col.kind !== "forecast") {
+                            return several ? <td key={col.key} className={`n ${col.kind}`} /> : <Fact key={col.key} run={run} line={l} col={col} rows={1} />;
+                          }
+                          const p = run.cases[c]?.years[col.index!];
+                          return <Forecast key={col.key} line={l} p={p} c={c} i={col.index!} preview={preview.includes(c)} currency={amountUnit(run)} />;
+                        })}
+                      </tr>
+                    ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           ))}
         </table>

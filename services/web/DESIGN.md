@@ -1099,8 +1099,9 @@ on the folder changed last. Never just the first workspace.
   adjusted with one-offs, interest and other, tax rate, net income, diluted EPS and its growth,
   diluted shares and their change, FCF and its margin, buybacks, and with a price the multiples)
   and bear, base and bull side by side: history years, the TTM (when it isn't a fiscal year end)
-  and the current year's reported quarters once per line, then a row per case for the forecast
-  years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
+  and the current year's reported quarters once per line, in its own "Reported" row (Morgan 29:
+  spanning the cases' rows from the first, the history read as the bear case's), then a row per case
+  for the forecast years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
   share change or EPS growth, and per-share figures before it are marked * with why. Two charts side
   by side, revenue and operating income, each on its own scale (a 4% margin's operating income read as
   zero on a revenue axis, Riley 36), history solid as "Reported", each case dashed (bear and bull lighter,

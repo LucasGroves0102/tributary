@@ -404,7 +404,7 @@ it("adds bear and bull cases to the project's model, switches between them and s
   expect(page.querySelector(".scenario-preview-note")?.textContent).toContain("Previewing the bear case: nothing is added yet.");
   // #156: before it's added, the bear tab's table shows the case it would start as, labelled so,
   // beside the base case
-  const cases = () => [...new Set([...page.querySelectorAll(".model-table td.case")].map((t) => t.textContent))];
+  const cases = () => [...new Set([...page.querySelectorAll(".model-table td.case:not(.reported)")].map((t) => t.textContent))];
   const selected = () => [...new Set([...page.querySelectorAll(".model-table tr.selected td.case")].map((t) => t.textContent))];
   expect(cases()).toEqual(["Bear (preview)", "Base"]);
   await click(button("Add bear and bull cases", page));

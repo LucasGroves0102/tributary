@@ -5405,6 +5405,11 @@ mark.claim-mark {
   color: var(--series-4);
 }
 
+/* the filed figures' own row above the cases (Morgan 29): quiet, like a source */
+.model-table td.case.reported {
+  color: var(--text-3);
+}
+
 /* the price and why past years have no multiple, beside "Valuation at your price" */
 .model-table .group-row .group-sub {
   margin-left: var(--sp-2);

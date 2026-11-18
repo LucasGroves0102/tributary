@@ -288,7 +288,7 @@ def test_checks_the_thesis_and_saves_the_result():
     model = result["assumptions"][0]
     assert model["ref"] == "model-1" and model["item_id"] == MODEL_ID and model["base_fy"] == 2025
     assert model["stats"]["cagr"] == pytest.approx(0.10)
-    assert model["stats"]["avg_margin"] == pytest.approx(0.16)
+    assert model["stats"]["avg_margin"] == pytest.approx(0.20)  # the median since Morgan 16
     assert (model["margin_min"], model["margin_max"]) == (pytest.approx(0.1), pytest.approx(0.2))
     y1, y2 = model["years"]
     assert (y1["fy"], y1["growth_flag"], y1["margin_flag"]) == (2026, "above", "above")

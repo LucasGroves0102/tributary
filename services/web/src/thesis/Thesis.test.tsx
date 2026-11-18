@@ -443,7 +443,7 @@ it("edits a model's assumptions next to their defaults and saves them", async ()
   // year over 4 years, 20% margins, and the run rate it starts from)
   const rules = [...container.querySelectorAll(".model-rules li")].map((l) => l.textContent);
   expect(rules[0]).toContain("4-yr CAGR 10.0%");
-  expect(rules[0]).toContain("5-yr avg 20.0%");
+  expect(rules[0]).toContain("5-yr median 20.0%");
   expect(rules.map((r) => r!.split(":")[0])).toEqual(["Growth and operating margin start at the trailing twelve months to FY2026 Q3 (10.0%, n/a) and close half the gap each year to the long run",
     "Interest and other", "Tax rate", "Share change (buybacks less issuance)", "FCF margin, one rate on revenue (the table shows operating cash flow less capex behind it)"]);
   const hints = () => [...container.querySelectorAll(".assumptions td .faint")].map((h) => h.textContent);

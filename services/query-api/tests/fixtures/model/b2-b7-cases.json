@@ -1,5 +1,5 @@
 {
- "note": "Generated from services/agent model_stats.py; the web app's model.test.ts and services/agent tests/test_model_stats.py both check these numbers (cases: history stats and flags; scenario_cases: which assumptions each scenario uses; default_cases: the run-rate defaults a new model starts from, on real TTM rows of four shapes).",
+ "note": "Generated from services/agent model_stats.py; the web app's model.test.ts and services/agent tests/test_model_stats.py both check these numbers (cases: history stats and flags; scenario_cases: which assumptions each scenario uses; default_cases: the run-rate defaults a new model starts from, on real TTM rows of four shapes). Expectations regenerated from query_api.model_maths on 2026-11-18 (Morgan 16: the long run's margin is the 5-year median, and the CAGR never starts in a trough).",
  "cases": [
   {
    "name": "10% a year, margins 10-22%",
@@ -424,7 +424,7 @@
     "stats": {
      "cagr": 0.10000000000000009,
      "cagr_years": 5,
-     "avg_margin": 0.15999999999999998,
+     "avg_margin": 0.2,
      "margin_years": 5,
      "last_growth": 0.10000000000000009,
      "last_margin": 0.1
@@ -898,7 +898,7 @@
     "stats": {
      "cagr": 0.6725675679020933,
      "cagr_years": 4,
-     "avg_margin": 0.39535931816714415,
+     "avg_margin": 0.3730772088875678,
      "margin_years": 3,
      "last_growth": 1.1420340763599355,
      "last_margin": null
@@ -1747,19 +1747,19 @@
      },
      {
       "growth": 44.2,
-      "margin": 55.6
+      "margin": 59.7
      },
      {
       "growth": 24.6,
-      "margin": 50.8
+      "margin": 56.9
      },
      {
       "growth": 14.8,
-      "margin": 48.4
+      "margin": 55.5
      },
      {
       "growth": 9.9,
-      "margin": 47.2
+      "margin": 54.8
      }
     ],
     "old_default": {
@@ -1773,11 +1773,11 @@
      },
      {
       "growth": 45.2,
-      "margin": 55.6
+      "margin": 59.7
      },
      {
       "growth": 24.6,
-      "margin": 50.8
+      "margin": 56.9
      }
     ],
     "user_set": [
@@ -2159,19 +2159,19 @@
      },
      {
       "growth": 20.1,
-      "margin": 15.7
+      "margin": 16.4
      },
      {
       "growth": 12.6,
-      "margin": 13.6
+      "margin": 14.6
      },
      {
       "growth": 8.8,
-      "margin": 12.5
+      "margin": 13.6
      },
      {
       "growth": 6.9,
-      "margin": 11.9
+      "margin": 13.2
      }
     ],
     "old_default": {
@@ -2185,11 +2185,11 @@
      },
      {
       "growth": 21.1,
-      "margin": 15.7
+      "margin": 16.4
      },
      {
       "growth": 12.6,
-      "margin": 13.6
+      "margin": 14.6
      }
     ],
     "user_set": [
@@ -2667,19 +2667,19 @@
      },
      {
       "growth": 5.7,
-      "margin": 22.2
+      "margin": 22.6
      },
      {
       "growth": 5.3,
-      "margin": 21.5
+      "margin": 22.1
      },
      {
       "growth": 5.2,
-      "margin": 21.2
+      "margin": 21.9
      },
      {
       "growth": 5.1,
-      "margin": 21.0
+      "margin": 21.8
      }
     ],
     "old_default": {
@@ -2693,11 +2693,11 @@
      },
      {
       "growth": 6.7,
-      "margin": 22.2
+      "margin": 22.6
      },
      {
       "growth": 5.3,
-      "margin": 21.5
+      "margin": 22.1
      }
     ],
     "user_set": [
@@ -3205,19 +3205,19 @@
      },
      {
       "growth": 6.0,
-      "margin": 1.7
+      "margin": 1.6
      },
      {
       "growth": 3.0,
-      "margin": 1.1
+      "margin": 0.9
      },
      {
       "growth": 1.5,
-      "margin": 0.8
+      "margin": 0.5
      },
      {
       "growth": 0.8,
-      "margin": 0.6
+      "margin": 0.3
      }
     ],
     "old_default": {
@@ -3231,11 +3231,11 @@
      },
      {
       "growth": 7.0,
-      "margin": 1.7
+      "margin": 1.6
      },
      {
       "growth": 3.0,
-      "margin": 1.1
+      "margin": 0.9
      }
     ],
     "user_set": [

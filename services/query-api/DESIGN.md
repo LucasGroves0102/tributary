@@ -666,7 +666,8 @@ by more than half in a year is a split or a merger, not buybacks, so that year h
 or EPS growth and the years before it are on another share basis: Deckers' 6-for-1, NVIDIA's 4- and
 10-for-1, Vertiv's SPAC merger), `ttm` (the latest TTM when it
 isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
-quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
+quarters a year earlier), `stats` and `run_rate` (B2 and B7's; since Morgan 16 the long run is
+the 5-year median margin and FCF margin, and the CAGR never starts in a trough, below), and per case (`bear`,
 `base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
 `defaults` (what Reset sets, per year; a bear or bull year's FCF margin follows the case's own
 operating margin, below) and the projected `years` (revenue, growth, organic growth,
@@ -691,6 +692,19 @@ price's currency (`market_cap_currency`), but EV and every multiple are left out
 they agree, net debt in that currency (its reading says `other_currency`: not a dollar figure) is
 read by its age alone, as a dollar company's is, so a euro price gives a euro company's EV and EV
 multiples in euros.
+
+The long run (Morgan 16, test 11): Booking's base case faded its 32.8% margin toward a 5-year mean
+with FY2021 in it, and the thesis check compared 6% growth with a 31.7% "5-yr CAGR" from the FY2020
+trough. Now the margins' long run is the 5-year median, and a CAGR whose start year is more than 20%
+below the best of the two years before it starts at that year (6 or 7 years; `cagr_years` says).
+Measured on hermes' TTM rows of 45 companies (2026-11-18): the CAGR moves for 20, every one a 2020
+trough, pandemic or oil price (Booking 31.7% to 10.2% from FY2019, Delta 30.0% to 5.1%, Hilton 22.8%
+to 4.1%, Exxon 12.9% to 2.2%, Boeing 9.0% to -1.7%), the other 25 unchanged (NVIDIA 66.9%); the margin's
+long run moves where one year is an outlier: Carnival's base case faded to -67.8% by year 5 (a
+-371% FY2021 in the mean) and now to 9.5%, Norwegian -71.1% to 11.1%, Royal Caribbean -33.6% to
+21.1%, NVIDIA 47.2% to 54.8% (FY2023's write-down year), Booking 29.2% to 30.0%; Apple, Costco,
+Walmart, PepsiCo within 0.3 points. Year 1 (the run rate) never moves. `user_set` still compares
+with today's default and the pre-B7 flat one (on B2's mean and window, `_flat`), no third.
 
 Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
 Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose

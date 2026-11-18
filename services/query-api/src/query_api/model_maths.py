@@ -34,9 +34,17 @@ off after tax (a history year's effective rate, or TAX_FALLBACK outside [0, 50%]
 year's tax input). `acquired` is revenue from acquisitions in a fiscal year (the user's figure):
 organic growth = (revenue - acquired) / revenue a year earlier - 1, shown only with such entries.
 
-Statistics (B2, unchanged): the base year is the latest fiscal year with revenue; CAGR =
-(revenue_end / revenue_start)^(1/n) - 1 from the earliest year in [end - 5, end) with positive
-revenue; average, lowest and highest operating margin over the 5 years ending at the base year.
+Statistics (B2; the long run's basis since Morgan 16): the base year is the latest fiscal year
+with revenue; CAGR = (revenue_end / revenue_start)^(1/n) - 1 from the earliest year in
+[end - 5, end) with positive revenue, unless that year is a trough: revenue more than TROUGH_DROP
+below the best of the TROUGH_YEARS before it, when the CAGR starts at that best year instead (n
+then 6 or 7: Booking's FY2020, $6.8B against FY2019's $15.1B, made a 31.7% "5-year CAGR" of a
+recovery; from FY2019 it is 9.5% a year). `avg_margin` is the MEDIAN operating margin of the 5
+years ending at the base year (the key keeps its name; `avg_fcf_margin` likewise the median FCF
+margin), so one pandemic year doesn't pull the long run: Carnival's -371% FY2021 made a mean of
+-73% that the base case faded to; the median is 9.1%. Lowest and highest margin over the same
+years, as before. The pre-B7 flat default (`old_default`) still reads the mean and the window's
+own CAGR (`_flat`): models saved from it hold those values.
 
 Run rate (B7): the newest TTM revenue against the TTM a year earlier, and that TTM's operating
 margin (less one-offs in its four quarters). Also from that TTM: interest and other over
@@ -61,9 +69,9 @@ latest quarter's); EPS = net income / shares; FCF = FCF margin x revenue. A rate
 blank is the default (`defaulted` lists them).
 
 Defaults (B7, per year; Reset sets them): growth and operating margin start at the run rate and
-close FADE of the gap each year to the long run (growth: the 5-year CAGR held in [0,
-LONG_RUN_GROWTH_CAP]; margin: the 5-year average); FCF margin the same way to its 5-year
-average; interest and other, tax rate and share change held at the run rate. With `ytd` and
+close FADE of the gap each year to the long run (growth: the CAGR held in [0,
+LONG_RUN_GROWTH_CAP]; margin: the 5-year median, Statistics); FCF margin the same way to its
+5-year median; interest and other, tax rate and share change held at the run rate. With `ytd` and
 quarters reported, year 1's remainder starts where any year 1 does, from the trailing twelve
 months (owner's decision, 2026-11-09): growth = the run rate's (the newest TTM over the TTM a year
 earlier), applied to the same remaining quarters a year earlier; margin = the newest TTM's
@@ -127,6 +135,7 @@ from __future__ import annotations
 
 import math
 import re
+import statistics
 from collections.abc import Iterable
 from datetime import date
 from typing import Any
@@ -144,6 +153,8 @@ GROWTH_FLAG_POINTS = 10.0
 MARGIN_EPSILON = 1e-9
 LONG_RUN_GROWTH_CAP = 5.0
 FADE = 0.5
+TROUGH_DROP = 0.2  # a CAGR's start year this far below the best year before it is a trough
+TROUGH_YEARS = 2  # how many years before the start that best year may be
 TAX_FALLBACK = 21.0  # percent: the US federal statutory rate
 TAX_RANGE = (0.0, 50.0)  # an effective rate outside this isn't a rate to carry forward
 SPLIT_CHANGE = 0.5  # a share count change over this is read as a split, not buybacks
@@ -403,20 +414,34 @@ def ttm_column(inputs: dict, adjustments: list[dict]) -> dict | None:
 
 # --- statistics, run rate and defaults (B2 / B7) --------------------------------------------
 
+def _cagr(start: dict | None, end: dict) -> tuple[float | None, int]:
+    n = end["fy"] - start["fy"] if start else 0
+    if start is None or n <= 0 or not end["revenue"] or end["revenue"] <= 0:
+        return None, 0
+    return (end["revenue"] / start["revenue"]) ** (1 / n) - 1, n
+
+
+def _median(values: list[float]) -> float | None:
+    return statistics.median(values) if values else None
+
+
 def stats(years: list[dict], window: int = STATS_WINDOW) -> dict:
     end = base_year(years)
     empty = {"cagr": None, "cagr_years": 0, "avg_margin": None, "margin_years": 0,
              "last_growth": None, "last_margin": None, "margin_min": None, "margin_max": None,
-             "avg_fcf_margin": None, "fcf_years": 0}
+             "avg_fcf_margin": None, "fcf_years": 0, "_flat": {"cagr": None, "margin": None}}
     if end is None:
         return empty
-    in_window = [y for y in years if end["fy"] - window <= y["fy"] <= end["fy"]]
-    start = next((y for y in in_window
-                  if y["revenue"] is not None and y["revenue"] > 0 and y["fy"] < end["fy"]), None)
-    n = end["fy"] - start["fy"] if start else 0
-    cagr = None
-    if start is not None and n > 0 and end["revenue"] > 0:
-        cagr = (end["revenue"] / start["revenue"]) ** (1 / n) - 1
+    positive = [y for y in years if y["revenue"] is not None and y["revenue"] > 0]
+    start = next((y for y in positive if end["fy"] - window <= y["fy"] < end["fy"]), None)
+    flat_cagr, _ = _cagr(start, end)
+    if start is not None:
+        # a trough isn't where growth starts (module docstring, Statistics)
+        before = [y for y in positive if start["fy"] - TROUGH_YEARS <= y["fy"] < start["fy"]]
+        best = max(before, key=lambda y: y["revenue"], default=None)
+        if best is not None and start["revenue"] < (1 - TROUGH_DROP) * best["revenue"]:
+            start = best
+    cagr, n = _cagr(start, end)
     recent = [y for y in years if end["fy"] - window < y["fy"] <= end["fy"]]
     margins = [m for y in recent if (m := y["margin"]) is not None and y["revenue"] > 0]
     fcfs = [m for y in recent if (m := y["fcf_margin"]) is not None and y["revenue"] > 0]
@@ -425,13 +450,15 @@ def stats(years: list[dict], window: int = STATS_WINDOW) -> dict:
         total += m
     prev = next((y for y in years if y["fy"] == end["fy"] - 1), None)
     return {
-        "cagr": cagr, "cagr_years": 0 if cagr is None else n,
-        "avg_margin": total / len(margins) if margins else None, "margin_years": len(margins),
+        "cagr": cagr, "cagr_years": n,
+        "avg_margin": _median(margins), "margin_years": len(margins),
         "last_growth": _growth(prev["revenue"], end["revenue"]) if prev else None,
         "last_margin": end["margin"] if end["revenue"] and end["revenue"] > 0 else None,
         "margin_min": min(margins) if margins else None,
         "margin_max": max(margins) if margins else None,
-        "avg_fcf_margin": sum(fcfs) / len(fcfs) if fcfs else None, "fcf_years": len(fcfs),
+        "avg_fcf_margin": _median(fcfs), "fcf_years": len(fcfs),
+        # the pre-B7 flat default's basis (old_default): the mean and the window's own CAGR
+        "_flat": {"cagr": flat_cagr, "margin": total / len(margins) if margins else None},
     }
 
 
@@ -605,11 +632,13 @@ def remainder_defaults(current: dict | None) -> dict | None:
 
 
 def old_default(st: dict) -> dict:
-    """What models made before B7 started from: the 5-year CAGR and margin, every year."""
-    return {"growth": 0.0 if st["cagr"] is None else _round1(_clamp(st["cagr"] * 100,
-                                                                    GROWTH_RANGE)),
-            "margin": 0.0 if st["avg_margin"] is None else _round1(
-                _clamp(st["avg_margin"] * 100, MARGIN_RANGE))}
+    """What models made before B7 started from: the 5-year CAGR and mean margin, every year (on
+    B2's basis, `_flat`: the window's own start year and the mean)."""
+    flat = st["_flat"]
+    return {"growth": 0.0 if flat["cagr"] is None else _round1(_clamp(flat["cagr"] * 100,
+                                                                      GROWTH_RANGE)),
+            "margin": 0.0 if flat["margin"] is None else _round1(
+                _clamp(flat["margin"] * 100, MARGIN_RANGE))}
 
 
 def case_defaults(defs: list[dict], case: str, years: list[dict], base_years: list[dict]
@@ -939,7 +968,7 @@ def run(inputs: dict, state: dict) -> dict:
         "history": years,
         "ttm": ttm,
         "current": cur,
-        "stats": st,
+        "stats": {k: v for k, v in st.items() if not k.startswith("_")},
         "run_rate": rr_out,
         "long_run": {
             "growth": _clamp(st["cagr"] * 100 if st["cagr"] is not None else

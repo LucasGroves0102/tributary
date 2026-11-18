@@ -36,8 +36,17 @@ it("shows multiples at the user's price for the TTM and the forecasts only, and 
   expect(pe.slice(1, 7).map((c) => c.textContent)).toEqual(Array(6).fill("n/a"));
   expect(pe[1]!.title).toMatch(/no past prices/);
   expect(pe[7]!.textContent).toMatch(/^\d+\.\dx$/);
-  // bear and bull are named in their chart colours
-  expect([...container.querySelectorAll(".model-table td.case")].slice(0, 3).map((c) => c.className)).toEqual(["case bear", "case base", "case bull"]);
+  // bear and bull are named in their chart colours, after the line's filed figures (its own row: Morgan 29, the
+  // history read as the bear case's when it spanned the cases' rows from the first)
+  expect([...container.querySelectorAll(".model-table td.case")].slice(0, 4).map((c) => c.className)).toEqual(["case reported", "case bear", "case base", "case bull"]);
+  const revenue = [...container.querySelectorAll<HTMLTableRowElement>(".model-table tr.reported")].find((r) => r.querySelector("th")?.textContent === "Revenue")!;
+  expect(revenue.querySelector("td.case")!.textContent).toBe("Reported");
+  expect([...revenue.querySelectorAll<HTMLTableCellElement>("td.history")].every((c) => c.textContent !== "" && c.rowSpan === 1)).toBe(true);
+  expect([...revenue.querySelectorAll("td.forecast")].every((c) => c.textContent === "")).toBe(true);
+  const bear = revenue.nextElementSibling!;
+  expect(bear.querySelector("td.case")!.textContent).toBe("Bear");
+  expect([...bear.querySelectorAll("td.history")].every((c) => c.textContent === "")).toBe(true);
+  expect([...bear.querySelectorAll("td.forecast")].some((c) => c.textContent !== "")).toBe(true);
 });
 
 it("an empty rate's forecast cell says it is Tributary's default", () => {

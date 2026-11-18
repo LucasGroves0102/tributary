@@ -67,7 +67,8 @@ def test_each_cases_fcf_margin_default_follows_its_own_operating_margin():
     """morgan4 finding 15: bear, base and bull all read 31.7%, 16.2%, 12.4%, so Morgan's bull
     (margins 24, 25, 25.5%) had free cash flow falling $3.70B, $3.37B, $3.14B while its operating
     income rose to $6.47B. A case's default is the base case's FCF margin moved by its margin
-    difference after tax (VRT's TTM rate, 19.8%)."""
+    difference after tax (VRT's TTM rate, 19.8%). Since Morgan 16 the base case fades to the
+    5-year median FCF margin (31.7%, 17.6%, 14.4%; the mean gave 16.2%, 12.4%)."""
     inputs = real("vrt")
     base_defs = run(inputs, model(VRT, years(3), ytd=True))["cases"]["base"]["defaults"]
     base = [{"growth": d["growth"], "margin": d["margin"]} for d in base_defs]
@@ -76,19 +77,19 @@ def test_each_cases_fcf_margin_default_follows_its_own_operating_margin():
     out = run(inputs, model(VRT, base, ytd=True, scenarios={"bear": shifted(base, "bear"),
                                                             "bull": bull}))
     c = out["cases"]
-    assert [d["fcfMargin"] for d in c["base"]["defaults"]] == [31.7, 16.2, 12.4]  # unchanged
-    assert [d["fcfMargin"] for d in c["bull"]["defaults"]] == [34.8, 23.7, 21.9]
+    assert [d["fcfMargin"] for d in c["base"]["defaults"]] == [31.7, 17.6, 14.4]  # unchanged
+    assert [d["fcfMargin"] for d in c["bull"]["defaults"]] == [34.8, 24.5, 23.1]
     fcf = {k: [y["fcf"] for y in c[k]["years"]] for k in ("bear", "base", "bull")}
     oi = [y["operating_income"] for y in c["bull"]["years"]]
     assert oi[0] < oi[1] < oi[2] and fcf["bull"][0] < fcf["bull"][1] < fcf["bull"][2]
     assert all(b < m < u for b, m, u in zip(fcf["bear"], fcf["base"], fcf["bull"], strict=True))
     tax = c["bull"]["defaults"][1]["taxRate"]
     assert c["bull"]["defaults"][1]["fcfMargin"] == pytest.approx(
-        16.2 + (25 - base[1]["margin"]) * (1 - tax / 100), abs=0.05)
+        17.6 + (25 - base[1]["margin"]) * (1 - tax / 100), abs=0.05)
     # the preview cases move by the spread alone; a rate the case typed is the case's
     preview = run(inputs, model(VRT, base, ytd=True))["cases"]
-    assert [d["fcfMargin"] for d in preview["bear"]["defaults"]] == [27.7, 13.1, 9.7]
-    assert [d["fcfMargin"] for d in preview["bull"]["defaults"]] == [35.7, 19.3, 15.1]
+    assert [d["fcfMargin"] for d in preview["bear"]["defaults"]] == [27.7, 14.3, 11.5]
+    assert [d["fcfMargin"] for d in preview["bull"]["defaults"]] == [35.7, 20.9, 17.4]
     typed = run(inputs, model(VRT, base, ytd=True, scenarios={
         "bull": [{**y, "fcfMargin": 5} for y in bull]}))["cases"]["bull"]["years"]
     assert [y["inputs"]["fcfMargin"] for y in typed] == [5.0, 5.0, 5.0]
@@ -179,9 +180,10 @@ def test_nvidia_remainder_defaults_to_the_trailing_twelve_months():
                   - cur["prior"]["margin"]) * 100
     assert round(old_margin, 1) == 75.0 and d[0]["margin"] < old_margin - 9
     assert round(cur["actual"]["growth"] * 100, 1) == 95.8 != d[0]["growth"]
-    # the FCF margin is still H2 FY2026's; years 2 and on fade from the same TTM as before
+    # the FCF margin is still H2 FY2026's; years 2 and on fade from the same TTM as before, to
+    # the 5-year median margin since Morgan 16 (54.1%, not FY2023's write-down year's mean, 46.0%)
     assert d[0]["fcfMargin"] == round(cur["remainder_prior"]["fcf_margin"] * 100, 1) == 45.6
-    assert [(y["growth"], y["margin"]) for y in d[1:]] == [(44.2, 55.6), (24.6, 50.8)]
+    assert [(y["growth"], y["margin"]) for y in d[1:]] == [(44.2, 59.7), (24.6, 56.9)]
     # Reset's year 1, projected: H1 as reported plus H2 at the TTM's rates; the full year's margin
     # lies between the two halves'
     y = run(real("nvda"), model(NVDA, d, ytd=True))["cases"]["base"]["years"][0]
@@ -500,3 +502,31 @@ def test_the_year_to_dates_adjusted_net_income_takes_the_one_off_off_after_tax()
         "actual"]
     rate = a["income_tax"] / a["pretax_income"]
     assert a["net_income_adjusted"] == pytest.approx(a["net_income"] - 46e6 * (1 - rate))
+
+
+def test_the_long_run_is_robust_to_a_pandemic_year():
+    """Morgan 16: Booking's base case faded its margin toward a 5-year mean with FY2021 in it, and
+    the check compared growth with a 31.7% "5-year CAGR" measured from the FY2020 trough. The long
+    run is the median margin, and a CAGR never starts in a trough (revenue more than TROUGH_DROP
+    below the best of the two years before): it starts at that year instead."""
+    from query_api.model_maths import TROUGH_DROP, stats
+
+    def year(fy, revenue, margin):
+        return {"fy": fy, "revenue": revenue, "margin": margin, "fcf_margin": margin}
+
+    bkng = [year(2018, 14.5, 0.32), year(2019, 15.07, 0.35), year(2020, 6.80, 0.01),
+            year(2021, 10.96, 0.228), year(2022, 17.09, 0.299), year(2023, 21.37, 0.273),
+            year(2024, 23.74, 0.318), year(2025, 26.04, 0.328)]
+    st = stats(bkng)
+    assert st["cagr_years"] == 6 and st["cagr"] == pytest.approx((26.04 / 15.07) ** (1 / 6) - 1)
+    assert st["avg_margin"] == pytest.approx(0.299)          # the median of FY2021-FY2025
+    assert st["_flat"]["cagr"] == pytest.approx((26.04 / 6.80) ** (1 / 5) - 1)   # 30.8%
+    assert st["_flat"]["margin"] == pytest.approx((0.228 + 0.299 + 0.273 + 0.318 + 0.328) / 5)
+    # a dip under TROUGH_DROP is growth's own history
+    dip = [year(2019, 10.0, 0.2), year(2020, 10.0 * (1 - TROUGH_DROP) + 0.01, 0.2),
+           year(2025, 12.0, 0.2)]
+    assert stats(dip)["cagr_years"] == 5
+    # a cruise line's -371% year doesn't drag the long run below zero
+    ccl = [year(2021, 1.9, -3.714), year(2022, 12.2, -0.36), year(2023, 21.6, 0.091),
+           year(2024, 25.0, 0.143), year(2025, 26.6, 0.168)]
+    assert stats(ccl)["avg_margin"] == pytest.approx(0.091)
