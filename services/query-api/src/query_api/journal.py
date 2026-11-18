@@ -2,7 +2,8 @@
 not-covered symbol they hold), kept honest. Storage: query_api/portfolio.py AppPortfolio (app
 migration 021's journal_entries); this module the rules and the routes.
 
-  GET    /v1/portfolio/journal?company_id=|symbol=   entries, newest written first
+  GET    /v1/portfolio/journal?company_id=|symbol=   entries, newest decided first (the day
+                                                   they show), then newest written (Morgan 31)
   POST   /v1/portfolio/journal                       a new entry, or a correction of one
   PATCH  /v1/portfolio/journal/{id}                  within EDIT_HOURS of writing it
   DELETE /v1/portfolio/journal/{id}                  within EDIT_HOURS of writing it

@@ -2372,6 +2372,10 @@ export interface Portfolio {
     value: string | null;
     unrealised: string | null;
     realised: string;
+    /** the open holdings on the user's prices, one without a price at its cost (an older API: absent) */
+    total_value?: string | null;
+    /** the cost of the open holdings without a price, inside total_value */
+    unpriced_cost?: string;
   };
   reviews_due: number;
   /** the server has Connect your data on (prices from the user's own provider can count) */
@@ -2390,6 +2394,12 @@ export interface HeldPosition {
 }
 
 export type JournalKind = "bought" | "added" | "trimmed" | "sold" | "review" | "note";
+/** Open the journal's form as this kind, on this day, with a line saying why it opened (a sale just recorded) */
+export interface JournalPrompt {
+  kind: JournalKind;
+  on?: string;
+  lead?: string;
+}
 
 /** a red line as the entry keeps it: what it said when the entry was written */
 export interface JournalRedLine {

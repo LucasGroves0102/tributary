@@ -550,9 +550,13 @@ What a user holds, valued only on their own prices, and the decision journal (`p
 migration 021, owner-only, forced RLS, not streamed). Cost is a running average cost; realised gain
 is worked out on each sale; a sale of more than was held that day is refused. A price is the user's
 own: their Connect-your-data close (only with `DATA_CONNECTIONS_KEY`) or one they typed or imported,
-the newer winning, always with its source and day; over 7 days old it is `stale`. Tributary
+the newer winning, always with its source and day; over 7 days old it is `stale`. A sale's price
+is the user's own price of its day (typed), unless they hold a newer one (`price_recorded`). Tributary
 fetches no price for anyone. Funds and ETFs (a symbol that resolves to no company the caller reads
-financials for) are kept by symbol and cost, without a price.
+financials for) are kept by symbol and cost, without a price. Weights are rounded to a tenth of a
+percent by largest remainder, so they add up to 100%; `totals.total_value` is the open holdings on
+the user's prices with an unpriced one at its cost (`unpriced_cost`). The journal lists the newest
+decided first.
 
 Fidelity's export is read by header names; Account Number is dropped as it is read, an account
 label that looks like a number is refused (and the database refuses it too); cash, money-market,

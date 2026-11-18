@@ -1051,7 +1051,8 @@ export const deleteLot = (token: string, lotId: string) =>
   sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/lots/${enc(lotId)}`);
 
 export const addSell = (token: string, holdingId: string, body: { shares: string; price: string; sold_on: string }) =>
-  sendJson<{ sell: unknown }>(token, "POST", `/v1/portfolio/holdings/${enc(holdingId)}/sells`, body);
+  // price_recorded: the sale's price is now the holding's own price of that day (an older API: absent)
+  sendJson<{ sell: unknown; price_recorded?: boolean }>(token, "POST", `/v1/portfolio/holdings/${enc(holdingId)}/sells`, body);
 
 export const deleteSell = (token: string, sellId: string) =>
   sendJson<{ deleted: boolean }>(token, "DELETE", `/v1/portfolio/sells/${enc(sellId)}`);

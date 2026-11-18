@@ -362,6 +362,11 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeGreaterThan(risks);
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeLessThan(md.indexOf("## What would prove me wrong"));
   expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Pinned the chart under Risks and mitigants in your thesis.");
+  // the button says so too (Morgan 30: it looked unchanged)
+  const pinBtn = fcf.querySelector<HTMLButtonElement>(".pin-btn")!;
+  expect(pinBtn.className).toContain("pinned");
+  expect(pinBtn.textContent).toBe(" Pinned: Risks and mitigants");
+  expect(pinBtn.title).toMatch(/^Pinned under Risks and mitigants in the thesis; pin it again/);
   // a chart saved in the project is work in the Numbers step, not a tick (#71)
   expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("");
   await goTo(`#/analysis/${PID}/numbers`, ".step-pane:not([hidden]) .step-work");

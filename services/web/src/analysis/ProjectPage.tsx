@@ -234,7 +234,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
         if (!thesisId) {
           await createThesis({ target, block });
           setToast({ text: `Started your thesis from the template and pinned the ${what} under ${where}.`, thesis: true });
-          return;
+          return where;
         }
         const handle = bridge.current;
         if (handle && handle.itemId === thesisId) {
@@ -253,8 +253,10 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
           setToast({ text: `Pinned the ${what} under ${where} in your thesis.`, thesis: true });
         }
         itemsChanged();
+        return where;
       } catch (e) {
         setToast({ text: `Couldn't pin it: ${e instanceof ApiError || e instanceof Error ? e.message : "try again"}.`, error: true });
+        return null;
       }
     },
   }), [thesisId, thesisSaved, createThesis, token, saved, itemsChanged]);
