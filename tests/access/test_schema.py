@@ -53,7 +53,7 @@ def tables(world: World, db: str) -> dict[str, dict]:
         "               AND NOT a.attisdropped AND a.attname = ANY(%s))"
         " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
         " WHERE c.relkind IN ('r', 'p') AND NOT c.relispartition"
-        "   AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')",
+        "   AND n.nspname <> 'information_schema' AND n.nspname NOT LIKE 'pg\\_%%'",  # temp too
         (USER_COLUMNS,)).fetchall()
     return {name: {"schema": schema, "rls": rls, "forced": forced, "user_keyed": keyed}
             for name, schema, rls, forced, keyed in rows
