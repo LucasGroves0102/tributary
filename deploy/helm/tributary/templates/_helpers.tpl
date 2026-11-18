@@ -128,6 +128,11 @@ feature is off (its routes 404, the web app hides it). */}}
       optional: true
 {{- else if eq . "jwt" }}
 {{ include "tributary.secretEnv" (dict "root" $root "env" "QUERY_API_JWT_SECRET" "key" "jwt-secret") }}
+{{- else if or (eq . "bodies") (eq . "bodies-ro") }}
+{{- /* The body store (migration 150, libs/bodies): document bodies as zstd files on the
+document-bodies volume (templates/bodies.yaml); bodies-ro mounts it read-only. */}}
+- name: BODIES_DIR
+  value: /bodies
 {{- else if eq . "query-api" }}
 - name: QUERY_API_URL
   value: http://query-api:{{ index $root.Values.services "query-api" "port" }}
@@ -225,8 +230,19 @@ containers:
     volumeMounts:
       - name: tmp
         mountPath: /tmp
+      {{- $uses := .uses | default list }}
+      {{- if or (has "bodies" $uses) (has "bodies-ro" $uses) }}
+      - name: bodies
+        mountPath: /bodies
+        readOnly: {{ has "bodies-ro" $uses }}
+      {{- end }}
 volumes:
   - name: tmp
     emptyDir:
       sizeLimit: {{ .tmpSize | default "64Mi" }}
+  {{- if or (has "bodies" $uses) (has "bodies-ro" $uses) }}
+  - name: bodies
+    persistentVolumeClaim:
+      claimName: {{ $root.Values.bodies.claimName }}
+  {{- end }}
 {{- end }}

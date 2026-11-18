@@ -14,6 +14,7 @@ import pytest
 
 from facts_fetcher import segments
 from facts_fetcher.ixbrl import EXTRACTOR_VERSION
+from tributary_bodies import Body, Store
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -275,6 +276,31 @@ def test_rebuild_reprojects_without_documents(conn):
     stats = segments.rebuild(conn)
     assert stats.documents == len(DOCS)
     assert conn.execute("SELECT count(*) FROM gold.segment_financials").fetchone()[0] == before
+
+
+def test_documents_in_the_body_store_extract_the_same(conn, tmp_path):
+    """Migration 150: a body moved to its zstd file is extracted as from the column; one whose
+    file is missing is skipped and left pending, never stored as an error row."""
+    segments.run(conn)
+    extracts = "SELECT accession_no, status, fact_count, facts FROM bronze.filing_xbrl ORDER BY 1"
+    before = conn.execute(extracts).fetchall()
+    store = Store(tmp_path)
+    for acc, gz in conn.execute("SELECT accession_no, content_gzip FROM bronze.filing_documents"
+                                ).fetchall():
+        body = Body.of(gzip.decompress(gz))
+        conn.execute("UPDATE bronze.filing_documents SET content_gzip = NULL, body_bytes = %s"
+                     " WHERE accession_no = %s AND content_sha256 = %s",
+                     (store.put(body), acc, body.sha256))
+    conn.execute("TRUNCATE bronze.filing_xbrl CASCADE")
+    missing = conn.execute("SELECT accession_no, content_sha256 FROM bronze.filing_documents"
+                           " ORDER BY accession_no LIMIT 1").fetchone()
+    store.path(missing[1]).unlink()
+    stats = segments.run(conn, store=store)
+    assert stats.documents == len(DOCS) - 1 and stats.completed
+    assert conn.execute(extracts).fetchall() == [r for r in before if r[0] != missing[0]]
+    assert segments.pending(conn, 10) == [(missing[0], conn.execute(
+        "SELECT cik FROM bronze.filing_documents WHERE accession_no = %s", (missing[0],)
+    ).fetchone()[0], missing[1])]
 
 
 def test_one_call_for_many_companies_writes_what_one_call_each_writes(conn):

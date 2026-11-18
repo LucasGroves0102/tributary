@@ -7,6 +7,7 @@ The services commit, so this test inserts its own documents into an empty bronze
 them afterwards; it skips when bronze already holds documents."""
 
 import gzip
+import hashlib
 import json
 import os
 import re
@@ -17,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from filing_parser.sections import PARSER_VERSION
+from tributary_bodies import Body, Store
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -73,14 +75,18 @@ def conn():
                 c.execute(f"DELETE FROM {table} WHERE accession_no = ANY(%s)", (accessions,))
 
 
-def reparse_all(cmd: list[str]) -> list[dict]:
-    """Run a parser service with --reparse-all; its per-document log lines (the skipped
-    document's line has no accession_no field)."""
+def reparse_all(cmd: list[str], bodies: Path | None = None, every: bool = False) -> list[dict]:
+    """Run a parser service with --reparse-all (BODIES_DIR `bodies`); its per-document log lines
+    (the skipped documents' lines have no accession_no field), or `every` line."""
     env = {**os.environ, "DATABASE_URL": DSN or "", "LOG_LEVEL": "INFO"}
+    env.pop("BODIES_DIR", None)
+    if bodies is not None:
+        env["BODIES_DIR"] = str(bodies)
     out = subprocess.run([*cmd, "--reparse-all"], env=env, capture_output=True, text=True,
                          timeout=300)
     assert out.returncode == 0, out.stderr
-    return [line for line in map(json.loads, out.stdout.splitlines()) if "accession_no" in line]
+    lines = list(map(json.loads, out.stdout.splitlines()))
+    return lines if every else [line for line in lines if "accession_no" in line]
 
 
 def comparable(rows: list[tuple]) -> list[tuple]:
@@ -135,3 +141,30 @@ def test_rust_service_writes_what_the_python_service_writes(conn):
     reparse_all(python)
     rows = conn.execute(ROWS).fetchall()
     assert {r[2] for r in rows} == {"python"} and comparable(rows) == comparable(py_rows)
+
+
+def test_both_services_read_moved_bodies_and_skip_missing_ones(conn, tmp_path):
+    """Migration 150: with every body moved to its zstd file, both services write the rows they
+    write from content_gzip; a body whose file is missing is skipped by both (logged, the run goes
+    on, its rows kept)."""
+    python = [sys.executable, "-m", "filing_parser.main"]
+    reparse_all(python)
+    expected = comparable(conn.execute(ROWS).fetchall())
+    store = Store(tmp_path)
+    for table, key in (("bronze.filing_documents", "accession_no"),
+                       ("bronze.filing_exhibits", "accession_no || exhibit_type")):
+        for k, gz in conn.execute(f"SELECT {key}, content_gzip FROM {table}").fetchall():
+            body = Body.of(gzip.decompress(gz))
+            conn.execute(f"UPDATE {table} SET content_gzip = NULL, body_bytes = %s,"
+                         f" content_sha256 = %s WHERE {key} = %s",
+                         (store.put(body), body.sha256, k))
+    gone = hashlib.sha256(gzip.decompress((FIXTURES / "nvda-10-Q.htm.gz").read_bytes()))
+    store.path(gone.hexdigest()).unlink()
+    for cmd, parser in ((python, "python"), ([RUST or ""], "rust")):
+        lines = reparse_all(cmd, bodies=tmp_path, every=True)
+        parsed = [x["accession_no"] for x in lines if "accession_no" in x]
+        assert parsed == [DOCS[0][0], DOCS[2][0]]
+        assert any(f"skipping {DOCS[1][0]}: 'no body file" in x["message"] for x in lines)
+        rows = conn.execute(ROWS).fetchall()
+        assert comparable(rows) == expected
+        assert {r[2] for r in rows if r[0] != DOCS[1][0]} == {parser}

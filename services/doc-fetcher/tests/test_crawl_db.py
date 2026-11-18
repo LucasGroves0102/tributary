@@ -1,7 +1,6 @@
 """The crawl queue in Postgres (db/migrations/020_doc_crawl.sql, doc_fetcher.crawl_db). Skipped
 unless TEST_DATABASE_URL is set; every test is rolled back."""
 
-import gzip
 import os
 from datetime import date, timedelta
 
@@ -9,8 +8,8 @@ import pytest
 
 from doc_fetcher import crawl_db
 from doc_fetcher.crawl_fetch import Fetched
-from doc_fetcher.db import Blob
 from doc_fetcher.index import Exhibit, FilingIndex
+from tributary_bodies import Body, Store
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -127,21 +126,28 @@ def test_claim_order_lease_and_backoff(conn):
     assert queued(conn)["tc-a"][3] == "failed"
 
 
-def test_store_publish_and_ops_views(conn):
+def test_store_publish_and_ops_views(conn, tmp_path):
     plan_three(conn)
     targets = {t.accession_no: t for t in crawl_db.claim(conn, 5, LEASE)}
-    doc = Blob.of(b"<html>10-Q</html>")
+    doc = Body.of(b"<html>10-Q</html>")
     index = FilingIndex(date(2026, 5, 1), None, "doc.htm", "https://sec/doc.htm")
     ex = Exhibit("EX-99.1", "PRESS RELEASE", "pr.htm", "https://sec/pr.htm")
-    fetched = Fetched(index, doc, [(ex, Blob.of(b"<html>press</html>"))], 3)
-    crawl_db.store(conn, targets["tc-a"], fetched)
-    crawl_db.store(conn, targets["tc-a"], fetched)  # a retried batch: no duplicate rows
+    fetched = Fetched(index, doc, [(ex, Body.of(b"<html>press</html>"))], 3)
+    bodies = Store(tmp_path)
+    crawl_db.store(conn, bodies, targets["tc-a"], fetched)
+    crawl_db.store(conn, bodies, targets["tc-a"], fetched)  # a retried batch: no duplicate rows
 
-    stored = conn.execute("SELECT content_gzip, size_bytes FROM bronze.filing_documents"
-                          " WHERE accession_no = 'tc-a'").fetchone()
-    assert gzip.decompress(stored[0]) == b"<html>10-Q</html>"
-    assert conn.execute("SELECT count(*) FROM bronze.filing_exhibits"
-                        " WHERE accession_no = 'tc-a'").fetchone()[0] == 1
+    # migration 150: the row has no content_gzip, the body is a file named by its hash
+    stored = conn.execute("SELECT content_gzip, content_sha256, size_bytes, body_bytes"
+                          " FROM bronze.filing_documents WHERE accession_no = 'tc-a'").fetchone()
+    assert stored == (None, doc.sha256, doc.size, len(doc.data))
+    assert bodies.read(doc.sha256) == b"<html>10-Q</html>"
+    assert conn.execute("SELECT count(*), bool_and(content_gzip IS NULL AND body_bytes > 0)"
+                        " FROM bronze.filing_exhibits WHERE accession_no = 'tc-a'"
+                        ).fetchone() == (1, True)
+    with pytest.raises(psycopg.errors.CheckViolation), conn.transaction():
+        conn.execute("UPDATE bronze.filing_documents SET body_bytes = NULL"
+                     " WHERE accession_no = 'tc-a'")  # a row always has its body somewhere
 
     events = crawl_db.unpublished(conn, 10)
     assert [e["accession_no"] for e in events] == ["tc-a"]
@@ -175,7 +181,7 @@ def test_store_publish_and_ops_views(conn):
 def test_catchup_status_reads_every_kind(conn):
     rows = {r[0]: r[1:] for r in crawl_db.catchup_status(conn)}
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
-                         "check_segments", "check_sections", "statements", "known"}
+                         "check_segments", "check_sections", "statements", "known", "bodies"}
     assert all(isinstance(r[4], float) for r in rows.values())
 
 

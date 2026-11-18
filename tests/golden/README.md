@@ -90,7 +90,9 @@ A third gap, closed by migration 038. Its row was `absent` until then, written t
 ## How the figures were extracted
 
 1. The 10-K documents are stored in `bronze.filing_documents` (`content_gzip` is gzip of the
-   HTML). Pull each one read-only and decompress it into a scratch directory outside the repo:
+   HTML; since migration 150 the body is a zstd file instead, `<BODIES_DIR>/<sha[:2]>/<sha>.zst`
+   on the `document-bodies` volume, read with `zstd -d`). Pull each one read-only and decompress it
+   into a scratch directory outside the repo:
 
    ```bash
    echo "COPY (SELECT translate(encode(content_gzip, 'base64'), E'\n', '')

@@ -13,7 +13,8 @@ was read; tests never re-run this, the reviewed CSV is the reference.
     python tests/golden/extract_reference.py review candidates.csv PAYLOADS > review.txt
 
 COMPANIES: ticker|company_id|name|sic|accession|filed|period_end lines; DOCS: <accession>.htm
-files (bronze.filing_documents' content_gzip, decompressed); PAYLOADS: CIK<cik>.json.gz files
+files (bronze.filing_documents' body decompressed: content_gzip, or its file in the body store
+since migration 150); PAYLOADS: CIK<cik>.json.gz files
 (bronze.company_facts.raw_gzip), the company's CIKs in a `ciks` file beside them
 (company_id|cik lines).
 """

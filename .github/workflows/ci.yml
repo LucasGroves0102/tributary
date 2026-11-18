@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest pytest-cov pyright pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent -e services/mcp-server
+      - run: pip install ruff pytest pytest-cov pyright pyyaml==6.0.3 -e libs/kafka -e libs/telemetry -e libs/sec -e libs/authz -e libs/bodies -e services/poller -e services/bronze-loader -e services/company-loader -e services/facts-fetcher -e services/doc-fetcher -e services/parser -e services/authz-sync -e 'services/query-api[test]' -e services/agent -e services/mcp-server
       - run: ruff check .
       - run: pyright --pythonpath "$(which python)"
       - run: ./scripts/create-databases.sh
@@ -286,6 +286,13 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo test --locked
+      # The document read path before and after the storage diet (gzip from Postgres, zstd from a
+      # file), optimised as in the image but without its LTO: timings in the log.
+      - name: Read path timing (migration 150)
+        env:
+          CARGO_PROFILE_RELEASE_LTO: "false"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+        run: cargo test --locked --release --bin parser read_path_timing -- --ignored --nocapture
 
   authz:
     runs-on: ubuntu-latest

@@ -14,7 +14,8 @@ Everything else (amendments, the daily index's late filings, the 8-Ks left out h
 fetch error dropped) is the document crawl's, which skips whatever this stored first.
 
 A filing is stored whole or not at all (review B2): the index, the document and an 8-K's exhibits
-are fetched first; then the document, the exhibits and an ops.document_outbox row commit in one
+are fetched first; their bodies are written to the body store (BODIES_DIR, zstd files named by
+hash, migration 150); then the document, the exhibits and an ops.document_outbox row commit in one
 transaction; the outbox row goes only when Kafka confirms documents.fetched. An unconfirmed event
 is republished (`sweep`, at start and every OUTBOX_SWEEP_SECONDS), so a stored document is never
 left unannounced; a fetch error stores nothing, and the crawl plans the filing like any other.
@@ -43,18 +44,20 @@ from prometheus_client import Counter
 
 from doc_fetcher import ownership
 from doc_fetcher.db import (
-    Blob,
     already_fetched,
+    body_store,
     insert_document,
     insert_exhibit,
     operating_ciks,
     owe_event,
     owed_events,
     paid_events,
+    put,
     results_release,
     tracked_ciks,
 )
 from doc_fetcher.index import Exhibit, parse_exhibits, parse_index, parse_items
+from tributary_bodies import Body, Store
 from tributary_kafka import client_config
 from tributary_sec import sec_client
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, count_delivery, serve_metrics
@@ -154,6 +157,7 @@ def main() -> None:
     }))
     consumer.subscribe([IN_TOPIC])
     producer = Producer(client_config({"enable.idempotence": True}))
+    store = body_store()
     serve_metrics()
 
     with psycopg.connect(dsn, autocommit=True) as conn, \
@@ -193,7 +197,7 @@ def main() -> None:
                         ownership.enqueue(conn, event)  # fetched when idle: 10-K/Q/8-K first
                     scope = coverage.scope(event)
                     if scope is not None:
-                        handle(conn, client, producer, event,
+                        handle(conn, client, producer, store, event,
                                eight_k_items=config.eight_k_items if scope == "live" else None)
                 except (ValueError, KeyError, httpx.HTTPError, psycopg.DataError,
                         psycopg.IntegrityError) as e:
@@ -211,13 +215,14 @@ def main() -> None:
     log.info("stopped")
 
 
-def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, event: dict,
-           eight_k_items: frozenset[str] | None = None) -> bool:
+def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, store: Store,
+           event: dict, eight_k_items: frozenset[str] | None = None) -> bool:
     """Fetch, store and announce one filing; False when it was stored already, is an 8-K
     with none of `eight_k_items` (None: every 8-K) or a 6-K that isn't a results release
     (db.results_release, whoever's it is). Every file is fetched before anything is
-    stored (an HTTP error stores nothing); the document, its exhibits and the owed event commit
-    together; the event's outbox row goes when Kafka confirms it, else `sweep` sends it again."""
+    stored (an HTTP error stores nothing); the bodies' files are written next, then the document,
+    its exhibits and the owed event commit together; the event's outbox row goes when Kafka
+    confirms it, else `sweep` sends it again."""
     accession, cik, form = event["accession_no"], event["cik"], event["form_type"]
     if already_fetched(conn, accession):
         return False
@@ -240,16 +245,17 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
     doc_resp = client.get(index.url)
     doc_resp.raise_for_status()
     exhibits = exhibit_bodies(client, index_resp.content, form)  # index.EXHIBITS
-    blob = Blob.of(doc_resp.content)
+    document = put(store, Body.of(doc_resp.content))  # files first, then the rows
+    stored = [(exhibit, put(store, Body.of(content))) for exhibit, content in exhibits]
     with conn.transaction():
-        insert_document(conn, accession, cik, form, index, blob)
-        for exhibit, content in exhibits:
-            insert_exhibit(conn, accession, exhibit, content)
+        insert_document(conn, accession, cik, form, index, document)
+        for exhibit, body in stored:
+            insert_exhibit(conn, accession, exhibit, body)
         owe_event(conn, accession)
     if not publish(conn, producer, [{
             "accession_no": accession, "cik": cik, "form": form,
             "document_name": index.document_name, "url": index.url,
-            "content_sha256": blob.sha256, "size_bytes": blob.size}]):
+            "content_sha256": document.sha256, "size_bytes": document.size}]):
         log.warning("%s %s %s: event not confirmed yet; the outbox sends it again", cik, form,
                     accession, extra={"cik": cik, "form": form, "accession_no": accession})
     DOCUMENTS.labels(form).inc()
@@ -308,14 +314,16 @@ def exhibit_bodies(client: httpx.Client, index_html: bytes,
     return bodies
 
 
-def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, accession: str,
+def fetch_exhibits(conn: psycopg.Connection, client: httpx.Client, store: Store, accession: str,
                    index_html: bytes) -> int:
-    """A stored 8-K's exhibits (`doc-fetcher-exhibits`): all fetched, then stored together."""
-    bodies = exhibit_bodies(client, index_html)
+    """A stored 8-K's exhibits (`doc-fetcher-exhibits`): all fetched, their files written, then
+    their rows stored together."""
+    stored = [(exhibit, put(store, Body.of(content)))
+              for exhibit, content in exhibit_bodies(client, index_html)]
     with conn.transaction():
-        for exhibit, content in bodies:
-            insert_exhibit(conn, accession, exhibit, content)
-    return len(bodies)
+        for exhibit, body in stored:
+            insert_exhibit(conn, accession, exhibit, body)
+    return len(stored)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ from datetime import date, timedelta
 import psycopg
 
 from doc_fetcher.crawl_fetch import Fetched, Target
-from doc_fetcher.db import insert_document, insert_exhibit
+from doc_fetcher.db import insert_document, insert_exhibit, put
+from tributary_bodies import Store
 
 
 @dataclass(frozen=True)
@@ -68,13 +69,16 @@ def mark_already_stored(conn: psycopg.Connection, accessions: list[str]) -> None
     )
 
 
-def store(conn: psycopg.Connection, target: Target, fetched: Fetched) -> None:
-    """Documents and the done mark in one transaction: stored iff done."""
+def store(conn: psycopg.Connection, bodies: Store, target: Target, fetched: Fetched) -> None:
+    """The bodies' files first, then the documents and the done mark in one transaction: stored
+    iff done."""
+    document = put(bodies, fetched.document)
+    exhibits = [(exhibit, put(bodies, body)) for exhibit, body in fetched.exhibits]
     with conn.transaction():
         insert_document(conn, target.accession_no, target.cik, target.form, fetched.index,
-                        fetched.document)
-        for exhibit, blob in fetched.exhibits:
-            insert_exhibit(conn, target.accession_no, exhibit, blob)
+                        document)
+        for exhibit, body in exhibits:
+            insert_exhibit(conn, target.accession_no, exhibit, body)
         conn.execute(
             """
             UPDATE ops.doc_crawl_targets

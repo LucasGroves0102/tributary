@@ -402,7 +402,8 @@ DROP FUNCTION gold.input_values(jsonb);
 DROP TABLE gold.known_companies;
 DROP TABLE gold.financials_known;
 
--- the 'known' kind: its stamps and runs, then its row and the constraints as 074 left them
+-- the 'known' kind: its stamps and runs, then its row and the constraints as 074 left them, plus
+-- 150's 'bodies' (the storage diet, independent of 085-087: it stays)
 DELETE FROM ops.company_builds WHERE kind = 'known';
 DELETE FROM ops.catchup_runs WHERE kind = 'known';
 DELETE FROM ops.catchup WHERE kind = 'known';
@@ -412,7 +413,7 @@ ALTER TABLE ops.company_builds ADD CONSTRAINT company_builds_kind_check
 ALTER TABLE ops.catchup DROP CONSTRAINT catchup_kind_check;
 ALTER TABLE ops.catchup ADD CONSTRAINT catchup_kind_check
     CHECK (kind IN ('parser', 'passages', 'diffs', 'gold', 'check_financials', 'check_segments',
-                    'check_sections', 'statements'));
+                    'check_sections', 'statements', 'bodies'));
 
 -- 071's ops.company_rule_version, 074's ops.company_backlog, 076's ops.rebuild_soon, copied
 -- unchanged

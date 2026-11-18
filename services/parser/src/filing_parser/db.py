@@ -1,24 +1,25 @@
 """Read documents from bronze, write sections to silver."""
 
-import gzip
-
 import psycopg
 from psycopg.types.json import Jsonb
 
 from filing_parser.sections import PARSER_VERSION, Section, Table
+from tributary_bodies import Store, read_body
 
 PARSER = "python"
 
 
-def load_document(conn: psycopg.Connection, accession_no: str) -> tuple[str, bytes]:
-    """(form, uncompressed HTML)."""
+def load_document(conn: psycopg.Connection, accession_no: str,
+                  store: Store | None = None) -> tuple[str, bytes]:
+    """(form, uncompressed HTML): from content_gzip while the row has it, else from its file in
+    the body store (migration 150). A missing row or file is a KeyError (MissingBody)."""
     row = conn.execute(
-        "SELECT form, content_gzip FROM bronze.filing_documents WHERE accession_no = %s",
-        (accession_no,),
+        "SELECT form, content_gzip, content_sha256 FROM bronze.filing_documents"
+        " WHERE accession_no = %s", (accession_no,),
     ).fetchone()
     if row is None:
         raise KeyError(f"no bronze document for {accession_no}")
-    return row[0], gzip.decompress(row[1])
+    return row[0], read_body(store, row[1], row[2])
 
 
 def write_sections(conn: psycopg.Connection, accession_no: str, sections: list[Section]) -> None:
@@ -82,11 +83,13 @@ def all_accessions(conn: psycopg.Connection) -> list[str]:
     ).fetchall()]
 
 
-def load_exhibits(conn: psycopg.Connection,
-                  accession_no: str) -> list[tuple[str, str | None, bytes]]:
-    """(exhibit_type, description, uncompressed HTML) for each stored exhibit."""
+def load_exhibits(conn: psycopg.Connection, accession_no: str,
+                  store: Store | None = None) -> list[tuple[str, str | None, bytes]]:
+    """(exhibit_type, description, uncompressed HTML) for each stored exhibit (`load_document`'s
+    column or file)."""
     rows = conn.execute(
-        "SELECT exhibit_type, description, content_gzip FROM bronze.filing_exhibits"
-        " WHERE accession_no = %s ORDER BY exhibit_type", (accession_no,),
+        "SELECT exhibit_type, description, content_gzip, content_sha256"
+        " FROM bronze.filing_exhibits WHERE accession_no = %s ORDER BY exhibit_type",
+        (accession_no,),
     ).fetchall()
-    return [(t, d, gzip.decompress(c)) for t, d, c in rows]
+    return [(t, d, read_body(store, c, sha)) for t, d, c, sha in rows]

@@ -74,11 +74,12 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | on (Flux release) | filings companyfacts lacks, from their own XBRL (055) |
 | `demo-cleanup` | query-api (`query-api-demo-cleanup`) | hourly at :15 | on | deletes expired demo sandboxes |
 | `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018); then up to 20 min of catch-up: gold and checks an older rule built (071) |
-| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021) and the parser-output checks of what it indexes (072); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill` (paused until the owner starts it), up to 5 min of parser checks on older documents (072), the rest of 20 min on older passages (071) |
+| `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021) and the parser-output checks of what it indexes (072); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill` (paused until the owner starts it), up to 5 min of parser checks on older documents (072), the rest of 20 min on older passages (071); then up to 15 min (`BODIES_SECONDS`) moving document bodies out of Postgres into the body store, after a daily sweep of it (150) |
 | `alerts` | query-api (`query-api-alerts`) | every 10 minutes | on | filing alerts and webhooks (app migration 016); watched screens, each once after the nightly figures land (app 024, tributary 110) |
 | `business-peers` | parser (`parser-peers`) | Sundays 05:30 | on | peers by business (047) |
 | `financials-rebuild` | facts-fetcher (`facts-fetcher --rebuild`) | suspended | emergency only | re-derives silver and gold from bronze, all at once (the `segments` catch-up does it by itself) |
 | `insiders-backfill` | doc-fetcher (`doc-fetcher-insiders`, 90 days) | suspended | by hand | Forms 3/4/5 history |
+| `bodies-refetch` | doc-fetcher (`doc-fetcher-bodies --refetch`) | suspended | by hand | downloads document bodies missing from the body store (150; after a loss, the files having no backup) |
 | `seed-documents` | doc-fetcher (`doc-fetcher-seed`) | suspended | by hand | tracked companies' recent 10-K/10-Q/8-K → `filings.raw` |
 | `section-passages` | parser (`parser-index --passages`) | suspended | emergency only | rebuilds older search passages all at once; no diffs (the `section-index` catch-up does it by itself) |
 | `parser-reparse` | parser-rs (`parser --reparse-all`) | suspended | emergency only | re-parses every stored document at once (the `section-index` catch-up re-queues them by itself) |
@@ -118,6 +119,15 @@ kubectl -n tributary create job --from=cronjob/financials-rebuild financials-reb
   | kubectl apply -f -
 ```
 
+- Document bodies (migration 150): the PersistentVolumeClaim `document-bodies` (`bodies` values;
+  k3s's local-path volume on the node's disk, kept on uninstall) holds every document and exhibit
+  body as a zstd file. `uses: bodies` mounts it read-write at `/bodies` with `BODIES_DIR`
+  (doc-fetcher, doc-crawler, section-index's move, bodies-refetch), `uses: bodies-ro` read-only
+  (parser, parser-backfill, parser-reparse, segments). Its directory on hermes:
+  `kubectl get pv $(kubectl -n tributary get pvc document-bodies -o jsonpath='{.spec.volumeName}')
+  -o jsonpath='{.spec.hostPath.path}{.spec.local.path}'`. Moving the stored bodies into it is the
+  `section-index` catch-up's (parser README "Document bodies", with the owner's `VACUUM FULL` once
+  done); a lost file comes back with `bodies-refetch`.
 - The document crawl (`doc-crawler` + `parser-backfill`, see
   [doc-fetcher](../../../services/doc-fetcher/README.md#document-crawl)) ships at `replicas: 0`.
   Start it by setting both to 1 under `values.services` in `deploy/flux/releases/tributary.yaml`
