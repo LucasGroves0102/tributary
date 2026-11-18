@@ -117,9 +117,8 @@ function ResultsOut({ companyId, name, event, lead }: { companyId: string; name:
     <Folio name="Results out" line={`8-K filed ${day(event.filed, true)}`} lead={lead} className="results-out">
       <p className="story results-line" role="status">
         {name} released its results on {longDay(event.filed)}.{" "}
-        <a href={read}>{event.release ? "Read the press release" : "Read the 8-K"}</a>
-        {" · "}
-        <a href={href({ view: "company", companyId, tab: "earnings" })}>Earnings</a>
+        <a href={read}>{event.release ? "Read the press release" : "Read the 8-K"}</a>, or its figures on{" "}
+        <a href={href({ view: "company", companyId, tab: "earnings" })}>Earnings</a>.
       </p>
       <p className="foot">
         The figures below are from the last 10-Q or 10-K until the report for this quarter is filed and its XBRL figures arrive;
