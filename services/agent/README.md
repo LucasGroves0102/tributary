@@ -126,7 +126,10 @@ result) or an `error` event if it couldn't be saved or the model never submitted
   project's other models of its company too) is run by `POST /v1/companies/{id}/model` as the
   user, on its base case only; the numbers (CAGR, margins, flags, both bases where the user has
   one-offs, the TTM column, `user_set` and `defaulted` years) go to the model as data. A failed run
-  leaves that model's error; the claims are still checked.
+  leaves that model's error; the claims are still checked. Its EPS and diluted shares are on today's
+  share basis like the Statements tab, so `/per-share` (annual and TTM, diluted, as the user) is read
+  too: the evidence those figures verify against, with the share basis and TTM EPS in the data
+  (Morgan 19: `/financials` keeps them as filed, Booking's 2024 shares ~34M before its split).
 - **Scope.** The thesis's company, its models' companies, an analysis project's company and peers,
   and tickers it names that the user can read; 12 at most. Every read is still the user's own
   Query API call. Plus `submit_check`.

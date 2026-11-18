@@ -26,6 +26,7 @@ from tributary_agent.thesis_check import (
     STOPPED_EARLY,
     Checker,
     CheckError,
+    Evidence,
     check_agent,
     named_tickers,
     text_hash,
@@ -950,6 +951,51 @@ def test_the_model_is_run_by_the_query_api_as_the_user():
     assert forecast[0]["defaulted"] == ["nonOperating", "taxRate", "shareChange", "fcfMargin"]
     assert forecast[0]["reported_quarters"] == 0 and "eps_diluted" in forecast[0]
     assert "defaulted" in CHECK_RULES and "reported_quarters" in CHECK_RULES
+
+
+class PerShare(FakeQueryApi):
+    """The Query API's /per-share (query_api.per_share): EPS and diluted shares on today's share
+    basis, as the model run and the Statements tab read them (Morgan 19: Booking's FY2025 EPS
+    $6.62 read "not found in the data", its 2024 shares ~34M as filed before the 25-for-1)."""
+
+    def __call__(self, request):
+        if request.url.path == f"/v1/companies/{NVDA}/per-share":
+            self.seen.append(request)
+            view = request.url.params["view"]
+            cite = {"accession_no": ACC, "form": "10-Q", "filed": "2026-08-27", "filing_url": URL}
+            rows = ([{"metric": "eps_diluted", "period_end": "2026-07-26", "value": "7.50",
+                      "unit": "USD/shares", "citation": cite},
+                     {"metric": "eps_basic", "period_end": "2026-07-26", "value": "7.61",
+                      "unit": "USD/shares", "citation": cite}] if view == "ttm" else
+                    [{"metric": "eps_diluted", "period_end": "2026-01-25", "value": "6.62",
+                      "unit": "USD/shares", "citation": cite},
+                     {"metric": "weighted_shares_diluted", "period_end": "2026-01-25",
+                      "value": "851600000", "unit": "shares", "citation": cite}])
+            return httpx.Response(200, json={
+                "company_id": NVDA, "view": view, "shares": "adjusted", "as_of": AS_OF,
+                "splits": [{"label": "25-for-1", "reverse": False}], "rows": rows})
+        return super().__call__(request)
+
+
+def test_the_models_per_share_history_is_on_todays_share_basis_and_is_evidence():
+    fake = PerShare()
+    _, messages, job = run(fake, *script())
+    asked = [r for r in fake.seen if r.url.path.endswith("/per-share")]
+    assert [r.url.params["view"] for r in asked] == ["annual", "ttm"]
+    assert all(r.headers["authorization"] == "Bearer alice-token" for r in asked)
+    model = check_data(messages)["models"][0]
+    assert model["ttm_eps_diluted"] == 7.5 and "25-for-1" in model["share_basis"]
+    assert "before later splits" in model["share_basis"]
+    assert all("diluted_shares" in y for y in model["history"])
+    # the split-adjusted figures are in the data, as verify.py reads it; basic EPS is left out
+    ev = Evidence(job.prefetched)
+    assert [f["status"] for f in ev.check("FY2025 diluted EPS was $6.62, TTM $7.50")] == [
+        "verified", "verified"]
+    assert ev.check("basic EPS $7.61")[0]["status"] == "unverified"
+    # without the route (an older Query API) the check data is as before
+    _, before, _ = run(FakeQueryApi(), *script())
+    plain = check_data(before)["models"][0]
+    assert "share_basis" not in plain and "diluted_shares" not in plain["history"][0]
 
 
 def test_an_older_query_api_without_the_route_leaves_the_model_out_not_the_check():

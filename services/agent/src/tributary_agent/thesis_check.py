@@ -67,6 +67,7 @@ from tributary_agent.agent import Agent, Answer, _collect_citations
 from tributary_agent.model_stats import (
     HISTORY_METRICS,
     HISTORY_QUARTERS,
+    MAX_HISTORY,
     run_model,
     scenario_assumptions,
 )
@@ -341,6 +342,8 @@ class Model:
     valuation: dict | None = None  # at the user's own price (None without one)
     figures: list["ModelFigure"] = field(default_factory=list)  # what a claim can match
     embedded: bool = True  # the thesis embeds it (else: the project's model, not embedded)
+    # /per-share's newest TTM EPS and the splits it applied (None: an older Query API)
+    per_share: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -521,9 +524,59 @@ def build_scope(api: Api, job: Job) -> None:
             c["tickers"] = c["tickers"] or found
 
 
+# Morgan 19: the model's EPS and diluted shares are on today's share basis (the model route reads
+# query_api.per_share, like the Statements tab) while /financials, the chat tool, keeps each figure
+# as filed: Booking's FY2025 EPS read $6.62 in the model and "not found in the data", its 2024
+# shares ~34M (before the 25-for-1 split) in a tool result beside the model's 851.6M
+PER_SHARE_METRICS = ("eps_diluted", "weighted_shares_diluted")
+
+
+def read_per_share(api: Api, company_id: str) -> tuple[list[str], dict | None]:
+    """The split-adjusted per-share history the model run's EPS and shares come from, read as
+    the user (`/per-share`, annual and TTM, diluted only): evidence for the figures check_data
+    shows, and the newest TTM EPS with the splits applied. ([], None) from an older Query API or
+    an error: the check goes on without it."""
+    results: list[str] = []
+    out: dict | None = None
+    for view, n in (("annual", MAX_HISTORY), ("ttm", 4)):
+        r = api.call("GET", f"/v1/companies/{company_id}/per-share",
+                     params={"view": view, "quarters": n})
+        if r is None or r.status_code != 200:
+            continue
+        try:
+            body = r.json()
+        except ValueError:
+            continue
+        if not isinstance(body, dict) or not isinstance(body.get("rows"), list):
+            continue
+        body["rows"] = [x for x in body["rows"]
+                        if isinstance(x, dict) and x.get("metric") in PER_SHARE_METRICS]
+        results.append(json.dumps(body, separators=(",", ":")))
+        out = out or {}
+        out["splits"] = [s.get("label") for s in _list(body.get("splits"))
+                         if isinstance(s, dict) and isinstance(s.get("label"), str)]
+        if view == "ttm":
+            eps = next((x for x in body["rows"] if x.get("metric") == "eps_diluted"), None)
+            if eps is not None and (v := _num_text(eps.get("value"))) is not None:
+                out["ttm_eps_diluted"] = v
+                out["ttm_eps_period_end"] = eps.get("period_end")
+    return results, out
+
+
+def _num_text(v: Any) -> float | None:
+    """A JSON number or a Decimal written as text (the Query API's figures)."""
+    if isinstance(v, str):
+        try:
+            return float(v)
+        except ValueError:
+            return None
+    return _num(v)
+
+
 def read_history(api: Api, job: Job) -> None:
-    """Each model's fiscal-year history, read as the user (the evidence), and the model run
-    through the Query API (the numbers)."""
+    """Each model's fiscal-year history, read as the user (the evidence), its per-share history
+    on today's share basis (the evidence for its EPS, read_per_share), and the model run through
+    the Query API (the numbers)."""
     for m in job.models:
         content, is_error = api.run("get_financials", {
             "company_id": m.company_id, "metrics": HISTORY_METRICS,
@@ -533,6 +586,8 @@ def read_history(api: Api, job: Job) -> None:
                 "permission denied") else "couldn't read this company's history")
             continue
         job.prefetched.append(content)
+        per_share, m.per_share = read_per_share(api, m.company_id)
+        job.prefetched.extend(per_share)
         body, error = run_model(api, m.company_id, m.state)
         if body is None:
             m.error = error
@@ -850,6 +905,23 @@ def _ttm(m: Model) -> dict:
             if v is not None}
 
 
+def _per_share(m: Model) -> dict:
+    """Which share basis the history's EPS and diluted shares are on (read_per_share): only
+    when the Query API gave the per-share history, so a check without it reads as before."""
+    if not m.per_share:
+        return {}
+    splits = m.per_share.get("splits") or []
+    out: dict[str, Any] = {"share_basis": (
+        "eps_diluted and diluted_shares are on today's share basis, every stock split applied to "
+        "earlier years, as the Statements tab and the model show them"
+        + (f" ({'; '.join(splits)})" if splits else "")
+        + "; get_financials gives each figure as its filing states it, before later splits")}
+    if m.per_share.get("ttm_eps_diluted") is not None:
+        out["ttm_eps_diluted"] = round(m.per_share["ttm_eps_diluted"], 2)
+        out["ttm_eps_period_end"] = m.per_share.get("ttm_eps_period_end")
+    return out
+
+
 def _pe(m: Model, fy: Any) -> float | None:
     """The base case's P/E at the user's price for one forecast year (the model's valuation)."""
     cases = (m.valuation or {}).get("cases")
@@ -896,6 +968,7 @@ def data_block(job: Job) -> str:
                              "revenue": y.get("revenue"),
                              "operating_income": y.get("operating_income"),
                              "net_income": y.get("net_income"), "eps_diluted": y.get("eps"),
+                             **({"diluted_shares": y.get("shares")} if m.per_share else {}),
                              "free_cash_flow": y.get("fcf"),
                              "accession_no": ((y.get("sources") or {}).get("revenue") or {})
                              .get("accession_no")} for y in m.history],
@@ -910,6 +983,7 @@ def data_block(job: Job) -> str:
                 "ttm_margin_pct": _pct((m.run or {}).get("margin")),
                 "ttm_period": (m.run or {}).get("period"),
                 **_ttm(m),
+                **_per_share(m),
                 **_model_extras(m),
                 "forecast": [{"fiscal_year": y["fy"], "growth_pct": _round(y["growth"]),
                               "margin_pct": _round(y["margin"]),
@@ -933,9 +1007,10 @@ def data_block(job: Job) -> str:
     data = {
         "companies": [{"company_id": c, **v} for c, v in job.companies.items()],
         "models": models,
-        "flag_rule": "growth more than 10 percentage points above or below the 5-year revenue "
-                     "CAGR, or an operating margin outside the lowest-highest of the last 5 "
-                     "fiscal years",
+        "flag_rule": "growth more than 10 percentage points above or below the revenue CAGR "
+                     "(over cagr_years: 5, or from the year before a trough, so a recovery "
+                     "isn't read as growth), or an operating margin outside the lowest-highest "
+                     "of the last 5 fiscal years; avg_operating_margin_pct is their median",
         "access_note": "access lists what the user can read for each company: financials "
                        "(numbers) and filings (text). Empty = no access.",
         "role_note": "role: thesis (the thesis's company), model (a model's), project (the "
