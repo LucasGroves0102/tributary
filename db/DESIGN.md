@@ -1149,25 +1149,3 @@ companies in `authz.public_access` (0 while the catalog is closed), aggregate-on
 `ops.public_*`, DEFINER because public_access's policy lets query_api read it only with a user; one count,
 search_path pinned, EXECUTE only `query_api`; the primary key serves it (2 ms on hermes). The status
 route adds it as `coverage.catalog_companies`. CREATE FUNCTION only.
-
-### 150_document_bodies.sql
-
-The storage diet (the owner, 2026-11-17: bodies as compressed files "as long as it doesn't affect
-performance"). Document and exhibit bodies were 34.3 GB of gzip-9 in TOAST (36 GB with its overhead),
-carried again by every weekly full dump (47 GB, 2026-11-15). Now each is a zstd-12 file named by its
-SHA-256 (libs/bodies): 0.72 of the gzip bytes on sampled documents, 0.77 on exhibits (0.77 / 0.92 with
-4 KiB block rounding: ~27 GB of files), decompressed ~4 GB/s against gzip's 1.2 GB/s. Postgres keeps
-the hash, `size_bytes` and the file's `body_bytes`; `content_gzip` is NULL once moved (CHECK one or
-the other, NOT VALID: every existing row had content_gzip). Content-addressed, so identical bodies
-(351 repeated hashes) share a file and a write is idempotent; files are written (fsync, rename) before
-the row's transaction, so "stored whole or not at all" (059) still holds and a failed transaction
-leaves an orphan the daily sweep trashes. Alternatives: zstd-19 saves 4% more at a twentieth of the
-speed (the move would take a day of CPU); a trained dictionary would help the small exhibits but is a
-second artefact both parsers must load; an object store is not on hermes; Postgres's own lz4 TOAST
-can't beat gzip-9 on already compressed bytes. Raw companyfacts (`bronze.company_facts`, 3 GB) stays:
-financials-rebuild re-derives from it. `bronze.filing_instances` (89 rows, 14 MB) and
-`ownership_documents` (XML parsed in SQL) stay too. Moving the stored bodies is a catch-up kind
-(071's machinery, services/parser `bodies.py`); the partial indexes give it the oldest rows still in
-the column without a scan. Reading: unchanged for every Query API route (query_api has no grant on
-`content_gzip`; routes read metadata columns, never TOAST); the parsers' and segments' per-document
-read gets faster (services/parser README "Document bodies" has the timings).

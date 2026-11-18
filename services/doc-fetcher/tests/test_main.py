@@ -4,10 +4,8 @@ not at all, its event owed until Kafka confirms it (review B2)."""
 
 import contextlib
 import gzip
-import hashlib
 import json
 import os
-import tempfile
 from pathlib import Path
 
 import httpx
@@ -15,11 +13,9 @@ import pytest
 
 from doc_fetcher import crawl_db, db
 from doc_fetcher.index import parse_items
-from doc_fetcher.main import MATERIAL_8K_ITEMS, Config, Coverage, fetch_exhibits, handle, sweep
-from tributary_bodies import Store
+from doc_fetcher.main import MATERIAL_8K_ITEMS, Config, Coverage, handle, sweep
 
 FIXTURES = Path(__file__).parent / "fixtures"
-STORE = Store(tempfile.mkdtemp(prefix="bodies-"))
 INDEX_8K = (FIXTURES / "nvda-8-K-index.htm").read_bytes()
 NVDA = "0001045810"
 OTHER = "0000320193"
@@ -141,7 +137,7 @@ def client(requests: list[str], failing: str | None = None) -> httpx.Client:
 def test_material_8k_is_fetched_with_its_exhibits():
     requests: list[str] = []
     conn, producer = FakeConn(), FakeProducer()
-    assert handle(conn, client(requests), producer, STORE, event(),
+    assert handle(conn, client(requests), producer, event(),
                   eight_k_items=frozenset(MATERIAL_8K_ITEMS)) is True
     assert requests == ["0001045810-26-000073-index.htm", "nvda-20260826.htm",
                         "q2fy27pr.htm", "q2fy27cfocommentary.htm"]
@@ -166,7 +162,7 @@ def test_a_10k_is_stored_with_its_annual_report_exhibit():
     tenk = event(form_type="10-K", accession_no="0001045810-26-000021",
                  url="https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
                      "0001045810-26-000021-index.htm")
-    assert handle(conn, httpx.Client(transport=httpx.MockTransport(respond)), producer, STORE,
+    assert handle(conn, httpx.Client(transport=httpx.MockTransport(respond)), producer,
                   tenk) is True
     assert requests == ["0001045810-26-000021-index.htm", "nvda-20260125.htm",
                         "nvda-2026xex13.htm"]
@@ -176,53 +172,26 @@ def test_a_10k_is_stored_with_its_annual_report_exhibit():
 
 def test_the_document_its_exhibits_and_the_owed_event_commit_together():
     conn, producer = FakeConn(), FakeProducer()
-    assert handle(conn, client([]), producer, STORE, event()) is True
+    assert handle(conn, client([]), producer, event()) is True
     assert conn.in_tx == ["INSERT bronze.filing_documents", "INSERT bronze.filing_exhibits",
                           "INSERT bronze.filing_exhibits", "INSERT ops.document_outbox"]
     # confirmed by Kafka: the outbox row goes, after the transaction
     assert conn.statements[-1] == "DELETE ops.document_outbox"
 
 
-def test_the_bodies_are_files_written_before_the_transaction():
-    """Migration 150: the rows carry the hash, raw size and file size; each body is a zstd file
-    named by its hash, written before the transaction that inserts its row."""
-    store = Store(tempfile.mkdtemp(prefix="bodies-"))
-    seen: list[list[str]] = []
-
-    class Watching(FakeConn):
-        def transaction(self):
-            seen.append(sorted(h for h, _ in store.files()))  # what's on disk at BEGIN
-            return super().transaction()
-
-    conn = Watching()
-    assert handle(conn, client([]), FakeProducer(), store, event()) is True
-    press = b"<html>press release</html>"  # the document and both exhibits, one body
-    assert seen == [[hashlib.sha256(press).hexdigest()]]
-    assert store.read(hashlib.sha256(press).hexdigest()) == press
-
-
-def test_fetch_exhibits_writes_files_then_rows():
-    store = Store(tempfile.mkdtemp(prefix="bodies-"))
-    conn = FakeConn()
-    assert fetch_exhibits(conn, client([]), store, "0001045810-26-000073", INDEX_8K) == 2
-    assert conn.in_tx == ["INSERT bronze.filing_exhibits", "INSERT bronze.filing_exhibits"]
-    assert len(list(store.files())) == 1
-
-
 def test_a_failed_exhibit_fetch_stores_nothing():
     """Before: the document was committed, the exhibit failed, no event was sent, and the crawl
     later marked the stored filing published: never parsed."""
     conn, producer = FakeConn(), FakeProducer()
-    store = Store(tempfile.mkdtemp(prefix="bodies-"))
     with pytest.raises(httpx.HTTPStatusError):
-        handle(conn, client([], failing="q2fy27cfocommentary.htm"), producer, store, event())
+        handle(conn, client([], failing="q2fy27cfocommentary.htm"), producer, event())
     assert not any(s.startswith("INSERT") for s in conn.statements)
-    assert producer.events == [] and list(store.files()) == []  # no file either
+    assert producer.events == []
 
 
 def test_an_unconfirmed_event_stays_owed():
     conn, producer = FakeConn(), FakeProducer(fail=True)
-    assert handle(conn, client([]), producer, STORE, event()) is True  # stored; offset moves on
+    assert handle(conn, client([]), producer, event()) is True  # stored; the offset can move on
     assert "INSERT ops.document_outbox" in conn.in_tx
     assert "DELETE ops.document_outbox" not in conn.statements  # the sweep sends it again
 
@@ -230,7 +199,7 @@ def test_an_unconfirmed_event_stays_owed():
 def test_8k_without_a_fetched_item_stops_at_the_index():
     requests: list[str] = []
     conn, producer = FakeConn(), FakeProducer()
-    assert handle(conn, client(requests), producer, STORE, event(),
+    assert handle(conn, client(requests), producer, event(),
                   eight_k_items=frozenset({"5.07"})) is False
     assert requests == ["0001045810-26-000073-index.htm"]
     assert producer.events == []
@@ -240,8 +209,7 @@ def test_8k_without_a_fetched_item_stops_at_the_index():
 def test_tracked_8k_ignores_items():
     requests: list[str] = []
     producer = FakeProducer()
-    assert handle(FakeConn(), client(requests), producer, STORE, event(),
-                  eight_k_items=None) is True
+    assert handle(FakeConn(), client(requests), producer, event(), eight_k_items=None) is True
     assert len(producer.events) == 1
 
 
@@ -370,8 +338,7 @@ def test_a_6k_results_release_is_stored_with_its_press_release():
     assert b"FORM 6-K" in INDEX_6K and b'<div class="info">2026-06-30</div>' in INDEX_6K
     requests: list[str] = []
     conn, producer = FakeConn(results=True), FakeProducer()
-    assert handle(conn, foreign_client(requests, INDEX_6K), producer, STORE,
-                  event(form_type="6-K"))
+    assert handle(conn, foreign_client(requests, INDEX_6K), producer, event(form_type="6-K"))
     assert requests == ["0001045810-26-000073-index.htm", "nvda-20260826.htm",
                         "q2fy27pr.htm", "q2fy27cfocommentary.htm"]
     # the rule's inputs: period of report, filing date, the CIK, document name, description
@@ -386,7 +353,7 @@ def test_a_6k_results_release_is_stored_with_its_press_release():
 def test_a_6k_that_is_not_a_results_release_stops_at_the_index():
     requests: list[str] = []
     conn, producer = FakeConn(results=False), FakeProducer()
-    assert handle(conn, foreign_client(requests, INDEX_6K), producer, STORE,
+    assert handle(conn, foreign_client(requests, INDEX_6K), producer,
                   event(form_type="6-K")) is False
     assert requests == ["0001045810-26-000073-index.htm"]
     assert not any(s.startswith("INSERT") for s in conn.statements) and producer.events == []
@@ -397,13 +364,13 @@ def test_a_20f_is_its_document_and_a_40f_has_its_exhibits():
     index_40f = INDEX_6K.replace(b'<td scope="row">6-K</td>', b'<td scope="row">40-F</td>')
     requests: list[str] = []
     conn = FakeConn()
-    assert handle(conn, foreign_client(requests, index_20f), FakeProducer(), STORE,
+    assert handle(conn, foreign_client(requests, index_20f), FakeProducer(),
                   event(form_type="20-F"))
     assert requests == ["0001045810-26-000073-index.htm", "nvda-20260826.htm"]
     assert conn.asked == []  # the 6-K rule only
     requests.clear()
     conn = FakeConn()
-    assert handle(conn, foreign_client(requests, index_40f), FakeProducer(), STORE,
+    assert handle(conn, foreign_client(requests, index_40f), FakeProducer(),
                   event(form_type="40-F"))
     assert requests[-2:] == ["q2fy27pr.htm", "q2fy27cfocommentary.htm"]
     assert conn.in_tx.count("INSERT bronze.filing_exhibits") == 2

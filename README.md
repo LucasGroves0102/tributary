@@ -267,7 +267,7 @@ curl -H "Authorization: Bearer $TRIBUTARY_API_KEY" \
 |---|---|
 | `services/` | One folder per deployable service or job (poller, bronze-loader, company-loader, facts-fetcher, doc-fetcher, parser, parser-rs, authz-sync, query-api, agent, mcp-server, web) |
 | `clients/` | Clients for Tributary's API (`python/tributary_client.py`: one file, the standard library only) |
-| `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `kafka`: Kafka client config from the environment, SASL/SCRAM included; `telemetry`: JSON logs and Prometheus metrics; `bodies`: the body store, document bodies as zstd files named by hash) |
+| `libs/` | Shared Python packages (`sec`: SEC client with User-Agent and rate limiting; `authz`: OpenFGA client; `kafka`: Kafka client config from the environment, SASL/SCRAM included; `telemetry`: JSON logs and Prometheus metrics) |
 | `db/` | Analytics migrations (`db/migrations`), the app database (`db/app`), backouts (`db/backout`) and the transforms' index (`db/transforms`) |
 | `streaming/` | Debezium configs and Kafka topic docs |
 | `authz/` | OpenFGA authorization model and its tests (`make authz-test`) |

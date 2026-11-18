@@ -107,15 +107,6 @@ operatorAccess:
 # CronJob schedules are in this zone (EDGAR's daily index lands late evening ET).
 timeZone: America/New_York
 
-# The body store (migration 150, templates/bodies.yaml): document and exhibit bodies as zstd files,
-# mounted at /bodies by `uses: bodies` / `bodies-ro`. ~27 GB once every stored body is a file
-# (hermes, 2026-11-17); local-path doesn't enforce the size. storageClassName: empty = the cluster's
-# default (k3s local-path, on the node's disk).
-bodies:
-  claimName: document-bodies
-  size: 100Gi
-  storageClassName: ""
-
 resources:
   requests:
     cpu: 25m
@@ -129,9 +120,8 @@ resources:
 # out, and the shared SEC rate limit in host Postgres), anthropic (API key + HTTPS out), github
 # (GitHub OAuth app keys, optional, + HTTPS out), market-data (data-connections-key, optional,
 # + HTTPS out to users' market-data providers), webhooks (HTTPS out to users' alert webhooks;
-# query_api/webhooks.py refuses private addresses), jwt, query-api, demo, bodies / bodies-ro (the
-# body store at /bodies, BODIES_DIR, read-write / read-only). Each adds the env vars, volumes and
-# network access it needs.
+# query_api/webhooks.py refuses private addresses), jwt, query-api, demo. Each adds the env vars
+# and network access it needs.
 # kafkaUser: the Kafka SCRAM user with kafka.sasl.enabled (default: the service/job name).
 # secClass: priority in the shared SEC rate limit (SEC_CALLER_CLASS): live, batch or bulk.
 # Defaults: live for services, batch for jobs. Lower classes leave tokens for higher ones.
@@ -148,14 +138,14 @@ services:
   # 10-K, 10-Q and material 8-K from the feed (FETCH_OPERATING, FETCH_8K_ITEMS; services/doc-fetcher
   # README), within minutes. SEC class live.
   doc-fetcher:
-    uses: [kafka, postgres, sec, bodies]
+    uses: [kafka, postgres, sec]
   # image: parser-rs (Rust, live since 2026-10-20) or parser (the Python reference). Both consume
   # documents.fetched as group parser-python, write the same silver.filing_sections rows
   # (parser = rust | python) and expose the same metrics and logs, so rolling back is this one
   # value.
   parser:
     image: parser-rs
-    uses: [kafka, postgres, bodies-ro]
+    uses: [kafka, postgres]
     resources:
       requests:
         cpu: 100m
@@ -176,7 +166,7 @@ services:
     image: doc-fetcher
     command: [doc-crawler]
     replicas: 0
-    uses: [kafka, postgres, sec, bodies]
+    uses: [kafka, postgres, sec]
     secClass: bulk
     terminationGracePeriodSeconds: 60
     env:
@@ -206,7 +196,7 @@ services:
   parser-backfill:
     image: parser-rs
     replicas: 0
-    uses: [kafka, postgres, bodies-ro]
+    uses: [kafka, postgres]
     env:
       PARSER_TOPIC: documents.backfill
       PARSER_GROUP: parser-backfill
@@ -425,25 +415,6 @@ jobs:
     env:
       INSIDERS_DAYS: "7"
       INSIDERS_LIMIT: "5000"
-  # Document bodies missing from the body store (migration 150; the hourly sweep counts them in
-  # ops.catchup_status, kind bodies, `failed`): downloads each by its stored URL at the bulk class
-  # and stores it only if it is still the stored hash. By hand, after a loss (no backup of the files
-  # by design: deploy/host README "Document bodies"): kubectl -n tributary create job
-  # --from=cronjob/bodies-refetch bodies-refetch-1 (~1M files if all are lost: a few days).
-  bodies-refetch:
-    image: doc-fetcher
-    command: [doc-fetcher-bodies, --refetch]
-    schedule: "0 0 1 1 *"
-    suspend: true
-    timeoutSeconds: 345600
-    uses: [postgres, sec, bodies]
-    secClass: bulk
-    resources:
-      requests:
-        cpu: 50m
-        memory: 128Mi
-      limits:
-        memory: 512Mi
   # Run once to fill a new database: kubectl create job --from=cronjob/seed-documents seed-1
   seed-documents:
     image: doc-fetcher
@@ -470,7 +441,7 @@ jobs:
     schedule: "20 * * * *"
     suspend: true
     timeoutSeconds: 14400
-    uses: [postgres, bodies-ro]
+    uses: [postgres]
     tmpSize: 256Mi
     resources:
       requests:
@@ -531,7 +502,7 @@ jobs:
     schedule: "40 * * * *"
     suspend: true
     timeoutSeconds: 14400
-    uses: [postgres, bodies]
+    uses: [postgres]
     resources:
       requests:
         cpu: 250m
@@ -543,9 +514,6 @@ jobs:
       SECTION_INDEX_BATCH: "25"
       CATCHUP_SECONDS: "1200"
       PARSER_CATCHUP_PER_RUN: "3000"
-      # Migration 150: document bodies moved into the body store after the rest of the catch-up
-      # (~110k an hour at ~8 ms each; ~1M bodies in about 10 runs), never past the job's 50 minutes
-      BODIES_SECONDS: "900"
   # Search passages without page furniture (migration 068): rebuilds only the passages of filings
   # indexed before it (parser-index --passages: no diffs, no checkpoint change, the same lock as
   # section-index, so one waits for the other). An emergency tool since migration 071: the hourly
@@ -581,7 +549,7 @@ jobs:
     schedule: "0 8 1 1 *"
     suspend: true
     timeoutSeconds: 172800
-    uses: [postgres, bodies-ro]
+    uses: [postgres]
     resources:
       requests:
         cpu: 500m

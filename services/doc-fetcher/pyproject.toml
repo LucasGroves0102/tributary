@@ -9,7 +9,6 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "tributary-sec",
     "prometheus-client>=0.20",
-    "tributary-bodies",
     "tributary-kafka",
     "tributary-telemetry",
 ]
@@ -20,7 +19,6 @@ doc-fetcher-seed = "doc_fetcher.seed:main"
 doc-fetcher-exhibits = "doc_fetcher.exhibits:main"
 doc-crawler = "doc_fetcher.crawl:main"
 doc-fetcher-insiders = "doc_fetcher.ownership:main"
-doc-fetcher-bodies = "doc_fetcher.bodies:main"
 
 [build-system]
 requires = ["setuptools>=68"]

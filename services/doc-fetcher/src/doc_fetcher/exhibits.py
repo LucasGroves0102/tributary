@@ -6,7 +6,7 @@ import os
 import httpx
 import psycopg
 
-from doc_fetcher.db import body_store, eight_ks_without_exhibits
+from doc_fetcher.db import eight_ks_without_exhibits
 from doc_fetcher.index import index_url
 from doc_fetcher.main import fetch_exhibits
 from tributary_sec import sec_client
@@ -17,7 +17,6 @@ log = logging.getLogger("doc_fetcher.exhibits")
 
 def main() -> None:
     configure_logging()
-    store = body_store()
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn, \
             sec_client(os.environ["SEC_USER_AGENT"]) as client:
         pending = eight_ks_without_exhibits(conn)
@@ -26,7 +25,7 @@ def main() -> None:
             try:
                 resp = client.get(index_url(cik, accession))
                 resp.raise_for_status()
-                n = fetch_exhibits(conn, client, store, accession, resp.content)
+                n = fetch_exhibits(conn, client, accession, resp.content)
                 log.info("%s: %d exhibits", accession, n)
             except httpx.HTTPError as e:
                 log.error("%s: %s", accession, e)

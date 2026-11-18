@@ -22,8 +22,7 @@ metrics. Events from before the field existed have no `source` and came from the
 seed events without it were marked `seed` in bronze by `db/migrations/016_seed_source.sql`.
 
 `documents.fetched` references the document in `bronze.filing_documents` instead of
-embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit. Its
-`content_sha256` also names the body's file in the body store (migration 150, libs/bodies).
+embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit.
 
 `documents.backfill` carries the same reference for documents stored by the document crawl
 (hundreds of thousands of filings over days). It is a separate topic with its own consumer group,

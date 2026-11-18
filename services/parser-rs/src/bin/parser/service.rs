@@ -8,7 +8,7 @@ use filing_parser::{Error, Section, exhibit_section, parse};
 use serde_json::Value;
 
 use crate::BoxError;
-use crate::db::{MissingBody, Store};
+use crate::db::Store;
 use crate::log;
 use crate::metrics::Metrics;
 
@@ -48,21 +48,12 @@ impl std::fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
-/// A body missing from the body store is a Skip, as Python's MissingBody (a KeyError); any
-/// other load error is Fatal.
-fn skip_missing(e: BoxError) -> Failure {
-    match e.downcast::<MissingBody>() {
-        Ok(missing) => Failure::Skip(missing.to_string()),
-        Err(e) => Failure::Fatal(e),
-    }
-}
-
 pub fn parse_one(
     store: &mut impl Store,
     metrics: &Metrics,
     accession_no: &str,
 ) -> Result<(), Failure> {
-    let Some((form, content)) = store.load_document(accession_no).map_err(skip_missing)? else {
+    let Some((form, content)) = store.load_document(accession_no)? else {
         return Err(Failure::Skip(format!(
             "'no bronze document for {accession_no}'"
         )));
@@ -110,7 +101,7 @@ fn sections(
     content: &[u8],
 ) -> Result<Vec<Section>, Failure> {
     let mut sections = parse(content, form)?;
-    for e in store.load_exhibits(accession_no).map_err(skip_missing)? {
+    for e in store.load_exhibits(accession_no)? {
         sections.push(exhibit_section(
             &e.exhibit_type,
             e.description.as_deref(),
@@ -163,9 +154,6 @@ pub mod tests {
         pub exhibits: HashMap<String, Vec<FakeExhibit>>,
         pub sections: HashMap<String, Vec<Section>>,
         pub writes: usize,
-        /// accessions whose document's / exhibits' bodies are missing from the body store
-        pub missing: Vec<String>,
-        pub missing_exhibits: Vec<String>,
     }
 
     impl FakeStore {
@@ -182,18 +170,10 @@ pub mod tests {
 
     impl Store for FakeStore {
         fn load_document(&mut self, acc: &str) -> Result<Option<(String, Vec<u8>)>, BoxError> {
-            if self.missing.iter().any(|m| m == acc) {
-                let msg = format!("no body file {acc}");
-                return Err(Box::new(MissingBody(msg)));
-            }
             Ok(self.documents.get(acc).cloned())
         }
 
         fn load_exhibits(&mut self, acc: &str) -> Result<Vec<Exhibit>, BoxError> {
-            if self.missing_exhibits.iter().any(|m| m == acc) {
-                let msg = format!("no body file {acc} EX-99.1");
-                return Err(Box::new(MissingBody(msg)));
-            }
             let mut exhibits = self.exhibits.get(acc).cloned().unwrap_or_default();
             exhibits.sort();
             Ok(exhibits
@@ -259,21 +239,6 @@ pub mod tests {
         let err = parse_one(&mut FakeStore::default(), &metrics, "x").unwrap_err();
         assert!(matches!(&err, Failure::Skip(r) if r == "'no bronze document for x'"));
         assert_eq!(metrics.parse_failures.with_label_values(&[""]).get(), 0);
-    }
-
-    #[test]
-    fn missing_bodies_are_skipped() {
-        let mut store = FakeStore::with(&[("a", "8-K", fixture("8-K"))]);
-        store.missing.push("b".into());
-        store.missing_exhibits.push("a".into());
-        let metrics = Metrics::new().unwrap();
-        let err = parse_one(&mut store, &metrics, "b").unwrap_err();
-        assert!(matches!(&err, Failure::Skip(r) if r == "'no body file b'"));
-        // an exhibit's counts against the form, as anything Python's parse_one raises there
-        let err = parse_one(&mut store, &metrics, "a").unwrap_err();
-        assert!(matches!(&err, Failure::Skip(r) if r == "'no body file a EX-99.1'"));
-        assert_eq!(count(&metrics, "failures", "8-K"), 1);
-        assert!(store.sections.is_empty());
     }
 
     #[test]

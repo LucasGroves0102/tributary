@@ -8,10 +8,9 @@ from pathlib import Path
 import pytest
 from prometheus_client import REGISTRY
 
-from filing_parser.db import load_document, load_exhibits, table_rows, write_sections
+from filing_parser.db import load_document, table_rows, write_sections
 from filing_parser.main import parse_one
 from filing_parser.sections import PARSER_VERSION, parse
-from tributary_bodies import Body, MissingBody, Store
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -47,32 +46,6 @@ def test_parse_and_write_is_idempotent(conn):
         " ORDER BY section_key").fetchall()
     assert rows == [("8.01", "0001045810", "https://example/doc", "python"),
                     ("9.01", "0001045810", "https://example/doc", "python")]
-
-
-def test_bodies_in_the_store_read_like_bodies_in_the_column(conn, tmp_path):
-    """Migration 150: a moved row (content_gzip NULL, body_bytes set) reads from its zstd file;
-    rows in either place parse to the same sections."""
-    store = Store(tmp_path)
-    doc, press = Body.of(HTML), Body.of(b"<html><p>Results press release</p></html>")
-    for b in (doc, press):
-        store.put(b)
-    conn.execute("UPDATE bronze.filing_documents SET content_gzip = NULL, body_bytes = %s,"
-                 " content_sha256 = %s WHERE accession_no = %s", (len(doc.data), doc.sha256, ACC))
-    conn.execute("INSERT INTO bronze.filing_exhibits (accession_no, exhibit_type, description,"
-                 " document_name, url, content_sha256, size_bytes, body_bytes) VALUES"
-                 " (%s, 'EX-99.1', 'PRESS RELEASE', 'pr.htm', 'u', %s, %s, %s)",
-                 (ACC, press.sha256, press.size, len(press.data)))
-    assert load_document(conn, ACC, store) == ("8-K", HTML)
-    assert load_exhibits(conn, ACC, store) == [
-        ("EX-99.1", "PRESS RELEASE", b"<html><p>Results press release</p></html>")]
-    parse_one(conn, ACC, store)
-    assert conn.execute("SELECT count(*) FROM silver.filing_sections WHERE accession_no = %s"
-                        " AND section_key = 'EX-99.1'", (ACC,)).fetchone() == (1,)
-    with pytest.raises(MissingBody):  # no store: a KeyError the consumer logs and skips
-        load_document(conn, ACC)
-    store.path(doc.sha256).unlink()
-    with pytest.raises(KeyError):
-        parse_one(conn, ACC, store)
 
 
 def test_parse_one_counts_parsed_documents(conn):

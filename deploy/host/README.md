@@ -39,30 +39,9 @@ the `section-index` job until `ops.section_index_status` has caught up (about 1 
 `REINDEX` `gold.section_search_tsv`. Search and "What changed" are empty until then; every other
 screen works at once.
 
-Dumps use `zstd:1` compression (Postgres 16). The document bodies were gzip, and `pg_dump`'s
-default gzip recompressing them on one core took most of the first full dump's ~70 minutes (38 GB,
-2026-11-02). Older gzip dumps restore the same way.
-
-## Document bodies
-
-Since migration 150 the document and exhibit bodies are zstd files in the body store (the
-`document-bodies` volume, deploy/helm/tributary README; libs/bodies), not Postgres rows, so no dump
-carries them: the weekly full dump shrinks by ~34 GB as the `bodies` catch-up moves them (47 GB on
-2026-11-15, ~13 GB after), the same again while a new full dump sits beside the old one, and the
-restore test's free-space need (2x the backup) drops with it. The restore test is unchanged: it
-restores the database, whose moved rows name their files by hash.
-
-The files are not backed up (recommended; the owner's call). They are the SEC's documents, immutable
-and re-fetchable by the URL each row keeps: `bodies-refetch` (`doc-fetcher-bodies --refetch`,
-doc-fetcher README "Document bodies") downloads every missing one at the bulk class and stores it
-only if it is still the stored hash: about 1M files (documents and exhibits) in a few days if all are
-lost. A copy beside the dumps would sit on the same disk (it survives a deletion, not a disk
-failure) and cost ~27 GB, most of what the move saves. The code never deletes a body outright: the
-daily sweep moves an unreferenced file to `trash/` for a week, puts back one a row still names, and
-trashes nothing when most files look unreferenced (a store that isn't this database's). After
-restoring a dump, the sweep reconciles the store with it: files the restored rows don't name go to
-the trash, rows whose file is gone are counted (`ops.catchup_status`, kind `bodies`, `failed`) for
-`bodies-refetch`.
+Dumps use `zstd:1` compression (Postgres 16). Most of the document bodies are already gzip, and
+`pg_dump`'s default gzip recompressing them on one core took most of the first full dump's ~70
+minutes (38 GB, 2026-11-02). Older gzip dumps restore the same way.
 
 ## Install
 

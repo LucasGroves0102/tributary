@@ -11,8 +11,8 @@ every row as label + the numbers printed in it.
 
 `csv` reads DIR/<accession>.htm for each filing in FILINGS and writes candidate rows for
 `10k_figures.csv`. The committed CSV is that output after review against the filing; tests
-never re-run extraction. Documents come from bronze.filing_documents (content_gzip, or since
-migration 150 the body store's zstd file, decompressed); see README.md.
+never re-run extraction. Documents come from bronze.filing_documents (content_gzip is gzip of
+the HTML); see README.md.
 """
 
 from __future__ import annotations

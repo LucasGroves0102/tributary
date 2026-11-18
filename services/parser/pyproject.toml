@@ -7,7 +7,6 @@ dependencies = [
     "lxml>=5.0",
     "psycopg[binary]>=3.2",
     "prometheus-client>=0.20",
-    "tributary-bodies",
     "tributary-kafka",
     "tributary-telemetry",
 ]

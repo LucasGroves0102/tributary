@@ -30,7 +30,6 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
-from typing import BinaryIO
 
 EXTRACTOR_VERSION = 1
 CHUNK = 1 << 20
@@ -306,21 +305,14 @@ def extract_chunks(chunks: Iterable[str]) -> Extract:
     return p.result()
 
 
-def _chunks(stream: io.BufferedIOBase | gzip.GzipFile | BinaryIO,
-            encoding: str = "utf-8") -> Iterator[str]:
+def _chunks(stream: io.BufferedIOBase | gzip.GzipFile, encoding: str = "utf-8") -> Iterator[str]:
     reader = io.TextIOWrapper(stream, encoding=encoding, errors="replace")  # type: ignore[arg-type]
     while chunk := reader.read(CHUNK):
         yield chunk
 
 
-def extract_stream(stream: io.BufferedIOBase | gzip.GzipFile | BinaryIO) -> Extract:
-    """Facts from a document read as a binary stream, a chunk at a time (a stored body:
-    tributary_bodies.open_body, gzip from the column or zstd from its file)."""
-    return extract_chunks(_chunks(stream))
-
-
 def extract_gzip(content_gzip: bytes) -> Extract:
-    """Facts from a gzip-compressed document (bronze.filing_documents' content_gzip before
-    migration 150 moved it to a file), decompressed a chunk at a time."""
+    """Facts from a gzip-compressed document as stored in bronze.filing_documents, decompressed
+    a chunk at a time."""
     with gzip.GzipFile(fileobj=io.BytesIO(content_gzip)) as f:
-        return extract_stream(f)
+        return extract_chunks(_chunks(f))

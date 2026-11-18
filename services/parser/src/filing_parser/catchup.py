@@ -24,10 +24,6 @@ a new filing:
 4. passages: index.refresh_passages for the rest of `seconds` (filings whose passages an older
    SEARCH_RULE built, oldest first), under the lock section-index and section-passages share.
 5. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
-6. bodies (migration 150, bodies.py): document bodies move out of Postgres into zstd files in the
-   body store (BODIES_DIR), oldest filing first, for up to BODIES_SECONDS and never past the job's
-   JOB_SECONDS; once a day a sweep first trashes orphan files and counts missing ones. No
-   BODIES_DIR: recorded as skipped.
 
 Each kind records a row in ops.catchup_runs (read ops.catchup_status). `UPDATE ops.catchup SET
 paused = true WHERE kind = ...` stops a kind's work and keeps measuring it. Everything is keyed on
@@ -48,10 +44,9 @@ from datetime import date
 
 import psycopg
 
-from filing_parser import bodies, index, statements
+from filing_parser import index, statements
 from filing_parser.diff import ALGORITHM
 from filing_parser.sections import PARSER_VERSION
-from tributary_bodies import Store
 
 log = logging.getLogger("parser_index.catchup")
 
@@ -65,7 +60,6 @@ SECTIONS_BATCH = 10000  # ... a transaction (2,000 took 0.8 s on hermes; 079's b
 STATEMENTS_SECONDS = 300  # filings' statement lines read per run, in seconds, out of SECONDS
 STATEMENTS_BATCH = 100    # ... a transaction
 JOB_SECONDS = 3000  # ... within 50 minutes of the job's start: the next hourly run is never skipped
-BODIES_SECONDS = bodies.SECONDS  # bodies moved per run, in seconds, after the rest (JOB_SECONDS)
 
 
 def budget(seconds: float, elapsed: float) -> float:
@@ -142,12 +136,6 @@ def measure_diffs(conn: psycopg.Connection, r: Result) -> Result:
         "SELECT count(*), min(filed) FROM ops.section_index"
         " WHERE form IN ('10-K', '10-Q') AND algorithm IS DISTINCT FROM %s",
         (ALGORITHM,)).fetchone()
-    return r
-
-
-def measure_bodies(conn: psycopg.Connection, r: Result) -> Result:
-    r.behind, r.oldest = bodies.backlog(conn)
-    r.failed = bodies.last_missing(conn)
     return r
 
 
@@ -258,41 +246,6 @@ def diffs(conn: psycopg.Connection, diffed: int) -> Result:
     return r
 
 
-def body_files(conn: psycopg.Connection, store: Store | None, seconds: float, *,
-               clock: Callable[[], float] = time.monotonic, now: float | None = None) -> Result:
-    """Bodies out of Postgres into files for up to `seconds` (clock time), after a sweep when one
-    is due (bodies.py). A filesystem error stops this run's work (logged); the measurement is
-    recorded either way: `failed` = bodies whose checks failed this run + files the last sweep
-    found missing."""
-    started = clock()
-    with conn.transaction():
-        new = fresh(conn, "bodies", bodies.VERSION)
-        paused, _ = begin(conn, "bodies", bodies.VERSION)
-        r = Result("bodies", bodies.VERSION, paused=paused)
-        if new:
-            record(conn, measure_bodies(conn, r), 0.0)
-        due = store is not None and not paused and seconds > 0 and bodies.sweep_due(conn)
-    note, failed, swept = None, 0, None
-    if store is None:
-        note = "skipped: no body store (BODIES_DIR)"
-    elif not paused and seconds > 0:
-        try:
-            if due:
-                swept = bodies.sweep(conn, store, now)
-                note = swept.note
-            moved = bodies.move(conn, store, started + seconds, clock=clock)
-            r.done, failed = moved.bodies, len(moved.failed)
-            log.info("bodies: %d moved, %.1f MB gzip -> %.1f MB zstd, %d failed", moved.bodies,
-                     moved.gzip_bytes / 1e6, moved.file_bytes / 1e6, failed)
-        except OSError:
-            log.exception("bodies: the body store failed; the next run tries again")
-    with conn.transaction():
-        r.behind, r.oldest = bodies.backlog(conn)
-        r.failed = failed + (swept.missing if swept else bodies.last_missing(conn))
-        record(conn, r, clock() - started, note)
-    return r
-
-
 def skipped(conn: psycopg.Connection, note: str = "skipped: lock held") -> list[Result]:
     """parser-index found its lock held (a hand-run job does the work): every kind records a run
     that did nothing, with its last count (ops.catchup_skipped), measured only when the last count
@@ -305,7 +258,6 @@ def skipped(conn: psycopg.Connection, note: str = "skipped: lock held") -> list[
         ("statements", statements.READER, measure_statements),
         ("passages", index.SEARCH_RULE, measure_passages),
         ("diffs", ALGORITHM, measure_diffs),
-        ("bodies", bodies.VERSION, measure_bodies),
     ]
     results = []
     for kind, version, measure in kinds:
@@ -330,15 +282,12 @@ def skipped(conn: psycopg.Connection, note: str = "skipped: lock held") -> list[
 def run(conn: psycopg.Connection, seconds: float = SECONDS, per_run: int = PER_RUN,
         diffed: int = 0, clock: Callable[[], float] = time.monotonic,
         sections_seconds: float = SECTIONS_SECONDS,
-        statements_seconds: float = STATEMENTS_SECONDS, *, store: Store | None = None,
-        bodies_seconds: float = BODIES_SECONDS, job_deadline: float | None = None
-        ) -> list[Result]:
+        statements_seconds: float = STATEMENTS_SECONDS) -> list[Result]:
     """Every kind, after a parser-index run that finished its own work: the parser checks get up to
     `sections_seconds` of `seconds`, the statement lines up to `statements_seconds`, the passages
-    what is left; then the bodies up to `bodies_seconds`, ending by `job_deadline` (clock time).
-    A kind that raises is logged and left for the next run; a lost connection stops the job."""
+    what is left. A kind that raises is logged and
+    left for the next run; a lost connection stops the job."""
     deadline = clock() + seconds
-    job_end = clock() + seconds + bodies_seconds if job_deadline is None else job_deadline
     steps: list[Callable[[], Result]] = [
         lambda: parser(conn, per_run),
         lambda: sections(conn, min(sections_seconds, max(0.0, deadline - clock())), clock=clock),
@@ -346,8 +295,6 @@ def run(conn: psycopg.Connection, seconds: float = SECONDS, per_run: int = PER_R
                                 clock=clock),
         lambda: passages(conn, max(0.0, deadline - clock()), clock=clock),
         lambda: diffs(conn, diffed),
-        lambda: body_files(conn, store, min(bodies_seconds, max(0.0, job_end - clock())),
-                           clock=clock),
     ]
     results = []
     for step in steps:

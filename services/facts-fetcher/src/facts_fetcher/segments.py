@@ -6,9 +6,7 @@ document crawl already store (bronze.filing_documents). No SEC requests.
 
 A run takes the stored 10-K/10-Q documents that have no extract for their current content hash
 and EXTRACTOR_VERSION (that row is the checkpoint), in (CIK, accession) order so a company's
-filings land together. Each document (content_gzip, or its zstd file in the body store once
-migration 150's catch-up moved it: BODIES_DIR) is decompressed and parsed in chunks (ixbrl.py); a
-document whose file is missing is skipped and logged, never stored as an error. A batch
+filings land together. Each document is decompressed and parsed in chunks (ixbrl.py); a batch
 of them is written in one transaction together with its silver rows and its companies' gold
 rows and segment quality check. A run stops after `limit` documents; the next resumes with what
 is left, so the first load (~90k documents) is a series of short runs and a crash loses one
@@ -35,9 +33,8 @@ from dataclasses import dataclass, field
 import psycopg
 
 from facts_fetcher import catchup
-from facts_fetcher.ixbrl import EXTRACTOR_VERSION, Extract, Fact, extract_stream, plain
+from facts_fetcher.ixbrl import EXTRACTOR_VERSION, Extract, Fact, extract_gzip, plain
 from facts_fetcher.labels import member_label
-from tributary_bodies import MissingBody, Store, open_body
 from tributary_telemetry import configure_logging
 
 FORMS = ("10-K", "10-K/A", "10-Q", "10-Q/A")
@@ -111,16 +108,12 @@ def decompress(raw_gzip: bytes) -> list[dict]:
     return json.loads(gzip.decompress(raw_gzip))
 
 
-def build_row(accession_no: str, cik: str, sha256: str, content_gzip: bytes | None,
-              axes: set[str], store: Store | None = None) -> Row:
-    """Extract one stored document (content_gzip, else its file in `store`). A broken document
-    becomes an error row, so it isn't retried until the extractor version changes; a missing
-    file raises MissingBody (not the document's fault: the caller skips it)."""
+def build_row(accession_no: str, cik: str, sha256: str, content_gzip: bytes,
+              axes: set[str]) -> Row:
+    """Extract one stored document. Never raises: a broken document becomes an error row, so it
+    isn't retried until the extractor version changes."""
     try:
-        with open_body(store, content_gzip, sha256) as f:
-            ex: Extract = extract_stream(f)
-    except MissingBody:
-        raise
+        ex: Extract = extract_gzip(content_gzip)
     except Exception as e:  # noqa: BLE001 - one bad document must not stop the load
         log.warning("%s: extraction failed: %s", accession_no, e)
         return Row(accession_no, cik, sha256, "error", error=f"{type(e).__name__}: {e}"[:500])
@@ -158,13 +151,10 @@ def pending(conn: psycopg.Connection, limit: int) -> list[tuple[str, str, str]]:
         """, (list(FORMS), EXTRACTOR_VERSION, limit)).fetchall()
 
 
-def document(conn: psycopg.Connection, accession_no: str) -> tuple[bytes | None, str] | None:
-    """(content_gzip, or None once the body is a file; content SHA-256), None if not stored."""
-    row = conn.execute("SELECT content_gzip, content_sha256 FROM bronze.filing_documents"
-                       " WHERE accession_no = %s", (accession_no,)).fetchone()
-    if row is None:
-        return None
-    return (bytes(row[0]) if row[0] is not None else None), row[1]
+def document(conn: psycopg.Connection, accession_no: str) -> bytes | None:
+    row = conn.execute("SELECT content_gzip FROM bronze.filing_documents WHERE accession_no = %s",
+                       (accession_no,)).fetchone()
+    return bytes(row[0]) if row else None
 
 
 def store_rows(conn: psycopg.Connection, rows: Sequence[Row]) -> None:
@@ -236,8 +226,7 @@ def _flush(conn: psycopg.Connection, rows: list[Row], stats: RunStats) -> None:
     stats.batches.append(len(rows))
 
 
-def run(conn: psycopg.Connection, limit: int = LIMIT, batch_size: int = BATCH,
-        store: Store | None = None) -> RunStats:
+def run(conn: psycopg.Connection, limit: int = LIMIT, batch_size: int = BATCH) -> RunStats:
     """Extract up to `limit` pending documents, `batch_size` per transaction."""
     with conn.transaction():
         axes = segment_axes(conn)
@@ -246,16 +235,13 @@ def run(conn: psycopg.Connection, limit: int = LIMIT, batch_size: int = BATCH,
     todo = todo[:limit]
     started = time.monotonic()
     batch: list[Row] = []
-    for accession_no, cik, _ in todo:  # the hash read with the body is the checkpoint's
+    for accession_no, cik, sha in todo:
         with conn.transaction():
-            stored = document(conn, accession_no)
-        if stored is None:  # deleted meanwhile
+            content = document(conn, accession_no)
+        if content is None:  # deleted meanwhile
             continue
-        try:
-            batch.append(build_row(accession_no, cik, stored[1], stored[0], axes, store))
-        except MissingBody as e:  # left pending: the next run tries again
-            log.warning("%s: skipped, %s", accession_no, e)
-        del stored
+        batch.append(build_row(accession_no, cik, sha, content, axes))
+        del content
         if len(batch) >= batch_size:
             _flush(conn, batch, stats)
             batch = []
@@ -350,12 +336,11 @@ def main(argv: Iterable[str] | None = None) -> None:
     args = parser.parse_args(None if argv is None else list(argv))
     configure_logging()
     started = time.monotonic()
-    store = Store.from_env()  # BODIES_DIR: documents migration 150's catch-up moved to files
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         if args.rebuild:
             stats = rebuild(conn)
         else:
-            stats = run_rounds(lambda: run(conn, args.limit, args.batch, store), args.rounds,
+            stats = run_rounds(lambda: run(conn, args.limit, args.batch), args.rounds,
                                args.pause_seconds)
         log.info("%s: %d documents, %d with iXBRL, %d silver rows, %d gold rows in %.0fs",
                  "complete" if stats.completed else "limit reached, run again to continue",

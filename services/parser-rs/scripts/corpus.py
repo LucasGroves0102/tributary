@@ -1,9 +1,8 @@
 """Write the parser corpus: the repo's filing fixtures plus documents and exhibits from bronze.
 
-Usage: DATABASE_URL=... [BODIES_DIR=...] python scripts/corpus.py OUT_DIR [--limit 192]
+Usage: DATABASE_URL=... python scripts/corpus.py OUT_DIR [--limit 192]
 
-Documents are written gzipped (a body moved to the body store, migration 150, is read from its file
-under BODIES_DIR and gzipped again), one file each, and listed in OUT_DIR/manifest.jsonl
+Documents are written gzipped, as stored, one file each, and listed in OUT_DIR/manifest.jsonl
 in the input format of `parser-rs` and scripts/bench.py. Reads Postgres only; rows are streamed.
 """
 
@@ -15,8 +14,6 @@ import re
 from pathlib import Path
 
 import psycopg
-
-from tributary_bodies import Store, read_body
 
 REPO = Path(__file__).resolve().parents[3]
 FIXTURES = [REPO / "services/parser/tests/fixtures"]
@@ -41,32 +38,24 @@ def main() -> None:
                 form = re.fullmatch(r"\w+-(.+)\.htm\.gz", f.name).group(1)  # nvda-10-K.htm.gz
                 add({"id": f"fixture/{f.name}", "source": "fixture", "form": form}, f)
 
-        store = Store.from_env()
-
-        def gz(content: bytes | None, sha256: str) -> bytes:
-            return content if content is not None else gzip.compress(
-                read_body(store, None, sha256))
-
         with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
             conn.read_only = True
             accessions = []
             with conn.cursor(name="documents") as cur:
-                cur.execute("SELECT accession_no, form, content_gzip, content_sha256"
-                            " FROM bronze.filing_documents"
+                cur.execute("SELECT accession_no, form, content_gzip FROM bronze.filing_documents"
                             " ORDER BY filed, accession_no LIMIT %s", (args.limit,))
-                for accession_no, form, content, sha256 in cur:
+                for accession_no, form, content in cur:
                     path = docs / f"{accession_no}.htm.gz"
-                    path.write_bytes(gz(content, sha256))
+                    path.write_bytes(content)
                     accessions.append(accession_no)
                     add({"id": accession_no, "source": "bronze", "form": form}, path)
             with conn.cursor(name="exhibits") as cur:
-                cur.execute("SELECT accession_no, exhibit_type, description, content_gzip,"
-                            " content_sha256 FROM bronze.filing_exhibits"
-                            " WHERE accession_no = ANY(%s)"
+                cur.execute("SELECT accession_no, exhibit_type, description, content_gzip"
+                            " FROM bronze.filing_exhibits WHERE accession_no = ANY(%s)"
                             " ORDER BY accession_no, exhibit_type", (accessions,))
-                for accession_no, exhibit_type, description, content, sha256 in cur:
+                for accession_no, exhibit_type, description, content in cur:
                     path = docs / f"{accession_no}.{exhibit_type}.htm.gz"
-                    path.write_bytes(gz(content, sha256))
+                    path.write_bytes(content)
                     add({"id": f"{accession_no}/{exhibit_type}", "source": "bronze",
                          "exhibit_type": exhibit_type, "description": description}, path)
 
