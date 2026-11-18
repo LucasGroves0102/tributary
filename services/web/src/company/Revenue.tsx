@@ -233,6 +233,19 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
       ) : (
         <>
           <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
+          {(() => {
+            // quarters with no breakdown have no bars under a continuous growth line: say so on the chart
+            // (Riley, test 10, finding 23: 3 of 12 geography quarters had bars, and it looked broken)
+            const bare = d.periods.filter((_, i) => !d.blocked[i] && d.rows.every((r) => r.points[i] === null)).length;
+            const by = pick === "geography" ? "geography" : pick === "product_service" ? "product" : "segment";
+            return bare > 0 && (
+              <p className="small muted card-b decomposition-gaps" role="note">
+                {bare} of the {d.periods.length} quarters in the table have no bars: {c.name} doesn't report revenue by {by} for
+                the four quarters a twelve-month change needs there (the table marks them {NO_DATA}). The line is revenue growth
+                from the statements, which every quarter has.
+              </p>
+            );
+          })()}
           <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           <TableScroll label="Growth decomposition">
             <table className="t decomposition">

@@ -12,20 +12,33 @@
 import { useState, type FormEvent } from "react";
 
 import { AlertSettingsSection } from "../alerts/AlertSettings";
+import { WatchedScreens } from "../watches/WatchedScreens";
 import { ApiKeysSection } from "../apikeys/ApiKeysSection";
 import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { ConnectedAppsSection } from "../connect/ConnectedApps";
 import { Skeleton } from "../components/States";
 import { localDay } from "../format";
 import { refreshMarketData, useMarketData } from "../market/useMarketData";
-import type { MarketConnection, MarketProvider } from "../types";
+import type { MarketConnection, MarketProvider, ScreenWatches } from "../types";
 
-export function Settings({ token }: { token: string }) {
+export function Settings({ token, watches }: { token: string; watches?: ScreenWatches | null }) {
   const market = useMarketData(token);
   return (
     <div className="page settings-page">
       <h1>Settings</h1>
       <AlertSettingsSection token={token} />
+      {/* the screens that alert, beside the filing alerts (Riley, test 10, finding 72): a watch is set on its screen */}
+      {!!watches?.watches.length && (
+        <section className="card" aria-label="Watched screens">
+          <div className="card-h">
+            <h2 className="grow">Watched screens</h2>
+            <span className="sub">change or stop one on its screen, with Watch</span>
+          </div>
+          <div className="card-b">
+            <WatchedScreens list={watches} />
+          </div>
+        </section>
+      )}
       {/* a server without data connections shows no section for them (Riley 90: "none available") */}
       {market?.enabled !== false && (
       <section className="card" aria-label="Connections">

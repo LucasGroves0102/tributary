@@ -101,7 +101,7 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
   const ctx: UiContext = {
     // Your data (B2) is the user's own too: nothing of it goes to the assistant
     page: route.view === "status" || route.view === "settings" || route.view === "api" || route.view === "portfolio"
-      || route.view === "data" || route.view === "connect" ? "about"
+      || route.view === "data" || route.view === "connect" || route.view === "notfound" ? "about"
       : route.view === "alerts" ? "home"
       // a saved screen's link is Companies a moment later (agent-api's pages have no "screen")
       : route.view === "screen" ? "companies"

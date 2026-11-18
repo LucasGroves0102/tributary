@@ -328,6 +328,23 @@ describe("a sandbox lists only its own companies", () => {
     expect($("[role=alert]")?.textContent).toContain("TSLA isn't one of the companies in this demo.");
   });
 
+  it("End demo asks first and says what is lost (Riley, test 10, finding 17)", async () => {
+    stored();
+    await mount(<App picker={false} />);
+    await click(button("End demo"));
+    const dialog = document.querySelector(".ws-confirm")!;
+    expect(dialog.textContent).toContain("End the demo?");
+    expect(dialog.textContent).toContain("the holdings, journal, analyses, models, theses, metrics and watched screens");
+    // Keep: still in the sandbox
+    await click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Keep")!);
+    expect(loadSession()).not.toBeNull();
+    expect($(".sandbox-banner")).not.toBeNull();
+    await click(button("End demo"));
+    await click([...document.querySelectorAll(".ws-confirm button")].find((b) => b.textContent === "End demo")! as HTMLButtonElement);
+    expect(loadSession()).toBeNull();
+    expect($("h1")?.textContent).toBe("Tributary");
+  });
+
   it("a sandbox shows its demo badge, explained, and says who it is in words", async () => {
     stored();
     await mount(<App picker={false} />);

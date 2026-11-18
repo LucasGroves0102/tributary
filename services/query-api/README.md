@@ -254,7 +254,8 @@ sectors and co-registrants: [DESIGN.md](DESIGN.md#screener).
 
 `GET /v1/companies/{id}/per-share` (`per_share.py`, its docstring is the spec) is the one
 per-share pipeline the Statements tab reads. Split-adjusted by default (each row keeps `as_filed`
-and the `splits` applied); fiscal Q4 and TTM are derived and labelled (`derivation`). Gold and
+and the `splits` applied); fiscal Q4 and TTM are derived and labelled (`derivation`);
+`shares=as_filed` reads each period as its own filing stated it (140). Gold and
 `/financials` keep every per-share figure as filed. `/annual-per-share` stays (the 10-K's own
 figures; MCP's tools read it). Rules: [DESIGN.md](DESIGN.md#per-share-figures-on-one-share-basis).
 
@@ -279,7 +280,8 @@ days) per request, 40 periods a series. Rules: [DESIGN.md](DESIGN.md#spreadsheet
 have shown at the end of that day, from the filings filed by then (gold's history, migrations
 085-087). The day is echoed as `known_on` (`as_of` stays the response's time); before 2009 or after
 today is a 422. `/financials?originals=true` adds `original` to each figure a later filing changed
-(opt-in: the agent's JSON is unchanged). Readings are against the day (stale); segments, data notes
+and `history` (false until 086's catch-up has built the company's history: no figure can be marked
+yet) (opt-in: the agent's JSON is unchanged). Readings are against the day (stale); segments, data notes
 and the confidence mark stay today's. Spec: `point_in_time.py`'s docstring; rules:
 [DESIGN.md](DESIGN.md#point-in-time).
 
@@ -381,7 +383,8 @@ Details: [DESIGN.md](DESIGN.md#customizable-views).
 `GET /v1/status/data` (`status.py`) backs the web app's public `#/status` page. No token, so it
 returns only aggregate counts and timestamps (freshness, ingest latency, completeness, coverage,
 data quality by tier with findings per 1,000 figures, the parser-output checks, the coverage
-sweep's gaps per kind and reason (`gaps`, 076), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
+sweep's gaps per kind and reason (`gaps`, 076), the public catalog's size (`coverage.catalog_companies`,
+141: the sidebar's count, so every page says one number), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
 named fields only. Cached 60 s per process. Fields and an example: [DESIGN.md](DESIGN.md#status-page).
 
 ## Demo sandboxes
@@ -555,7 +558,8 @@ label that looks like a number is refused (and the database refuses it too); cas
 pending and option rows are skipped with a reason. Journal entries can be edited or deleted for 24
 hours, then a trigger keeps them as written and a change is a new entry that `corrects` the old.
 Open holdings join the filing alerts' follows (source `portfolio`); a review falls due when a
-held company files a 10-K or 10-Q after the holding was added and after the last `review` entry,
+held company files a 10-K or 10-Q, or an 8-K with results (item 2.02: from the index's items, else
+the parser's item headings), after the holding was added and after the last `review` entry,
 and `GET /v1/alerts/unread` counts it (`reviews_due`). No API key reaches any of it (not in
 `KEY_ROUTES`), so neither does the MCP server; agent-api has no tool for it.
 

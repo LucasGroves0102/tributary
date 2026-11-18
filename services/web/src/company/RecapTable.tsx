@@ -9,12 +9,13 @@ import { recapRows, type RecapDelta } from "./data";
  * (query_api shapes.percent_change); each row's hover names its filings. `yearAgo`: the quarter and
  * the same quarter a year earlier only (the Earnings view, beside the release, at half width). Set
  * as a statement: column rules, the quarter itself washed, a negative amount in parentheses; a
- * change keeps its sign. */
+ * change keeps its sign and no colour: the table holds debt and costs, where a rise isn't good, and the
+ * API says nothing of which way is good (Riley, test 10, finding 20: debt +333% read green). */
 export function RecapTable({ data, only, label, yearAgo = false }: { data: Recap; only?: readonly string[]; label: string; yearAgo?: boolean }) {
   const table = recapRows(data, only);
   // a change: signed, or n/m from a zero or negative base with the API's reason in its hover
   const change = (d: RecapDelta | null) => (
-    <td className={`n ${!d || d.why ? "faint" : d.sign >= 0 ? "pos" : "neg"}`}
+    <td className={!d || d.why ? "n faint" : "n"}
       title={d?.why ? `Not meaningful: ${d.why}.` : undefined}>
       {d?.text ?? "—"}
     </td>

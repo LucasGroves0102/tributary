@@ -646,6 +646,13 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
         "error", "warning", "kept_out", "coverage", "info"}
     assert {c["check"] for c in body["parser"]["checks"]} == {
         "invalid_key", "no_sections", "missing_core_item", "duplicate_section", "empty_section"}
+    # 141: the public catalog's size, a count only, though query_api reads public_access only with
+    # a user (Riley, test 10, finding 36: one company count everywhere)
+    conn.execute("DELETE FROM authz.public_access")
+    conn.execute("INSERT INTO authz.public_access (company_id, tier) VALUES (%s, 'financials'),"
+                 " (%s, 'filings'), (%s, 'financials')", (C, C, W))
+    assert client(conn).get("/v1/status/data").json()["coverage"]["catalog_companies"] == 2
+    assert as_query_api(conn, "SELECT ops.public_catalog_size()") == [(2,)]
     # 076: the coverage sweep's counts (none before its first run), never a company
     assert body["gaps"]["kinds"] == [] or all(
         set(k) == {"kind", "reason", "companies"} for k in body["gaps"]["kinds"])

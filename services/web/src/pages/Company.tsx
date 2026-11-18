@@ -2,7 +2,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useRef, useState } from "react";
 
 import { ApiError, expectedFilingsOf, screener } from "../api";
-import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK } from "../company/data";
+import { foreignReport, header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
 import { EarningsView } from "../company/Earnings";
 import { Filings } from "../company/Filings";
@@ -15,6 +15,7 @@ import type { ChartState } from "../chart/model";
 import type { StatementView } from "../company/statementView";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
+import { useDirectory } from "../companies/directory";
 import { placeName } from "../companies/places";
 import { confidenceWords } from "../companies/rows";
 import { Folio } from "../components/Folio";
@@ -73,8 +74,19 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   // the Price tab exists only when the server offers "Connect your data"
   const market = useMarketData(token);
   const tabs = COMPANY_TABS.filter(([t]) => t !== "price" || market?.enabled);
+  // the name comes from the directory (identity only, one small request) while the figures load: a page
+  // never sits nameless for seconds (Riley, test 10, finding 15)
+  const directory = useDirectory(token);
+  const known = directory.name(companyId);
 
-  if (!meta || meta.state === "loading") return <div className="page"><Skeleton lines={6} label="Loading the company" /></div>;
+  if (!meta || meta.state === "loading") {
+    return (
+      <div className="page company-page">
+        {known && <h1 className="co-name co-name-early">{known}</h1>}
+        <Skeleton lines={6} label="Loading the company" />
+      </div>
+    );
+  }
   if (meta.state === "error") {
     return (
       <div className="page">
@@ -131,6 +143,8 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
         </p>
         {next && (
           <p className="meta co-meta">
+            {/* the filing index is today's: as of a past day it says so (Riley, test 10, finding 18) */}
+            {asOf && <span className="asof-today-k">Today:</span>}
             {next.last_filed && <span>Last periodic report filed {day(next.last_filed, true)}</span>}
             <span title={expected?.state === "ok" ? expected.data.method : undefined}>
               Next {next.form}, for the period ending {day(next.period_end, true)}, expected
@@ -140,7 +154,7 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
           </p>
         )}
         {/* the user's own holding, quietly (portfolio, app 021): nothing when they hold none */}
-        <HoldingLine token={token} companyId={companyId} />
+        <HoldingLine token={token} companyId={companyId} today={!!asOf} />
         {joint && (
           <p className="meta co-meta joint-note" role="note">
             <span>
@@ -214,7 +228,13 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
         </nav>
       </Folio>
 
-      {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} />}
+      {asOf && !AS_OF_TABS.includes(tab) && tab !== "overview" && (
+        <p className="asof-today tab-today" role="note">
+          This tab shows today's {TODAY_WORDS[tab] ?? "data"}, not as it stood on {day(asOf, true)}: only the Overview's year and key figures,
+          Statements and Ratios follow the day. <a href={href({ view: "company", companyId, tab })}>Back to today</a>
+        </p>
+      )}
+      {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={row} access={row.access} asOf={asOf} />}
       {tab === "earnings" && (
         <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")}
           canReadFinancials={row.access.includes("financials")} />
@@ -225,7 +245,8 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} asOf={asOf} />}
-      {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes} />}
+      {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes}
+        foreign={foreignReport(row)} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
@@ -233,8 +254,16 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   );
 }
 
-/** The tabs whose figures follow the As of day; the others show today's (the banner says so). */
+/** The tabs whose figures follow the As of day; the others show today's (each says so at its top; the
+ * Overview, section by section). */
 const AS_OF_TABS: readonly CompanyTab[] = ["statements", "ratios"];
+
+/** What a today's tab shows, for its as-of note (Riley, test 10, finding 19: Peers showed today's
+ * figures with no word of it). */
+const TODAY_WORDS: Partial<Record<CompanyTab, string>> = {
+  earnings: "earnings releases and reported figures", revenue: "revenue breakdowns", segments: "segments",
+  filings: "filing list", notes: "data notes", peers: "peers and their figures", price: "prices",
+};
 
 /** "As of": a past day for the figures (point in time, query-api point_in_time.py), in the address
  * (`?asof=`) so it can be linked. Empty is today. Set, a quiet note says what it means and what
@@ -246,7 +275,7 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
     go({ view: "company", companyId, tab, ...(statements ? { statements } : {}), ...(picked && picked < today ? { asOf: picked } : {}) });
   };
   return (
-    <div className="co-asof">
+    <div className={asOf ? "co-asof on" : "co-asof"}>
       <label className="co-asof-field">
         <span>As of</span>
         <input type="date" className="field narrow" min={EARLIEST_AS_OF} max={today} value={asOf ?? ""}
@@ -256,9 +285,8 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
       </label>
       {asOf && (
         <p className="meta co-asof-note" id="co-asof-note" role="note">
-          Figures as they stood at the end of {day(asOf, true)}, from the filings filed by then
-          {AS_OF_TABS.includes(tab) ? "" : " (on the Statements and Ratios tabs and the key figures above)"}.
-          Segments, data notes and the confidence mark are today's.{" "}
+          <b>As of {day(asOf, true)}:</b> the Overview's year and key figures, Statements and Ratios read the filings filed by the end of
+          that day. Every other tab and section, the header's dates and your holding are today's, and say so.{" "}
           <a href={href({ view: "company", companyId, tab, ...(statements ? { statements } : {}) })}>Back to today</a>
         </p>
       )}

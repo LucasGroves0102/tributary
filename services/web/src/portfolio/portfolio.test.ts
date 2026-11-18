@@ -52,6 +52,9 @@ it("words gains with their sign and a review with its report", () => {
     .toBe("Review due: the 10-Q filed Nov 19, 2026 for the quarter ended Oct 26, 2026");
   expect(reviewWords({ accession_no: "a", form: "10-K", filed: "2027-02-25", period_end: null, cik: null }))
     .toBe("Review due: the 10-K filed Feb 25, 2027");
+  // results day: an 8-K with item 2.02 (Riley, test 10, finding 13)
+  expect(reviewWords({ accession_no: "a", form: "8-K", filed: "2026-11-17", period_end: null, cik: null }))
+    .toBe("Review due: results released Nov 17, 2026 (8-K)");
   expect(weightTitle("cost")).toContain("not by value");
 });
 

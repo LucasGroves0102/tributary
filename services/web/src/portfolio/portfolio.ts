@@ -101,6 +101,8 @@ export function holdingName(h: Pick<Holding, "company_id" | "name" | "symbol">, 
 
 /** "Review due: the 10-Q filed Nov 19 for the quarter ended Oct 26". */
 export function reviewWords(r: ReviewDue): string {
+  // results day (Riley, test 10, finding 13): an 8-K with item 2.02 makes a review due too
+  if (r.form.startsWith("8-K")) return `Review due: results released ${day(r.filed, true)} (8-K)`;
   const span = r.form.startsWith("10-K") ? "year" : "quarter";
   return `Review due: the ${r.form} filed ${day(r.filed, true)}${r.period_end ? ` for the ${span} ended ${day(r.period_end, true)}` : ""}`;
 }

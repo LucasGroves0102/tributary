@@ -116,7 +116,7 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
             <p className="faint small not-advice">{NOT_ADVICE}</p>
             {data.reviews_due > 0 && (
               <p className="review-due-note" role="status">
-                {data.reviews_due === 1 ? "One holding has" : `${data.reviews_due} holdings have`} a new 10-K or 10-Q since your last review.
+                {data.reviews_due === 1 ? "One holding has" : `${data.reviews_due} holdings have`} a new report since your last review (a 10-K or 10-Q, or results in an 8-K).
               </p>
             )}
             <HoldingsTable token={token} rows={open} data={data} name={name} />
@@ -158,7 +158,7 @@ function Empty({ onAdd }: { onAdd: () => void }) {
           <li><b>Add a holding</b> by hand: a company, the shares, what you paid and when.</li>
           <li><b>Import from Fidelity</b>: its Portfolio Positions CSV. You see every row before anything is saved; account numbers are dropped as the file is read.</li>
           <li><b>Write down why</b>, and what would make you sell. After 24 hours an entry is kept as written; a change is a correction beside it.</li>
-          <li><b>Review after each report</b>: when a company you hold files a 10-K or 10-Q, a review falls due on the Alerts bell.</li>
+          <li><b>Review after each report</b>: when a company you hold files a 10-K or 10-Q, or reports results in an 8-K, a review falls due on the Alerts bell.</li>
         </ul>
         <p className="faint small">{NOT_ADVICE} Funds and ETFs are kept by symbol and cost: Tributary covers companies' filings.</p>
         <div className="row">

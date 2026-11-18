@@ -492,7 +492,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         originals: Annotated[bool, Query(
             description="add `original` to each row whose value a later filing changed: the "
                         "first value, its filing and day, and the change's kind "
-                        "(point_in_time.py)")] = False,
+                        "(point_in_time.py), and `history`: whether the company's history is "
+                        "kept yet (without it no row can have one)")] = False,
     ) -> dict | Response:
         """A company's figures by quarter or TTM, fiscal or calendar, each with its citation
         (filing, form, XBRL tag) and freshness; `format=csv` for one row per value. `as_of`: as
@@ -542,6 +543,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
             meta["callouts"] = [c for (_, m), s in sorted(series.items())
                                 for c in statement_callouts(m, s)]
         found: dict[tuple, dict] = {}
+        if originals and fmt == "json":
+            # whether any figure can be marked yet: no history kept, no originals (086's
+            # catch-up builds it company by company; the web says so instead of marking none)
+            meta["history"] = store.history_kept(user_id, company_id)
         if originals and fmt == "json" and rows:
             found = point_in_time.originals(company_id, view, rows, store.originals(
                 user_id, company_id, view, sorted({r["metric"] for r in rows}), known_on))
@@ -595,8 +600,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         every figure as filed. `as_of`: on the share basis of that day (splits restated by then)."""
         known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "financials", company_id)
-        out = per_share.compute(store.per_share_inputs(user_id, company_id, known_on), view,
-                                shares)
+        inputs = store.per_share_inputs(user_id, company_id, known_on)
+        if shares == "as_filed":  # each period's first filing's own figure (per_share.py, 5; 140)
+            inputs["originals"] = store.per_share_originals(user_id, company_id, known_on)
+        out = per_share.compute(inputs, view, shares)
         kept: dict[str, int] = {}
         rows = []
         for r in out["rows"]:  # newest first per metric

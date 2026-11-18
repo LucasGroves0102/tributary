@@ -35,6 +35,8 @@ function what(route: Route, k: Known): string {
       return route.compare?.target ? `Comps: ${company(route.compare.target)}` : "Compare";
     case "about":
       return "What Tributary covers";
+    case "notfound":
+      return "Page not found";
     case "status":
       return "Data status";
     case "api":

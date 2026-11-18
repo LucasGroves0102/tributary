@@ -25,7 +25,7 @@ import {
   type Run,
 } from "../../reader/text";
 import { blockAt, blockMatches, firstBlockMatch, readerBlocks, type Block } from "../../reader/blocks";
-import { sectionTitle } from "../../reader/sections";
+import { sectionTitle, statementsElsewhere } from "../../reader/sections";
 import { go, href } from "../../route";
 import { asPhrase, isPhrase } from "../../search/state";
 import { TableScroll } from "../TableScroll";
@@ -304,6 +304,17 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
               )}
             </div>
           )}
+          {active && (() => {
+            // a 10-K's Item 8 that only points to the statements: link where they are (Riley, test 10, finding 10)
+            const at = statementsElsewhere(f.form, f.sections, active.section_key);
+            return at && (
+              <p className="statements-elsewhere" role="note">
+                The financial statements themselves are in Item {at.section_key.replace(/^(I|II|III|IV)-/, "")},{" "}
+                {sectionTitle(at.section_key, at.title)}:{" "}
+                <a href={href({ view: "filing", companyId, accessionNo, section: at.section_key, ...(query ? { q: query } : {}) })}>read them there</a>.
+              </p>
+            );
+          })()}
           {active && diffOn && diff ? (
             <SideBySide diff={diff} companyId={companyId} basis={changes?.state === "ok" ? changes.data.basis : basis}
               form={f?.form ?? null} onBasis={f?.form.startsWith("10-Q") ? setReaderBasis : undefined} />

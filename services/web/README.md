@@ -44,7 +44,7 @@ assistant takes 372px at any window size. `?` opens the keyboard shortcuts.
 
 ## Screens
 
-Hash routes (`src/route.ts`; an unknown route goes Home, `#/explore` to Companies):
+Hash routes (`src/route.ts`; an address naming no page shows "No page here", a malformed one under a known page goes Home, `#/explore` to Companies):
 
 | Route | Screen | Detail |
 |---|---|---|

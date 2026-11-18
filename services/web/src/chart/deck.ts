@@ -2,7 +2,7 @@
  * the wording is tested; ChartBuilder passes them to LayerChart, which draws them into the
  * SVG, so SVG and PNG exports carry them. */
 
-import { day } from "../format";
+import { day, localDay } from "../format";
 import { planAxes } from "./axes";
 import type { Align, Frequency } from "./model";
 import { xAxis, type Series } from "./series";
@@ -45,7 +45,9 @@ export function sourceFootnote(series: Series[], short: (companyId: string) => s
   if (latest) {
     parts.push(`latest ${latest.companyId ? `${short(latest.companyId)} ` : ""}${latest.form} filed ${day(latest.filed, true)}`);
   }
-  if (asOf) parts.push(`as of ${day(asOf, true)}`);
+  // the answer's time is a moment: the viewer's day, like every other date beside it (Riley, test 10,
+  // finding 24: a UTC "Nov 18" beside the journal's local Nov 17)
+  if (asOf) parts.push(`as of ${localDay(asOf, true)}`);
   return `${parts.join("; ")}.`;
 }
 

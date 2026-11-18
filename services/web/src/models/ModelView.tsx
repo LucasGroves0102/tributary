@@ -120,7 +120,7 @@ export function ModelView({
           <thead>
             <tr>
               <th className="first" scope="col">Line</th>
-              {shown.length > 1 && <th scope="col" className="case-h">Case</th>}
+              {shown.length > 1 && <th scope="col" className="case-h" data-frozen="">Case</th>}
               {columns.map((c) => (
                 <th key={c.key} scope="col" className={`n ${c.kind}`}>
                   {c.label}

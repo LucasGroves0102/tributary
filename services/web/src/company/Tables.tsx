@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { annualPerShare, ApiError, financialsView, perShare as fetchPerShare, segments as fetchSegments } from "../api";
+import { annualPerShare, ApiError, filingIndex, financialsView, perShare as fetchPerShare, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
 import { change, day, moneyRow, paren, pct } from "../format";
@@ -250,7 +250,7 @@ const BALANCE_NOT_TTM = "A balance is a point in time, so it has no trailing twe
 /** The figures stop before the newest 10-K/10-Q on EDGAR (H9): how far behind, in periods and days,
  * and where to read it meanwhile. No promise of when it catches up: the SEC's data keeps none. */
 function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind; companyId: string; name: string; url: string | null }) {
-  const word = behind.form === "10-K" ? "year" : "quarter";
+  const word = /^(10-K|20-F|40-F)$/.test(behind.form) ? "year" : "quarter";
   return (
     <p className="card-b stale-note" role="note">
       ⚠ Not in these figures yet: {name}'s {behind.form} for the {word} ending {day(behind.period, true)}, filed{" "}
@@ -290,7 +290,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   const bank = notApplicable.length > 0;
   const annual = period === "a" && kind === "is";
   const asFiled = view.shares === "filed";
-  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}|${asFiled}|${asOf ?? ""}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean; perShare: boolean }> => {
+  const load = useLoad(`${companyId}|${kind}|${period}|${basis}|${req.quarters}|${bank}|${asFiled}|${asOf ?? ""}`, async (): Promise<{ rows: FinancialRow[]; metrics: Line[]; callouts: Callout[]; annualOnly: boolean; perShare: boolean; history: boolean | null }> => {
     // each figure a later filing changed comes with its first version (`original`): its cell is marked
     const once = (rows: Line[]) => financialsView(token, companyId, req.quarters, rows.map(([m]) => m), req.view, basis, false, period === "q", asOf, true)
       .then((f) => ({ f, metrics: rows }));
@@ -323,7 +323,9 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
       : older ? withAnnualPerShare(fin.f.rows, older, basis) : fin.f.rows;
     return { rows, metrics: fin.metrics, callouts: fin.f.callouts ?? [],
       // a 20-F/40-F filer's figures are years (migration 056); an older API doesn't say
-      annualOnly: fin.f.cadence === "annual", perShare: perShare !== null };
+      annualOnly: fin.f.cadence === "annual", perShare: perShare !== null,
+      // whether a restated figure can be marked yet (086's history; an older API doesn't say)
+      history: fin.f.history ?? null };
   });
   const metrics = load?.state === "ok" ? load.data.metrics : (bank ? BANK_STATEMENTS : STATEMENTS)[kind].rows;
   const table = load?.state === "ok"
@@ -338,17 +340,25 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
     setOpened(metric && newest ? { metric, periodEnd: newest } : null);
   };
   const openedRow = opened ? table?.rows.find((r) => r.metric === opened.metric) : undefined;
-  // H9: a newer 10-K/10-Q in the index than the figures hold (public index, asked once per company)
+  // H9: a newer 10-K/10-Q in the index than the figures hold (public index, asked once per company).
+  // Today's index against today's figures only: as of a past day the figures are those filed by
+  // then, so a report filed since isn't missing from them (Riley, test 10, finding 3)
   const [newest, setNewest] = useState<IndexedFiling | null>(null);
+  // a company that reports once a year (20-F, 40-F) is behind its own annual report, not a 10-K/10-Q
+  const yearly = load?.state === "ok" && load.data.annualOnly;
   useEffect(() => {
     let live = true;
     setNewest(null);
-    void newestPeriodic(token, companyId).then((f) => live && setNewest(f));
+    if (asOf) return;
+    const ask = yearly
+      ? filingIndex(token, companyId, { forms: ["20-F", "40-F"], limit: 1 }).then((r) => r.filings[0] ?? null).catch(() => null)
+      : newestPeriodic(token, companyId);
+    void ask.then((f) => live && setNewest(f));
     return () => {
       live = false;
     };
-  }, [token, companyId]);
-  const behind = load?.state === "ok" ? figuresBehind(load.data.rows, newest) : null;
+  }, [token, companyId, asOf, yearly]);
+  const behind = load?.state === "ok" && !asOf ? figuresBehind(load.data.rows, newest) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
@@ -369,7 +379,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
         </span>
         {kind === "is" && (
-          <span className="basis-choice" title="EPS and shares: split-adjusted restates every period to today's share basis, using the company's own restated figures where it filed them and the split's ratio before that; as filed is each filing's own figure.">
+          <span className="basis-choice" title={`EPS and shares: split-adjusted restates every period to ${asOf ? `the share basis of ${day(asOf, true)} (the splits a filing had restated by then)` : "today's share basis"}, using the company's own restated figures where it filed them and the split's ratio before that; as filed is each filing's own figure for its period.`}>
             <Choices label="Per share" value={view.shares === "filed" ? "filed" : "adjusted"}
               set={(s) => set({ shares: s === "filed" ? "filed" : undefined })} options={SHARE_BASES} />
           </span>
@@ -378,6 +388,18 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
+      {asOf && kind === "is" && !asFiled && load?.state === "ok" && load.data.perShare && (
+        <p className="foot" role="note">
+          EPS and shares are split-adjusted to the share basis of {day(asOf, true)}, as it stood then: only the stock splits a filing
+          had restated by that day apply, not today's basis.
+        </p>
+      )}
+      {load?.state === "ok" && load.data.history === false && (
+        <p className="foot restated-pending" role="note">
+          Restated figures aren't marked for {name} yet: a mark needs the history Tributary keeps of every figure as first
+          reported, which is being built company by company and isn't built for {name}. Data notes lists its restatements now.
+        </p>
+      )}
       {load?.state === "ok" && load.data.annualOnly && (
         <p className="foot" role="note">
           {name} reports once a year (an annual report on Form 20-F or 40-F), so its figures are fiscal years and the
@@ -431,8 +453,10 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
                 ? "A fiscal Q4's EPS is derived: its net income over its diluted shares, worked out from the year's shares less the first three quarters'. "
                 : ""}
           {kind === "is" && (asFiled
-            ? "EPS and shares are as each filing states them, so periods before a stock split are on the old share basis. "
-            : "EPS and shares are split-adjusted: every period on today's share basis, the company's own restated figure where it filed one, else the split's ratio (the figure as filed is in the hover). ")}
+            ? "EPS and shares are as each period's own filing first stated them, so periods before a stock split are on the old share basis. "
+            : asOf
+              ? `EPS and shares are split-adjusted to the share basis of ${day(asOf, true)}: the stock splits a filing had restated by then, the company's own restated figure where it filed one, else the split's ratio (the figure as filed is in the hover). A split after that day isn't applied. `
+              : "EPS and shares are split-adjusted: every period on today's share basis, the company's own restated figure where it filed one, else the split's ratio (the figure as filed is in the hover). ")}
           {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
           {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
           {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}

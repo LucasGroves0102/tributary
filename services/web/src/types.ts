@@ -978,7 +978,9 @@ export interface ValueReading {
    * not_computed (069): no figure because Tributary computes none for this kind of company (Walmart's
    * gross margin), the reason says why; stale (069): the company's latest period is long past (a
    * quarterly filer's 270 days, an annual filer's 500), the figure kept but out of sorts and medians */
-  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency" | "not_computed" | "stale";
+  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency" | "not_computed" | "stale"
+    /** a user's own metric (screener `m_` column) with an input that has no figure: the reason names it */
+    | "not_reported";
   reason?: string | null;
   unit?: string | null;
 }
@@ -1567,6 +1569,9 @@ export interface DataStatus {
   };
   coverage: {
     companies_with_financials: number | null;
+    /** the public catalog's size (141): every company with XBRL financials or a stored filing's
+     * text, the sidebar's count; 0 while closed, absent from an older API */
+    catalog_companies?: number | null;
     documents: number | null;
     indexed_filings: number | null;
     sections: number | null;

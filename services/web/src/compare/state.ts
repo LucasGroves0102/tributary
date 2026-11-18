@@ -302,6 +302,17 @@ export function compareRows(s: CompareState, rows: ScreenerRow[], bank = false):
   });
 }
 
+/** "a quarter older" when a company's latest quarter ended more than 45 days before the newest in the
+ * table (its figures then cover earlier months: NVIDIA's Jul 26 beside peers' Sep 30, Riley, test 10,
+ * finding 33), else null. Dates only: nothing about the figures is judged. */
+export function olderThan(periodEnd: string, newest: string | null): string | null {
+  if (!newest) return null;
+  const days = (Date.parse(newest) - Date.parse(periodEnd)) / 86_400_000;
+  if (!(days > 45)) return null;
+  const q = Math.max(1, Math.round(days / 91.3));
+  return q === 1 ? "a quarter older" : `${q} quarters older`;
+}
+
 export function median(values: number[]): number | null {
   if (!values.length) return null;
   const v = [...values].sort((a, b) => a - b);

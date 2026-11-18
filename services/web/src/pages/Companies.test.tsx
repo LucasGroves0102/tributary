@@ -78,6 +78,18 @@ it("runs the screen from the URL's filters and shows values with sources", async
   expect($(".card-h .sub")?.textContent).toBe("revenue $1B to $10B, operating margin ≥ 20%");
 });
 
+it("a once-a-year filer ranked beside twelve months is said under the table (Riley, test 10, finding 25)", async () => {
+  await render();
+  expect($(".annual-foot")).toBeNull();
+  const shell = row(entry());
+  const annual = { ...shell, company_id: "0001046179", name: "Taiwan Semiconductor",
+    sources: Object.fromEntries(Object.entries(shell.sources).map(([k, s]) => [k, s && { ...s, form: "20-F" }])) };
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ ...SCREEN, rows: [row(entry()), annual] }));
+  act(() => root.unmount());
+  await render({ margin: 1 });
+  expect($(".annual-foot")?.textContent).toContain("ranked by its latest fiscal year, marked “annual”");
+});
+
 it("shows ungranted companies honestly: metadata only, with the reason", async () => {
   await render();
   const tsla = container.querySelectorAll("table.screen tbody tr")[1]!;

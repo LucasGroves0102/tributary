@@ -62,7 +62,7 @@ function respond(url: string, init?: RequestInit): Response {
   if (path === `/v1/portfolio/position/${NVDA}`) return Response.json({ position: { holding_id: HID, shares: "1.75", open: true, first_bought: "2026-11-02", added_at: "2026-11-16T15:00:00Z" } });
   if (path === "/v1/portfolio/journal" && method === "GET") return Response.json({ entries, has_more: false, edit_hours: 24, kinds: [] });
   if (path === "/v1/portfolio/journal") return Response.json({ entry: { ...FRESH, id: "e3" } });
-  if (path === "/v1/alerts/red-lines") return Response.json({ red_lines: [{ ...KEPT.red_lines[0], company_id: NVDA, created_at: "" }], max_per_company: 10 });
+  if (path === "/v1/alerts/red-lines") return Response.json({ red_lines: noRedLines ? [] : [{ ...KEPT.red_lines[0], company_id: NVDA, created_at: "" }], max_per_company: 10 });
   if (path === "/v1/portfolio/holdings") return Response.json({ holding_id: VOO, created: true, covered: false, company_id: null });
   if (path === "/v1/portfolio/import/preview") {
     return Response.json({
@@ -81,6 +81,7 @@ function respond(url: string, init?: RequestInit): Response {
 
 let root: Root;
 let container: HTMLDivElement;
+let noRedLines = false;
 
 async function settle() {
   for (let i = 0; i < 10; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
@@ -102,6 +103,7 @@ function type(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
 }
 
 beforeEach(() => {
+  noRedLines = false;
   holdings = [];
   entries = [];
   writes = [];
@@ -149,7 +151,7 @@ it("lists holdings with their own price's source and day, the gain, weight, next
   expect(fund[3]).toBe("—");
   expect(fund[4]).toBe("—");
   expect(container.querySelector(".portfolio-table thead")!.textContent).toContain("Weight (cost)");
-  expect(container.querySelector(".review-due-note")?.textContent).toContain("One holding has a new 10-K or 10-Q");
+  expect(container.querySelector(".review-due-note")?.textContent).toContain("One holding has a new report since your last review");
 });
 
 it("a holding's journal: a kept entry is corrected beside itself, a fresh one can still be edited", async () => {
@@ -188,6 +190,19 @@ it("the review button writes a review entry", async () => {
   await act(async () => form.requestSubmit());
   await settle();
   expect(writes.find((w) => w.path === "/v1/portfolio/journal")!.body).toMatchObject({ kind: "review", company_id: NVDA });
+});
+
+it("with no red lines, the journal points to the analysis's Monitor step, where they're set (Riley, test 10, finding 12)", async () => {
+  holdings = [NV];
+  noRedLines = true;
+  await show(<PortfolioPage token="t" holdingId={HID} />);
+  await act(async () => button("Write the review")!.click());
+  await settle();
+  const lines = container.querySelector(".entry-lines")!;
+  expect(lines.textContent).toContain("they're set in the Monitor step of its analysis");
+  expect(lines.textContent).not.toContain("Settings");
+  // the holding's analysis (a candidate here) opens at its Monitor step
+  expect(lines.querySelector("a")?.getAttribute("href")).toBe("#/analysis/p1/monitor");
 });
 
 it("imports a Fidelity export: the preview first, a missing cost typed, nothing saved until Add", async () => {
@@ -237,6 +252,25 @@ it("adds a fund by its symbol, and writes why as the journal's first entry", asy
   await settle();
   expect(writes[0]).toMatchObject({ path: "/v1/portfolio/holdings", body: { symbol: "VOO", lot: { shares: "0.05", cost_total: "25" } } });
   expect(writes[1]).toMatchObject({ path: "/v1/portfolio/journal", body: { symbol: "VOO", kind: "bought", why: "Cheap index exposure while I learn." } });
+});
+
+it("a problem shown clears once the form is edited (Riley, test 10, finding 16)", async () => {
+  await show(<PortfolioPage token="t" />);
+  await act(async () => button("Add a holding")!.click());
+  const form = container.querySelector<HTMLFormElement>("form.pf-form")!;
+  await act(async () => [...form.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((b) => b.textContent === "A fund or ETF")!.click());
+  await act(async () => form.requestSubmit());
+  await settle();
+  expect(form.querySelector(".err")?.textContent).toBe("Type the fund's symbol, such as VOO.");
+  await act(async () => type(form.querySelector<HTMLInputElement>('input[placeholder="VOO"]')!, "voo"));
+  expect(form.querySelector(".err")).toBeNull();
+});
+
+it("your price's example reads as an example, not a market price (Riley, test 10, finding 22)", async () => {
+  holdings = [NV];
+  await show(<PortfolioPage token="t" holdingId={HID} />);
+  const price = container.querySelector<HTMLInputElement>('form[aria-label="Your price"] input')!;
+  expect(price.placeholder).toBe("e.g. 100.00");
 });
 
 it("an account label is a name: nothing in the form asks for an account number", async () => {

@@ -1034,6 +1034,41 @@ def test_per_share_reads_one_companys_figures_under_rls(conn, token):
         assert nobody["rows"] == [] and nobody["splits"] == []
 
 
+def test_as_filed_per_share_reads_the_first_filing_to_state_a_year_under_its_rule(conn, token):
+    """Riley, test 10, finding 4: as filed is each filing's own figure for its period
+    (gold.per_share_originals, 140), not a later filing's comparative restated for a split."""
+    end = date(2025, 12, 31)
+    annual_fact(conn, NORMAL, "eps_diluted", end, Decimal("49.0"), "0000000000-26-000010",
+                date(2026, 2, 1))
+    # the next 10-K restates it for a split (gold's annual read takes this one), an amendment
+    # and a proxy say other things
+    annual_fact(conn, NORMAL, "eps_diluted", end, Decimal("4.90"), "0000000000-27-000010",
+                date(2027, 2, 1))
+    annual_fact(conn, NORMAL, "eps_diluted", end, Decimal("48"), "0000000000-26-000011",
+                date(2026, 1, 15), form="DEF 14A")
+    annual_fact(conn, NORMAL, "eps_diluted", end, Decimal("47"), "0000000000-26-000012",
+                date(2026, 3, 1), form="10-K/A")
+    params = {"view": "annual", "shares": "as_filed"}
+    r = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER), params=params)
+    assert r.status_code == 200, r.text
+    row = r.json()["rows"][0]
+    assert (row["value"], row["citation"]["accession_no"]) == ("49.0", "0000000000-26-000010")
+    adjusted = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER),
+                             params={"view": "annual"}).json()["rows"][0]
+    assert adjusted["value"] == "4.90"
+    # as of a day before the first 10-K: nothing filed yet
+    early = api(conn).get(f"/v1/companies/{NORMAL}/per-share", headers=token(USER),
+                          params={**params, "as_of": "2026-01-31"}).json()
+    assert early["rows"] == []
+    # the function's own rule: nothing for a user who reads nothing
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-nobody', true)")
+        cur.execute("SELECT count(*) FROM gold.per_share_originals(%s)", (NORMAL,))
+        assert cur.fetchone()[0] == 0
+        cur.execute("RESET ROLE")
+
+
 def test_annual_per_share_needs_the_tier_first(conn, token):
     r = api(conn, Closed()).get(f"/v1/companies/{STALE}/annual-per-share", headers=token(USER))
     assert r.status_code == 403

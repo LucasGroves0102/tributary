@@ -66,9 +66,15 @@ function Body({ data, companyId, name, compact }: { data: TextKpis | null; compa
     return (
       <div className="card-b">
         <p className="empty text-kpis-none">
-          {name}'s filings{from ? ` since ${from}` : ""} don't state a backlog or orders in the ways Tributary reads: a sentence such as
+          {name}'s filings{from ? ` since ${from}` : ""} don't state a backlog or orders in words in the ways Tributary reads: a sentence such as
           “our backlog was $X billion at December 31” or “orders of $X billion in the quarter”, or a table's “Total backlog” row, in MD&A,
           the 10-K's Item 1 or an earnings release. A company can state them otherwise, or only by segment; the Filings tab has the full text.
+        </p>
+        {/* the tagged figure nearest a backlog is elsewhere: the two pages agree (Riley, test 10, finding 27) */}
+        <p className="foot text-kpis-rpo">
+          The tagged figure nearest a backlog, remaining performance obligations (revenue under contract not yet recognised), is a
+          different measure: where {name} tags it, it is on <a href={href({ view: "company", companyId, tab: "statements", statements: { kind: "bs" } })}>Statements</a>,
+          under the balance sheet.
         </p>
         <p className="foot">{data.read.filings} filings mention backlog or orders; none states them in these ways. {data.method}</p>
       </div>

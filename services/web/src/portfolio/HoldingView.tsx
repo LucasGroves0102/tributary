@@ -117,7 +117,11 @@ export function HoldingView({ token, holding: h, portfolio, onChanged }: {
 
       <Folio name="Journal" line="Why you hold it" aside="Entries are kept as written after 24 hours">
         <JournalView token={token} subject={{ companyId: h.company_id, symbol: h.company_id ? null : h.symbol }}
-          reviewDue={!!h.review_due} prompt={prompt} onWritten={() => {
+          reviewDue={!!h.review_due} prompt={prompt}
+          monitor={h.link?.kind === "project" ? href({ view: "analysis", projectId: h.link.id, step: "monitor" })
+            : h.candidates.find((c) => c.kind === "project") ? href({ view: "analysis", projectId: h.candidates.find((c) => c.kind === "project")!.id, step: "monitor" })
+              : undefined}
+          onWritten={() => {
             setPrompt(null);
             onChanged();
           }} />
@@ -171,7 +175,7 @@ function PriceForm({ token, h, portfolio, onChanged }: { token: string; h: Holdi
     <form className="pf-form pf-inline" onSubmit={(e) => void save(e)} aria-label="Your price">
       <label className="pf-field">
         <span>Your price a share</span>
-        <input className="field num" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="186.26" />
+        <input className="field num" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 100.00" />
       </label>
       <label className="pf-field">
         <span>On</span>

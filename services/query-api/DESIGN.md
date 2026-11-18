@@ -360,7 +360,11 @@ the 10-K's per-share facts (036) and its restatement findings, under RLS after `
   restating filing. Where the company restated a period itself, gold already holds that figure and only
   later splits apply. NVIDIA's FY2019 EPS $6.63 (filed before the 2021 4-for-1 and the 2024 10-for-1)
   reads $0.17; each row keeps `as_filed` and the `splits` applied. `shares=as_filed` gives the filings'
-  own figures.
+  own figures: each period as the FIRST periodic filing to state it stated it (`gold.per_share_originals`,
+  140; Riley, test 10: gold holds the latest filing's figure, so NVIDIA's Jul 2023 quarter read $0.25, the
+  Aug 2024 10-Q's split-recast comparative, beside $0.82 for Apr 2023; its own 10-Q says $2.48).
+- **Models** read the years' EPS and diluted shares through this pipeline's annual view (model_api
+  `split_adjusted_years`), so a split no longer mixes share bases in one history row.
 - **Fiscal Q4, derived** (`derivation.method` `q4_eps`, `q4_shares`): Q4 shares = the year's weighted
   shares x its days less Q1-Q3's x theirs, over Q4's days; Q4 EPS = Q4 net income / Q4 shares, scaled
   by the year's EPS x shares / net income when preferred dividends make that more than 1% (beyond the

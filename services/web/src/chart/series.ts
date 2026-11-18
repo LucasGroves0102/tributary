@@ -59,6 +59,8 @@ export interface Series {
   dashed?: boolean;
   /** drawn lighter and thinner: a model's bear / bull case beside its base case */
   faint?: boolean;
+  /** drawn heavier: Compare's target among its peers, told apart by weight as well as colour */
+  strong?: boolean;
   /** something to say about this series under the chart (chart/notes.ts) */
   note?: string;
 }

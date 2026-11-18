@@ -136,6 +136,8 @@ export interface KeyStat {
   title: string;
   /** over 300 days older than the company's latest period (035): shown as not reported since then */
   old?: boolean;
+  /** how a figure no filing states was worked out, when its key alone can't say (TTM EPS): no seal */
+  how?: string;
 }
 
 function periodText(key: string, src: ValueSource): string {
@@ -229,6 +231,56 @@ export function howFiled(key: string, source: Pick<ValueSource, "form" | "period
     return { filed: false, how: "the fourth quarter, worked out as the 10-K's year less the first three quarters" };
   }
   return { filed: true };
+}
+
+/** Whether a key stat is stated in its filing as shown (a seal), or how it was worked out. */
+export function statFiled(s: Pick<KeyStat, "key" | "source" | "how">): { filed: true } | { filed: false; how: string } {
+  return s.how ? { filed: false, how: s.how } : howFiled(s.key, s.source);
+}
+
+/** The Overview's EPS beside the twelve months' flows (Riley, test 10, finding 1: under "twelve
+ * months" it showed the latest quarter's, sealed). From /per-share only (query_api/per_share.py, the
+ * one per-share pipeline; never computed here): TTM EPS is the four quarters' EPS added on today's
+ * share basis, a derived figure, so it has no seal; a company that reports once a year gets its latest
+ * year as the report states it (sealed unless a split was applied to it). `rows`: that route's rows
+ * (TTM, else the years) newest first; undefined while loading; null when the route isn't there (an
+ * older API) or failed: the quarter's own figure, labelled as a quarter. */
+export function epsStat(rows: FinancialRow[] | null | undefined, quarter: KeyStat, asOf?: string): KeyStat {
+  // as of a past day the splits are those a filing had restated by then (per_share.py, 2)
+  const basis = asOf ? `on the share basis of ${day(asOf, true)} (the stock splits filed by then)` : "on today's share basis (stock splits applied)";
+  if (rows === null) return { ...quarter, label: "EPS (diluted), quarter" };
+  const base = { ...quarter, key: "eps_diluted_ttm", label: "EPS (diluted)", old: false, status: null };
+  if (rows === undefined) {
+    return { ...base, value: null, source: null, periodEnd: null, text: "…", period: "twelve months", title: "EPS (diluted): loading" };
+  }
+  const r = rows.find((x) => x.metric === "eps_diluted");
+  const v = r ? Number(r.value) : NaN;
+  if (!r || !Number.isFinite(v)) {
+    return { ...base, value: null, source: null, periodEnd: null, text: NOT_REPORTED, period: "not reported",
+      title: "EPS (diluted): no twelve months' figure on file" };
+  }
+  const source: ValueSource = { period_end: r.period_end, accession_no: r.citation.accession_no, form: r.citation.form, filed: r.citation.filed };
+  const currency = r.unit.split("/")[0] || "USD";
+  const ttm = r.derivation?.method === "ttm_eps";
+  const splits = (r.splits ?? []).map((x) => x.label);
+  const how = ttm
+    ? `the four quarters' diluted EPS added, ${basis}`
+    : r.value_source === "derived"
+      ? "worked out from the filings"
+      : splits.length
+        ? `the ${r.citation.form}'s ${r.as_filed ?? ""} for the year, divided for the ${splits.join(" and ")} split${splits.length === 1 ? "" : "s"} since`
+        : undefined;
+  const parts = ttm
+    ? r.derivation!.inputs.map((i) => `${i.role} ${fmt("eps", Number(i.value), currency)}${i.derived ? " (derived)" : ""}`).join(", ")
+    : null;
+  return {
+    ...base, value: v, source, periodEnd: r.period_end, text: fmt("eps", v, currency),
+    period: ttm ? `TTM to ${day(r.period_end, true)}` : `year to ${day(r.period_end, true)}`,
+    title: `EPS (diluted), ${ttm ? "the twelve months" : "the year"} to ${day(r.period_end, true)}. ` +
+      (parts ? `Its quarters: ${parts}. ` : "") +
+      `Source: ${r.citation.form} filed ${day(r.citation.filed, true)}, ${r.citation.accession_no}.`,
+    ...(how ? { how } : {}),
+  };
 }
 
 /** An amount, not a rate: the ledger's first column. */
@@ -566,7 +618,8 @@ export function figuresBehind(
   newest: { form: string; accession_no: string; filed: string; period_of_report?: string | null } | null,
   now: number = Date.now(),
 ): FiguresBehind | null {
-  if (!newest?.period_of_report || !/^10-[KQ]$/.test(newest.form) || !rows.length) return null;
+  // a foreign filer's annual report counts too (Riley, test 10, finding 2: TSMC a year behind, unsaid)
+  if (!newest?.period_of_report || !/^(10-[KQ]|20-F|40-F)$/.test(newest.form) || !rows.length) return null;
   const through = rows.reduce((m, r) => (r.period_end > m ? r.period_end : m), "");
   const cited = rows.reduce((m, r) => (r.citation.filed > m ? r.citation.filed : m), "");
   if (rows.some((r) => r.citation.accession_no === newest.accession_no)) return null;
@@ -1323,7 +1376,7 @@ export function eightKItems(sectionKeys: string[]): string[] {
     .map((k) => `${k} ${EIGHT_K_ITEMS[k] ?? "Item"}`);
 }
 
-export type FormFilter = "reports" | "all" | "10-K" | "10-Q" | "8-K" | "proxy" | "insider";
+export type FormFilter = "reports" | "all" | "10-K" | "10-Q" | "8-K" | "proxy" | "insider" | "annual" | "6-K";
 
 /** The filing index's form chips: each is a list of exact SEC form types (sent to the API, at most
  * 20). Reports first: 57 of a company's 1,233 filings can be 10-K/Qs among the insider forms. A
@@ -1338,7 +1391,25 @@ export const FORM_FILTERS: [FormFilter, string, string[]][] = [
   ["proxy", "Proxy", ["DEF 14A", "DEFA14A", "DEFM14A", "PRE 14A"]],
   ["insider", "Insider", ["3", "4", "5", "3/A", "4/A", "5/A"]],
   ["all", "All", []],
+  // a foreign private issuer's (foreignFilters): its annual report and its 6-Ks
+  ["annual", "20-F", ["20-F", "20-F/A", "40-F", "40-F/A"]],
+  ["6-K", "6-K", ["6-K", "6-K/A"]],
 ];
+
+/** The chips a company's filings are filtered by: a foreign private issuer (foreignReport: its
+ * figures come from a 20-F or 40-F) files no 10-K, 10-Q, 8-K or Forms 3-5, so it gets its annual
+ * report's chip (labelled with its own form) and 6-K instead (Riley, test 10, finding 60: TSMC's
+ * 10-K filter was empty and there was no 20-F one). */
+export function filterChips(foreign: string | null | undefined): [FormFilter, string][] {
+  const keep = (f: FormFilter) => FORM_FILTERS.find(([k]) => k === f)!;
+  const chips: FormFilter[] = foreign
+    ? ["reports", "annual", "6-K", "proxy", "all"]
+    : ["reports", "10-K", "10-Q", "8-K", "proxy", "insider", "all"];
+  return chips.map((f) => {
+    const [k, label] = keep(f);
+    return [k, k === "annual" && foreign === "40-F" ? "40-F" : k === "annual" && foreign && foreign !== "20-F" ? "20-F or 40-F" : label];
+  });
+}
 
 export function formsOf(f: FormFilter): string[] {
   return FORM_FILTERS.find(([k]) => k === f)?.[2] ?? [];
@@ -1385,9 +1456,18 @@ export function filingHeadings(rows: { form: string; filed: string; period_of_re
 }
 
 /** Whether the parsed-text note applies: only reports are ever parsed, so saying "not parsed" on
- * every Form 4 or 144 is noise, while a 10-Q not parsed yet is worth saying. */
-export function parsedNote(f: { form: string; sections: number | null | undefined }): string | null {
+ * every Form 4 or 144 is noise, while a 10-Q not parsed yet is worth saying. A report with no text
+ * days after it was filed isn't waiting to be parsed: Tributary doesn't keep its text (an 8-K of
+ * routine items such as a shareholder vote, a filing outside the crawl's years; Riley, test 10,
+ * finding 29: a 16-month-old 5.07 8-K read "not parsed yet"). */
+export const PARSE_WAIT_DAYS = 2;
+export const NOT_KEPT_TITLE = "Tributary keeps the text of 10-Ks, 10-Qs and 8-Ks with material items (results, deals, debt, " +
+  "leadership); routine 8-Ks such as a shareholder vote's, and filings outside the years it reads, link to EDGAR.";
+
+export function parsedNote(f: { form: string; sections: number | null | undefined; filed?: string }, now: number = Date.now()): string | null {
   if (f.sections) return `${f.sections} section${f.sections === 1 ? "" : "s"}`;
-  if (!/^(10-[KQ]|8-K)/.test(f.form)) return null;
-  return f.sections === 0 ? "not parsed yet" : "index only";
+  if (!/^(10-[KQ]|8-K|20-F|40-F|6-K)/.test(f.form)) return null;
+  if (f.sections !== 0) return "index only";
+  const old = f.filed ? now - Date.parse(f.filed.slice(0, 10)) > PARSE_WAIT_DAYS * 86_400_000 : false;
+  return old ? "text not kept here" : "not parsed yet";
 }

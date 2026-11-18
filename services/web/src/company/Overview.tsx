@@ -1,21 +1,21 @@
 import { useRef } from "react";
 
-import { companyEvents, financials, latestSection, recap as fetchRecap } from "../api";
+import { companyEvents, financials, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
 import { LayerChart } from "../chart/LayerChart";
 import { financialSeries } from "../chart/series";
-import { Folio } from "../components/Folio";
+import { Folio, TodaysView } from "../components/Folio";
 import { Seal, SealLink } from "../components/Seal";
 import { ErrorPanel, sentence, Skeleton } from "../components/States";
 import { day, paren } from "../format";
 import { go, href } from "../route";
-import type { ScreenerRow, Tier, ValueSource } from "../types";
+import type { FilingEvent, FinancialRow, ScreenerRow, Tier, ValueSource } from "../types";
 import {
-  BANK_NOT_SHOWN, financeArmNote, foreignReport, header, howFiled, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection,
-  yearStory,
+  BANK_NOT_SHOWN, epsStat, financeArmNote, foreignReport, header, howFiled, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection,
+  statFiled, yearStory,
   type KeyStat, type YearStory,
 } from "./data";
 import { EventsCard } from "./Events";
-import { keyStatFlag, staleFlags, type StaleFlag } from "./events";
+import { keyStatFlag, resultsOut, staleFlags, type StaleFlag } from "./events";
 import { RecapTable } from "./RecapTable";
 import { Gate } from "./Tables";
 import { TextKpisCard } from "./TextKpis";
@@ -44,29 +44,51 @@ export function Overview({
   name,
   row,
   access,
+  asOf,
 }: {
   token: string;
   companyId: string;
   name: string;
   row: ScreenerRow;
   access: Tier[];
+  /** a past day (`?asof=`): the year and the key figures as they stood then; the rest is today's */
+  asOf?: string;
 }) {
   const canFin = access.includes("financials");
   const canRead = access.includes("filings");
   // a 20-F/40-F filer files no 10-Q, 10-K or 8-K: those sections say so instead (foreignReport)
   const foreign = foreignReport(row);
   const events = useLoad(canRead && !foreign ? `${companyId}|events` : null, () => companyEvents(token, companyId));
-  const flags = staleFlags(events?.state === "ok" ? events.data : null);
-  const story = canFin ? yearStory(row) : null;
+  // today's 8-Ks flag today's figures; as of a past day they say nothing about that day's
+  const flags = asOf ? [] : staleFlags(events?.state === "ok" ? events.data : null);
+  // as of a past day the key figures read gold's history of itself (086), which its catch-up builds
+  // company by company: without it they'd all read "not reported" (Riley, test 10, finding 7)
+  const history = useLoad(asOf && canFin ? `${companyId}|history|${asOf}` : null, () => historyKept(token, companyId, asOf));
+  const notKept = !!asOf && history?.state === "ok" && history.data === false;
+  // EPS for the twelve months like the other flows (finding 1): /per-share's TTM, or a year for a
+  // company that reports once a year
+  const settled = !asOf || (!!history && history.state !== "loading");
+  const eps = useLoad(canFin && settled && !notKept ? `${companyId}|eps|${asOf ?? ""}` : null, async () => {
+    const ttm = await perShare(token, companyId, "ttm", "fiscal", false, 1, asOf);
+    if (ttm === null) return null;
+    if (ttm.rows.some((r) => r.metric === "eps_diluted") || !foreign) return ttm.rows;
+    return (await perShare(token, companyId, "annual", "fiscal", false, 1, asOf))?.rows ?? [];
+  });
+  const epsRows = !eps || eps.state === "loading" ? undefined : eps.state === "ok" ? eps.data : null;
+  const results = asOf ? null : resultsOut(events?.state === "ok" ? events.data : null);
+  const story = canFin && !notKept ? yearStory(row) : null;
   return (
     <div className="folios">
+      {results && <ResultsOut companyId={companyId} name={name} event={results} lead={!!results} />}
       {story && (
-        <Folio name="The year" lead
+        <Folio name="The year" lead={!results}
           line={howFiled("revenue_ttm", story.source).filed ? `The year to ${day(story.end, true)}, as filed` : `Four quarters to ${day(story.end, true)}`}>
           <YearSentence story={story} name={name} companyId={companyId} />
         </Folio>
       )}
-      <Figures companyId={companyId} name={name} row={row} canFin={canFin} flags={flags} lead={!story} />
+      <Figures companyId={companyId} name={name} row={row} canFin={canFin} flags={flags} lead={!story && !results} eps={epsRows}
+        asOf={asOf} notKept={notKept} />
+      <TodaysView.Provider value={asOf ?? null}>
       {foreign ? (
         <Folio name="Since the last report" line="Current reports on Form 6-K" className="events-card">
           <p className="empty foreign-note">
@@ -75,12 +97,34 @@ export function Overview({
           </p>
         </Folio>
       ) : canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} folio />}
-      <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign} />
+      <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign}
+        asOf={notKept ? asOf : undefined} />
       <Business token={token} companyId={companyId} name={name} canRead={canRead} foreign={foreign} />
-      {canFin && <Revenue token={token} companyId={companyId} />}
+      {canFin && <Revenue token={token} companyId={companyId} name={name} foreign={foreign} />}
       <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} folio />
       <YourData token={token} companyId={companyId} name={name} />
+      </TodaysView.Provider>
     </div>
+  );
+}
+
+/** Results day (Riley, test 10, finding 21): an 8-K with results (item 2.02) after the latest
+ * 10-Q or 10-K, said at the top with the release, and that the figures below are the last report's
+ * until the next 10-Q or 10-K's arrive (the release's own tables are on Earnings). */
+function ResultsOut({ companyId, name, event, lead }: { companyId: string; name: string; event: FilingEvent; lead: boolean }) {
+  const read = href({ view: "filing", companyId, accessionNo: event.accession_no, section: event.release?.section_key ?? null });
+  return (
+    <Folio name="Results out" line={`8-K filed ${day(event.filed, true)}`} lead={lead} className="results-out">
+      <p className="story results-line" role="status">
+        {name} released its results on {longDay(event.filed)}.{" "}
+        <a href={read}>{event.release ? "Read the press release" : "Read the 8-K"}</a>, or its figures on{" "}
+        <a href={href({ view: "company", companyId, tab: "earnings" })}>Earnings</a>.
+      </p>
+      <p className="foot">
+        The figures below are from the last 10-Q or 10-K until the report for this quarter is filed and its XBRL figures arrive;
+        the release's own tables are on Earnings.
+      </p>
+    </Folio>
   );
 }
 
@@ -123,13 +167,18 @@ function YearSentence({ story, name, companyId }: { story: YearStory; name: stri
 /** The key figures as a ledger: amounts in the first column, rates in the second, each value after a
  * red rule with the seal of its filing. The period they share is in the margin; a figure from another
  * says when. */
-function Figures({ companyId, name, row, canFin, flags, lead }: {
+function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept = false }: {
   companyId: string;
   name: string;
   row: ScreenerRow;
   canFin: boolean;
   flags: StaleFlag[];
   lead: boolean;
+  /** /per-share's EPS rows (epsStat): undefined while loading, null when unavailable */
+  eps?: FinancialRow[] | null;
+  asOf?: string;
+  /** as of a past day, no history of the company is kept yet (086): nothing to read from */
+  notKept?: boolean;
 }) {
   const currency = header(row).currency;
   // Ford's and GM's debt includes their finance arms' (migration 055, consolidated as built)
@@ -141,13 +190,28 @@ function Figures({ companyId, name, row, canFin, flags, lead }: {
       </Folio>
     );
   }
-  const stats = keyStats(row).map((s) => ({ ...s, flag: keyStatFlag(s.key, s.periodEnd, flags) }));
+  if (notKept && asOf) {
+    const at = (tab: "statements" | "ratios") => href({ view: "company", companyId, tab, asOf });
+    return (
+      <Folio name="Figures" line={`As they stood on ${day(asOf, true)}`} lead={lead}>
+        <p className="empty asof-not-kept" role="note">
+          {name}'s figures as they stood on {day(asOf, true)} aren't kept here yet: Tributary is building each company's history of
+          its figures, a few thousand companies a day, and {name}'s isn't built. Until it is, <a href={at("statements")}>Statements</a>{" "}
+          and <a href={at("ratios")}>Ratios</a> work them out for that day from the filings filed by then (it takes a little longer).
+        </p>
+      </Folio>
+    );
+  }
+  // EPS over the twelve months, from /per-share (finding 1); the screener's quarter only as a fallback
+  const stats = keyStats(row)
+    .map((s) => (s.key === "eps_diluted_q" ? epsStat(eps, s, asOf) : s))
+    .map((s) => ({ ...s, flag: keyStatFlag(s.key, s.periodEnd, flags) }));
   // the period most of them share goes in the margin; the others say their own
   const ends = stats.map((s) => s.periodEnd).filter((e): e is string => !!e);
   const common = ends.sort((a, b) => ends.filter((x) => x === b).length - ends.filter((x) => x === a).length)[0] ?? null;
-  const sealed = stats.filter((s) => s.source && !s.status && howFiled(s.key, s.source).filed);
+  const sealed = stats.filter((s) => s.source && !s.status && statFiled(s).filed);
   const sources = new Set(sealed.map((s) => `${s.source!.form} filed ${day(s.source!.filed, true)}`));
-  const computed = stats.some((s) => s.value !== null && !howFiled(s.key, s.source).filed);
+  const computed = stats.some((s) => s.value !== null && !statFiled(s).filed);
   const flagged = [...new Map(stats.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
   return (
     <Folio name="Figures" lead={lead}
@@ -191,7 +255,7 @@ function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: Sta
   const blank = s.value === null && s.status !== "other_currency";
   // a seal says "taken from the filing": only a figure the filing states has one (Riley 32); a computed
   // one says in its hover what it is worked out from
-  const filing = howFiled(s.key, s.source);
+  const filing = statFiled(s);
   const link = s.source && !blank && filing.filed ? sealHref(companyId, s.source) : null;
   const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || blank;
   const how = !blank && !filing.filed ? `${s.label}, ${filing.how}.` : null;
@@ -216,10 +280,12 @@ function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: Sta
   );
 }
 
-function Recap({ token, companyId, name, accession, canFin, foreign }: {
+function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
   token: string; companyId: string; name: string; accession: string | null; canFin: boolean;
   /** foreignReport: a 20-F/40-F filer, which files no 10-Q or 10-K */
   foreign: string | null;
+  /** as of this past day with no history kept yet: which report was the latest then isn't known here */
+  asOf?: string;
 }) {
   const load = useLoad(accession, () => fetchRecap(token, accession!));
   const data = load?.state === "ok" ? load.data : null;
@@ -228,6 +294,11 @@ function Recap({ token, companyId, name, accession, canFin, foreign }: {
       aside={foreign ? undefined : "Against the prior quarter and a year earlier; no consensus estimates"}>
       {!canFin ? (
         <p className="empty locked">The recap needs financials for {name}.</p>
+      ) : !accession && asOf ? (
+        <p className="empty">
+          Which 10-Q or 10-K was {name}'s latest on {day(asOf, true)} is read from its history of figures, which isn't built yet.
+          Its Filings tab lists every report with its date.
+        </p>
       ) : !accession && foreign ? (
         <p className="empty foreign-note">
           {name} files as a foreign private issuer: annual reports on Form {foreign} and interim reports on Form 6-K, not 10-Qs or
@@ -312,7 +383,7 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
 
 /** Quarterly revenue (bars) and operating margin (line, right axis) on fiscal quarters, in the
  * chart builder's chart: hover shows each value's filing. */
-function Revenue({ token, companyId }: { token: string; companyId: string }) {
+function Revenue({ token, companyId, name, foreign }: { token: string; companyId: string; name: string; foreign: string | null }) {
   const svg = useRef<SVGSVGElement>(null);
   const load = useLoad(companyId, () => financials(token, companyId, 12, ["revenue", "operating_margin"]));
   const series = load?.state === "ok"
@@ -338,7 +409,12 @@ function Revenue({ token, companyId }: { token: string; companyId: string }) {
         ) : load.state === "error" ? (
           <ErrorPanel what="revenue" onRetry={load.retry} />
         ) : (
-          <p className="empty">No quarterly revenue to chart. Statements shows what this company reports.</p>
+          <p className="empty">
+            {/* a once-a-year filer has no quarters to chart: said, not blank (Riley, test 10, finding 28) */}
+            {foreign
+              ? `${name} reports once a year (Form ${foreign}), so there is no quarterly revenue to chart. Statements shows its years.`
+              : "No quarterly revenue to chart. Statements shows what this company reports."}
+          </p>
         )
       )}
     </Folio>

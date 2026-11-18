@@ -184,3 +184,5 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`095_foreign_filers.sql`](DESIGN.md#095_foreign_filerssql): foreign filers' 20-F, 40-F and results-release 6-Ks in the document crawl (`ops.results_release`), and the parser checks' keys for them.
 - [`100_userdata.sql`](DESIGN.md#100_userdatasql): Bring your own data: the schema `userdata` (a user's own datasets, their rows by company, day and when known, the upload log), owner-only under forced RLS, in every backup.
 - [`110_figures_landed.sql`](DESIGN.md#110_figures_landedsql): `ops.figures_landed_at()`, when the nightly figures last landed (the bulk job's coverage run): when watched screens are checked.
+- [`140_per_share_originals.sql`](DESIGN.md#140_per_share_originalssql): `gold.per_share_originals`: each period's EPS and weighted shares as its own filing first stated them (per-share "As filed").
+- [`141_public_catalog_size.sql`](DESIGN.md#141_public_catalog_sizesql): `ops.public_catalog_size()`, the public catalog's company count (the status page's, so every page says one number).

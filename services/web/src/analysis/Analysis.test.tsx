@@ -398,6 +398,10 @@ it("adds bear and bull cases to the project's model, switches between them and s
   expect(switchBtn("Base").getAttribute("aria-pressed")).toBe("true");
   await click(switchBtn("Bear"));
   expect(page.querySelector(".scenario-empty")?.textContent).toContain("No bear case yet");
+  // a preview reads as one: outlined, "Bear: preview", and nothing added (Riley, test 10, finding 35)
+  expect(switchBtn("Bear").className).toBe("on preview");
+  expect(switchBtn("Bear").textContent).toBe("Bear: preview");
+  expect(page.querySelector(".scenario-preview-note")?.textContent).toContain("Previewing the bear case: nothing is added yet.");
   // #156: before it's added, the bear tab's table shows the case it would start as, labelled so,
   // beside the base case
   const cases = () => [...new Set([...page.querySelectorAll(".model-table td.case")].map((t) => t.textContent))];

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import {
   filingIndex,
@@ -6,12 +6,11 @@ import {
   failureReason,
   FormulaApiError,
   screener,
-  screenerColumns,
-  searchCompanies,
   validateFormula,
   type FormulaRequest,
 } from "../api";
-import { apply as applyCompletion, complete, MAX_SUGGESTIONS, type Suggestion, type Vocabulary } from "../chart/autocomplete";
+import { type Vocabulary } from "../chart/autocomplete";
+import { FormulaCombo, useMetricCatalog } from "../chart/FormulaCombo";
 import { cached, remember } from "../chart/cache";
 import { fetchLayer } from "../chart/fetch";
 import { memberName, SEGMENT_AXIS_LABELS, SEGMENT_TRANSFORMS } from "../chart/segments";
@@ -21,7 +20,7 @@ import { autoSubtitle, methodNote, sourceFootnote } from "../chart/deck";
 import { LayerChart } from "../chart/LayerChart";
 import { askSides, drawnIds, planAxes } from "../chart/axes";
 import { filingMarkers, MARKER_FORMS, markerKey as keyToMarkers, markersFor, type Marker } from "../chart/markers";
-import { catalog, metricLabel, type MetricInfo } from "../chart/metrics";
+import { metricLabel, type MetricInfo } from "../chart/metrics";
 import {
   addLayer,
   applyTemplate,
@@ -59,7 +58,7 @@ import { pngBlob, slug, svgText } from "../chart/export";
 import { UNNAMED, useDirectory } from "../companies/directory";
 import { chartCsv, latestSource, toSeries, type Series, type Source } from "../chart/series";
 import type { Readable } from "../access";
-import { CompanyPicker, CompanySearch, resultTicker } from "../components/CompanySearch";
+import { CompanyPicker, CompanySearch } from "../components/CompanySearch";
 import { MenuButton } from "../components/MenuButton";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { dismissTopic, toast, useToastOn } from "../components/Toasts";
@@ -124,19 +123,6 @@ function useChartSeed(token: string, preferred: string[]): { none: boolean; ids:
   return { none: rows.length === 0, ids: [...new Set([...preferred, ...rows])].slice(0, 2) };
 }
 
-function useMetrics(token: string): MetricInfo[] | null {
-  const [out, setOut] = useState<MetricInfo[] | null>(null);
-  useEffect(() => {
-    let live = true;
-    screenerColumns(token)
-      .then((r) => live && setOut(catalog(r.columns)))
-      .catch(() => live && setOut([]));
-    return () => {
-      live = false;
-    };
-  }, [token]);
-  return out;
-}
 
 type Filings = { index: IndexedFiling[]; parsed: Filing[] };
 
@@ -182,7 +168,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
     [directory, onChart.join(","), directory.snapshot()],
   );
   const learn = useCallback((c: ChartCompany) => directory.learn([c]), [directory]);
-  const metrics = useMetrics(token);
+  const metrics = useMetricCatalog(token);
   // "+ Price" only with the user's own market-data connection (chart/prices.ts)
   const market = useMarketData(token);
   const priced = isConnected(market);
@@ -912,8 +898,6 @@ function Swatches({ color, label, onPick }: { color: number; label: string; onPi
   );
 }
 
-const KIND_LABEL: Record<Suggestion["kind"], string> = { metric: "metric", ticker: "company", function: "function" };
-
 /** "Valid · ...": what the chart will read it as, in a person's words. */
 function readsAs(unit: string, display: FormulaSeries["display"]): string {
   if (unit === "ratio") return display === "multiple" ? "a multiple, like 1.50x" : display === "number" ? "a plain number" : "a percent";
@@ -941,87 +925,6 @@ function FormulaInput({
   onBroken?: (broken: boolean) => void;
 }) {
   const [draft, setDraft] = useState(layer.formula ?? "");
-  // the cursor while suggesting (null: list closed), the highlighted row, and whether the user
-  // moved to it (only then does Enter take it instead of applying the formula)
-  const [cursor, setCursor] = useState<number | null>(null);
-  const [active, setActive] = useState(0);
-  const [moved, setMoved] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
-  const pending = useRef<number | null>(null);
-  const listId = useId();
-  // a capitalized word being typed may be a ticker: asked of the server, like every company search
-  const typed = cursor === null ? null : (/(?:^|[^A-Za-z0-9_.])([A-Z][A-Z0-9-]{0,9})$/.exec(draft.slice(0, cursor))?.[1] ?? null);
-  const [found, setFound] = useState<{ word: string; tickers: Vocabulary["tickers"] }>({ word: "", tickers: [] });
-  useEffect(() => {
-    if (!typed) return;
-    let live = true;
-    const t = setTimeout(() => {
-      searchCompanies(token, typed, true, MAX_SUGGESTIONS)
-        .then((rs) => {
-          if (!live) return;
-          setFound({
-            word: typed,
-            tickers: rs.flatMap((r) => {
-              const ticker = resultTicker(r);
-              return ticker ? [{ ticker, name: r.name }] : [];
-            }),
-          });
-        })
-        .catch(() => {});
-    }, 150);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [token, typed]);
-  const words = useMemo((): Vocabulary => ({
-    metrics: vocab.metrics,
-    tickers: [...new Map([...vocab.tickers, ...found.tickers].map((t) => [t.ticker, t])).values()],
-  }), [vocab, found]);
-  const comp = cursor === null ? null : complete(draft, cursor, words);
-  const open = !!comp && comp.items.length > 0;
-
-  useEffect(() => {
-    if (pending.current !== null && input.current) {
-      input.current.setSelectionRange(pending.current, pending.current);
-      pending.current = null;
-    }
-  }, [draft]);
-
-  const choose = (item: Suggestion) => {
-    if (!comp) return;
-    const r = applyCompletion(draft, comp, item);
-    pending.current = r.cursor;
-    setDraft(r.text);
-    setCursor(r.cursor);
-    setActive(0);
-    setMoved(false);
-  };
-  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (open && comp) {
-      const n = comp.items.length;
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setActive((a) => (a + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
-        setMoved(true);
-        return;
-      }
-      if (e.key === "Tab" || (e.key === "Enter" && moved)) {
-        e.preventDefault();
-        choose(comp.items[Math.min(active, n - 1)]!);
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setCursor(null);
-        return;
-      }
-    }
-    if (e.key === "Enter") {
-      setCursor(null);
-      commit();
-    }
-  };
   const [check, setCheck] = useState<{ ok: true; unit: string; display: FormulaSeries["display"] } | { ok: false; problems: FormulaProblem[] } | null>(null);
   const [focused, setFocused] = useState(false);
   const isBroken = check?.ok === false;
@@ -1060,51 +963,9 @@ function FormulaInput({
 
   return (
     <>
-      <div className="ac">
-        <input
-          ref={input}
-          className="field mono"
-          value={draft}
-          maxLength={500}
-          placeholder="e.g. net_income / revenue or NVDA.revenue / MSFT.revenue"
-          aria-label="Formula"
-          aria-invalid={check?.ok === false}
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-activedescendant={open ? `${listId}-${active}` : undefined}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setCursor(e.target.selectionStart ?? e.target.value.length);
-            setActive(0);
-            setMoved(false);
-          }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => {
-            setFocused(false);
-            setCursor(null);
-            commit();
-          }}
-          onKeyDown={onKey}
-        />
-        {open && comp && (
-          <ul className="ac-list" id={listId} role="listbox" aria-label="Formula suggestions">
-            {comp.items.map((item, i) => (
-              <li key={`${item.kind}-${item.label}`} id={`${listId}-${i}`} role="option" aria-selected={i === active}
-                className={i === active ? "on" : undefined}
-                onMouseDown={(e) => {
-                  e.preventDefault(); // keep focus in the field
-                  choose(item);
-                }}>
-                <span className={`ac-k ${item.kind}`}>{KIND_LABEL[item.kind]}</span>
-                <b className="mono">{item.label}</b>
-                {item.detail && <span className="faint">{item.detail}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      <FormulaCombo token={token} value={draft} onChange={setDraft} vocab={vocab} invalid={check?.ok === false}
+        placeholder="e.g. net_income / revenue or NVDA.revenue / MSFT.revenue" onCommit={commit} onEnter={commit}
+        onFocusChange={setFocused} />
       {check?.ok === false
         ? check.problems.map((p, i) => {
             const at = draft.slice(p.pos, p.pos + p.length);

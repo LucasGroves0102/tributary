@@ -149,6 +149,11 @@ it("puts the peer median, without the target, under the table", async () => {
   expect(median.querySelector("td.n")?.getAttribute("title")).toContain("Left out: 1 metadata only");
   // beside "Peer median", how many peers the table has (analyst test 4: it read a literal "n of N")
   expect(median.textContent).toContain("of 2 peers");
+  // High and Low say what they're of too (Riley, test 10, finding 33)
+  for (const name of ["High", "Low"]) {
+    const row = rows().find((r) => r.textContent?.startsWith(name))!;
+    expect([...row.querySelectorAll("td.n .count")].map((td) => td.textContent)).toEqual(["1 of 2", "1 of 2", "1 of 2"]);
+  }
   expect(median.textContent).not.toContain("n of N");
   expect($(".how-to-read .foot")?.textContent).toContain("1 company shows metadata only");
 });
@@ -308,9 +313,10 @@ it("side by side: one small chart per column, a line per readable company, on de
   expect(charts.map((c) => c.querySelector(".ch-title")?.textContent)).toEqual([
     "Revenue, TTM", "Operating margin, TTM", "Revenue growth, year over year, TTM",
   ]);
-  // every company in the same colour on each chart
+  // every company in the same colour on each chart; the target heavier, told apart by weight too (Riley, test 10, 32)
   for (const c of charts) {
     expect([...c.querySelectorAll(".ch-legend g")].map((g) => [g.getAttribute("class"), g.textContent])).toEqual([["c0", "NVDA"], ["c1", "AAPL"]]);
+    expect([...c.querySelectorAll(".ch-legend line")].map((l) => l.getAttribute("stroke-width"))).toEqual(["6", "4"]);
   }
   expect(charts[0]!.querySelector("svg")!.getAttribute("viewBox")).toBe("0 0 460 294"); // narrow and short: the text stays legible
   // the dollar charts can read on a log scale or indexed; the percents stay as they are

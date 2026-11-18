@@ -216,6 +216,15 @@ it("says why there are no results: too broad, no access, nothing matched", async
   reply = () => Response.json({ detail: "search too broad: add a company, form, section or date filter, or more specific words" }, { status: 422 });
   await render({ q: "the" });
   expect(container.querySelector(".error")?.textContent).toContain("search too broad");
+  // a search not widened by the reader offers no way back: it was the narrowest already
+  expect([...container.querySelectorAll(".error button")].map((b) => b.textContent)).toEqual([]);
+  act(() => root.unmount());
+  // widened to all dates and refused: the way back to the newest filings (Riley, test 10, finding 34)
+  await render({ q: "the", allDates: true });
+  const back = [...container.querySelectorAll<HTMLButtonElement>(".error button")].find((b) => b.textContent === "The newest filings")!;
+  expect(back).toBeTruthy();
+  await act(async () => back.click());
+  expect(parseSearch(window.location.hash.split("?")[1]!)).toEqual({ q: "the" });
   act(() => root.unmount());
   reply = () => Response.json({ query: "zzz", as_of: "", limit: 20, offset: 0, has_more: false, results: [] });
   await render({ q: "zzz" });

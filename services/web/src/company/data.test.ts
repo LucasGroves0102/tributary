@@ -10,7 +10,9 @@ import PS_TTM from "./fixtures/nvda-per-share-ttm.json";
 import type { PerShare, Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  epsStat,
   howFiled,
+  statFiled,
   figuresBehind,
   FINANCE_ARMS,
   financeArmNote,
@@ -18,6 +20,7 @@ import {
   fiscalYear,
   parsedNote,
   financialsCsv,
+  filterChips,
   formMatches,
   formsOf,
   header,
@@ -332,6 +335,8 @@ describe("figures behind the filing index (H9)", () => {
   it("isn't behind when the figures hold that period or cite that filing, or for an older or other filing", () => {
     expect(figuresBehind([...rows, fin("revenue", "2026-06-30", "40867000000", "FY2026 Q2")], june, NOW)).toBeNull();
     expect(figuresBehind(rows, { ...june, period_of_report: "2026-04-02" }, NOW)).toBeNull(); // within a week
+    // a 20-F a year past the figures says so too (Riley, test 10, finding 2: TSMC)
+    expect(figuresBehind(rows, { ...june, form: "20-F" }, NOW)).toMatchObject({ form: "20-F" });
     expect(figuresBehind(rows, { ...june, form: "8-K" }, NOW)).toBeNull();
     expect(figuresBehind(rows, { ...june, period_of_report: null }, NOW)).toBeNull();
     expect(figuresBehind(rows, { ...june, filed: "2026-04-01" }, NOW)).toBeNull(); // filed before what's cited
@@ -353,6 +358,12 @@ it("counts a foreign filer's 20-F, 40-F and 6-K as reports, within the API's 20 
   }
   expect(formMatches("4", "reports")).toBe(false);
   expect(formMatches("DEF 14A", "reports")).toBe(false);
+  // a foreign private issuer files no 10-K, 10-Q, 8-K or Forms 3-5: its own chips (Riley, test 10, finding 60)
+  expect(filterChips("20-F").map(([, label]) => label)).toEqual(["Reports", "20-F", "6-K", "Proxy", "All"]);
+  expect(filterChips("40-F").find(([f]) => f === "annual")?.[1]).toBe("40-F");
+  expect(filterChips(null).map(([f]) => f)).toEqual(["reports", "10-K", "10-Q", "8-K", "proxy", "insider", "all"]);
+  expect(formMatches("20-F/A", "annual")).toBe(true);
+  expect(formMatches("6-K", "6-K")).toBe(true);
   expect(formsOf("reports").length).toBeLessThanOrEqual(20);
 });
 
@@ -576,6 +587,11 @@ describe("the Filings tab's headings and notes", () => {
     expect(parsedNote({ form: "4", sections: 0 })).toBeNull();
     expect(parsedNote({ form: "144", sections: null })).toBeNull();
     expect(parsedNote({ form: "10-Q", sections: 0 })).toBe("not parsed yet");
+    // filed days ago and still no text: not waiting to be parsed, not kept (Riley, test 10, finding 29)
+    const now = Date.parse("2026-11-17T12:00:00Z");
+    expect(parsedNote({ form: "8-K", sections: 0, filed: "2025-07-01" }, now)).toBe("text not kept here");
+    expect(parsedNote({ form: "8-K", sections: 0, filed: "2026-11-17" }, now)).toBe("not parsed yet");
+    expect(parsedNote({ form: "20-F", sections: 0, filed: "2026-11-16" }, now)).toBe("not parsed yet");
     expect(parsedNote({ form: "8-K", sections: null })).toBe("index only");
     expect(parsedNote({ form: "10-K", sections: 12 })).toBe("12 sections");
   });
@@ -709,5 +725,28 @@ describe("howFiled: which figures a seal may say were taken from the filing (Ril
     expect(howFiled("free_cash_flow_ttm", k)).toMatchObject({ filed: false });
     expect(howFiled("revenue_ttm", q)).toEqual({ filed: false, how: "the four quarters to Jul 26, 2026 added up" });
     expect(howFiled("revenue_q", k)).toMatchObject({ filed: false, how: expect.stringContaining("year less the first three quarters") });
+  });
+});
+
+describe("epsStat: the Overview's EPS is twelve months, from /per-share (Riley, test 10, finding 1)", () => {
+  const quarter = keyStats(nvdaRow()).find((s) => s.key === "eps_diluted_q")!;
+  it("reads /per-share's TTM: derived, so no seal, and says how", () => {
+    const ttm = (PS_TTM as unknown as PerShare).rows.find((r) => r.metric === "eps_diluted")!;
+    const s = epsStat([ttm], quarter);
+    expect(s).toMatchObject({ key: "eps_diluted_ttm", label: "EPS (diluted)", period: `TTM to ${s.period.slice(7)}` });
+    expect(s.value).toBe(Number(ttm.value));
+    expect(statFiled(s)).toMatchObject({ filed: false, how: expect.stringContaining("four quarters' diluted EPS added, on today's share basis") });
+    expect(statFiled(epsStat([ttm], quarter, "2024-01-31"))).toMatchObject({ how: expect.stringContaining("share basis of Jan 31, 2024") });
+  });
+  it("a year as its report states it is sealed; one a split was applied to isn't", () => {
+    const year = fin("eps_diluted", "2025-12-31", "2.10", "FY2025", { citation: { ...fin("x", "", "", "").citation, form: "20-F" }, splits: [] });
+    expect(statFiled(epsStat([year], quarter))).toEqual({ filed: true });
+    const split = { ...year, as_filed: "4.20", splits: [{ label: "2-for-1", reverse: false, first_filed: "2026-03-01", first_accession: null }] };
+    expect(statFiled(epsStat([split], quarter))).toMatchObject({ filed: false, how: expect.stringContaining("divided for the 2-for-1 split") });
+  });
+  it("loading, none on file, and an older API (the quarter, labelled a quarter)", () => {
+    expect(epsStat(undefined, quarter)).toMatchObject({ text: "…", value: null });
+    expect(epsStat([], quarter)).toMatchObject({ text: "—", period: "not reported", value: null });
+    expect(epsStat(null, quarter)).toMatchObject({ key: "eps_diluted_q", label: "EPS (diluted), quarter", text: "$1.08" });
   });
 });

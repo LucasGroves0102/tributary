@@ -99,7 +99,7 @@ describe("Status", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Data status");
     for (const s of ["3 min ago", "2 min ago", "43 s", "95% within 1.8 min", "39,000 live-feed filings, last 7 days",
       "97.5%", "39,000 of 40,000 filings", "6,025", "265,625", "1,780,000", "43,012", "21 days checked",
-      "all on 1 of those days", "6,024 companies checked, 13,790,000 figures", "Access: 59 attempts to reach data a user can't read, 0 succeeded", "4 of 4 ordinary",
+      "all on 1 of those days", "6,024 companies checked, 13,790,000 figures", "Access: 59 prompt attacks on the assistant, 0 leaked data", "4 of 4 ordinary",
       "Citations: 128 of 128 figures traced", "30 of 30 answers using data", "Figures against the filings: 149 numbers printed in 5 10-Ks",
       "2 known gaps asserted and explained", "21 of the figures", "last recorded results, not live"]) {
       expect(t).toContain(s);
@@ -222,7 +222,7 @@ describe("Status without signing in", () => {
     window.location.hash = "#/status";
     await mount(<App picker={false} />);
     expect(container.querySelector("h1")?.textContent).toBe("Data status");
-    expect(text()).toContain("Access: 59 attempts");
+    expect(text()).toContain("Access: 59 prompt attacks");
     expect(container.querySelector(".status-home")?.getAttribute("href")).toBe("#/");
     const calls = vi.mocked(fetch).mock.calls;
     const statusCall = calls.find(([u]) => String(u).endsWith("/v1/status/data"));

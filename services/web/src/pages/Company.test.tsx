@@ -337,7 +337,29 @@ it("overview: a 20-F filer's sections say it files 20-Fs and 6-Ks, and ask for n
   expect(paths().some((u) => u.pathname.endsWith("/events") || u.pathname.includes("/recap") || u.pathname.includes("/sections"))).toBe(false);
 });
 
+it("overview: a once-a-year filer's revenue chart says why it has no quarters (Riley, test 10, finding 28)", async () => {
+  const BIRK = "0001977102";
+  const f20 = { period_end: "2025-12-31", accession_no: "0001977102-26-000004", form: "20-F", filed: "2026-02-12" };
+  rowFor = () => nvdaRow({ ...entry({ company_id: BIRK, name: "Birkenstock Holding", tickers: ["BIRK"] }), access: ["filings", "financials"],
+    sources: { revenue_ttm: f20, revenue_q: f20, cash_q: f20 } });
+  override = (u) => (u.pathname.endsWith("/financials") ? Response.json({ as_of: "", rows: [] }) : null);
+  await render("overview", BIRK);
+  expect(container.textContent).toContain("Birkenstock Holding reports once a year (Form 20-F), so there is no quarterly revenue to chart.");
+});
+
+const TTM_EPS = fin("eps_diluted", "2026-07-26", "4.9085", "FY2027 Q2", {
+  value_source: "derived", as_filed: null, splits: [],
+  derivation: { method: "ttm_eps", inputs: [
+    { role: "FY2026 Q3", metric: "eps_diluted", period_end: "2025-10-26", value: "1.3", accession_no: ACC, form: "10-Q" },
+    { role: "FY2026 Q4", metric: "eps_diluted", period_end: "2026-01-25", value: "1.7585", accession_no: K_ACC, form: "10-K", derived: true },
+    { role: "FY2027 Q1", metric: "eps_diluted", period_end: "2026-04-26", value: "2.39", accession_no: ACC, form: "10-Q" },
+    { role: "FY2027 Q2", metric: "eps_diluted", period_end: "2026-07-26", value: "2.46", accession_no: ACC, form: "10-Q" }] },
+});
+const perShareTtm = (u: URL) => u.pathname.endsWith("/per-share") && u.searchParams.get("view") === "ttm"
+  ? Response.json({ company_id: NVDA, view: "ttm", shares: "adjusted", splits: [], rows: [TTM_EPS] }) : null;
+
 it("overview: key stats with periods, the latest quarter recap with flags, and Item 1", async () => {
+  override = perShareTtm;
   await render();
   // Seal: the key figures are a ledger; the period they share is in the margin. A seal opens the filing, and
   // only a figure the filing states has one (Riley 32): twelve months from a 10-Q are four quarters added up
@@ -346,9 +368,18 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   expect([...container.querySelectorAll(".rubric")].find((r) => r.textContent?.startsWith("The year"))?.textContent).toContain("Four quarters to Jul 26, 2026");
   expect(stat.querySelector("a.seal-link")).toBeNull();
   expect(stat.querySelector("dd")?.title).toMatch(/^Revenue, the four quarters to Jul 26, 2026 added up\./);
-  const eps = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.getAttribute("data-key") === "eps_diluted_q")!;
-  expect(eps.querySelector("a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
-  expect(eps.querySelector("a.seal-link")?.getAttribute("aria-label")).toBe("EPS (diluted): taken from the 10-Q filed Aug 26, 2026");
+  // EPS for the twelve months like the block's other flows (Riley, test 10, finding 1: it was the quarter's,
+  // sealed): /per-share's TTM, the four quarters added, derived, so no seal
+  const eps = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.getAttribute("data-key") === "eps_diluted_ttm")!;
+  expect(eps.querySelector("dt")?.textContent).toBe("EPS (diluted)");
+  expect(eps.querySelector(".figure")?.textContent).toBe("$4.91");
+  expect(eps.querySelector("a.seal-link")).toBeNull();
+  expect(eps.querySelector("dd")?.title).toMatch(/^EPS \(diluted\), the four quarters' diluted EPS added, on today's share basis/);
+  expect(eps.querySelector("dd")?.title).toContain("FY2026 Q4 $1.76 (derived)");
+  expect(paths().find((u) => u.pathname.endsWith("/per-share"))?.searchParams.get("quarters")).toBe("1");
+  // a balance stays the quarter end's, sealed to its 10-Q
+  const cash = [...container.querySelectorAll(".ledger dl > div")].find((d) => d.getAttribute("data-key") === "cash_q")!;
+  expect(cash.querySelector("a.seal-link")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
   expect($(".computed-note")?.textContent).toContain("No seal: worked out from the filings");
   // the year as a sentence: four quarters added up, so no seal on it
   expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.2 billion, up 69.0% on the year before.");
@@ -357,6 +388,8 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;
   expect([...recap.querySelectorAll("th")].map((t) => t.textContent)).toEqual(["Metric", "FY2027 Q2", "FY2027 Q1", "QoQ", "FY2026 Q2", "YoY"]);
   expect(recap.querySelector("tbody tr")?.textContent).toBe("Revenue$46.74B$44.06B+6.1%$30.04B+55.6%");
+  // a change has no colour: up isn't good for every line (debt, costs; Riley, test 10, finding 20)
+  expect(recap.querySelectorAll(".pos, .neg")).toHaveLength(0);
   expect($(".flags")?.textContent).toContain("a $184 million restructuring charge");
   expect($(".flags a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-2`);
   expect($(".excerpt")?.textContent).toBe("NVIDIA pioneered accelerated computing. We sell GPUs.");
@@ -412,12 +445,84 @@ it("as of a past day: the key figures and the statements read it, a note says so
   expect(paths().filter((u) => u.pathname.endsWith("/screener")).map((u) => u.searchParams.get("as_of")))
     .toEqual(expect.arrayContaining(["2025-06-30", null]));
   const note = $(".co-asof-note")!;
-  expect(note.textContent).toContain("as they stood at the end of Jun 30, 2025");
-  expect(note.textContent).toContain("data notes and the confidence mark are today's");
+  expect(note.textContent).toContain("As of Jun 30, 2025: the Overview's year and key figures, Statements and Ratios read the filings filed by the end of that day");
+  expect(note.textContent).toContain("Every other tab and section, the header's dates and your holding are today's, and say so");
+  expect($(".co-asof")?.className).toBe("co-asof on");
   expect(note.querySelector("a")!.getAttribute("href")).toBe(`#/company/${NVDA}/statements?kind=bs`);
   expect(($(".co-asof-field input") as HTMLInputElement).value).toBe("2025-06-30");
   // the tabs keep the day
   expect([...container.querySelectorAll(".co-tabs a")].map((a) => a.getAttribute("href"))).toContain(`#/company/${NVDA}/ratios?asof=2025-06-30`);
+});
+
+it("as of a past day: no today-based 'not in these figures yet' notice, the share basis is that day's, and restated marks say why none show", async () => {
+  // a 10-Q filed long after the day: today's index, not missing from the day's figures (Riley, test 10, finding 3)
+  newerIndex = [indexRow("0001045810-26-000090", "10-Q", "2026-11-19", 1, { period_of_report: "2026-10-25" })];
+  override = (u) => u.pathname.endsWith("/financials") ? Response.json({ as_of: "", history: false,
+    rows: [fin("revenue", "2025-04-27", "44062000000", "FY2026 Q1"), fin("eps_diluted", "2025-04-27", "0.76", "FY2026 Q1")] })
+    : u.pathname.endsWith("/per-share") ? Response.json({ company_id: NVDA, view: "quarter", shares: "adjusted", splits: [], rows: [] }) : null;
+  await render("statements", NVDA, null, {}, "2025-06-30");
+  expect($(".stale-note")).toBeNull();
+  expect(paths().some((u) => u.pathname.endsWith("/filing-index"))).toBe(false);
+  expect(container.textContent).toContain("split-adjusted to the share basis of Jun 30, 2025, as it stood then");
+  expect(container.textContent).not.toContain("every period on today's share basis");
+  // finding 8: no history kept yet, so no figure can be marked; the page says so
+  expect($(".restated-pending")?.textContent).toContain("Restated figures aren't marked for Nvidia yet");
+});
+
+it("as of a past day with no history kept yet: the Overview says so instead of 'not reported', and today's sections say they're today's", async () => {
+  override = (u) => u.pathname.endsWith("/restatements") ? Response.json({ company_id: NVDA, as_of: "", history: false, rows: [] }) : null;
+  rowFor = () => nvdaRow({ access: ["filings", "financials"], values: {}, sources: {} });
+  await render("overview", NVDA, null, undefined, "2025-06-30");
+  const kept = $(".asof-not-kept")!;
+  expect(kept.textContent).toContain("Nvidia's figures as they stood on Jun 30, 2025 aren't kept here yet");
+  expect(kept.querySelector("a")?.getAttribute("href")).toBe(`#/company/${NVDA}/statements?asof=2025-06-30`);
+  expect($(".ledger")).toBeNull();
+  // Riley, test 10, finding 7: no "No 10-Q or 10-K values for Nvidia yet"
+  expect(container.textContent).not.toContain("No 10-Q or 10-K values");
+  // finding 18: the rest is today's, and each section says so; no EPS asked while nothing is kept
+  expect([...container.querySelectorAll(".asof-today")].length).toBeGreaterThan(2);
+  expect($(".asof-today")?.textContent).toBe("Today's, not as it stood on Jun 30, 2025.");
+  expect($(".asof-today-k")?.textContent).toBe("Today:");
+  expect(paths().some((u) => u.pathname.endsWith("/per-share"))).toBe(false);
+});
+
+it("as of a past day, a tab of today's data says so (Peers, Riley, test 10, finding 19)", async () => {
+  await render("peers", NVDA, null, undefined, "2025-06-30");
+  expect($(".tab-today")?.textContent).toContain("This tab shows today's peers and their figures, not as it stood on Jun 30, 2025");
+  expect($(".tab-today a")?.getAttribute("href")).toBe(`#/company/${NVDA}/peers`);
+  await act(async () => root.unmount());
+  container.remove();
+  await render("ratios", NVDA, null, undefined, "2025-06-30");
+  expect($(".tab-today")).toBeNull();
+});
+
+it("results day: the Overview opens on the release when an 8-K with results follows the last 10-Q (Riley, test 10, finding 21)", async () => {
+  const release = "0001045810-26-000101";
+  override = (u) => u.pathname.endsWith("/events") ? Response.json({
+    company_id: NVDA, as_of: "", since: "2026-07-26", window: "since_report", more: false, stale: [], method: "",
+    latest_report: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", period_end: "2026-07-26" },
+    events: [{ accession_no: release, form: "8-K", filed: "2026-11-17", accepted_at: null, event_date: "2026-11-17",
+      items: [{ item: "2.02", title: "Results of Operations and Financial Condition", kind: "earnings" }], items_from: "parsed",
+      material: true, amendment: false, affects: [], sections_available: true, excerpt: null,
+      release: { section_key: "EX-99.1", title: "Press release" }, filing_url: null, document_url: null }],
+  }) : null;
+  await render();
+  const top = $(".results-out")!;
+  expect(top.textContent).toContain("Nvidia released its results on November 17, 2026.");
+  expect(top.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${release}/EX-99.1`);
+  expect(container.querySelector(".folios > .folio")).toBe(top);
+});
+
+it("names the company from the directory while its figures load (Riley, test 10, finding 15)", async () => {
+  // the header's figures take a while; the directory's identity-only request doesn't
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname === "/api/query/v1/screener" && u.searchParams.getAll("columns").length > 1) return new Promise<Response>(() => {});
+    return respond(url);
+  }));
+  await render();
+  expect($(".co-name-early")?.textContent).toBe("Nvidia");
+  expect($(".skeleton, [aria-busy]")).not.toBeNull();
 });
 
 it("today: no note, and the statements still ask for each restated figure's first version", async () => {

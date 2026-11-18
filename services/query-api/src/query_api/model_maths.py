@@ -12,12 +12,14 @@ ratio in the output is a ratio (0.1 = 10%).
 History. A fiscal year is the TTM row at its fiscal Q4 ("FY2025 Q4"); the newest MAX_HISTORY
 years with any value, oldest first. Lines: revenue, operating income, pretax income, income tax,
 net income, operating cash flow, capex, free cash flow, buybacks (TTM sums), and the 10-K's
-diluted EPS and diluted weighted shares for the year ending within 7 days of that Q4. Ratios:
+diluted EPS and diluted weighted shares for the year ending within 7 days of that Q4, on today's
+share basis when the run has per_share's inputs (model_api.split_adjusted_years: per_share.py's
+annual view, so a stock split no longer mixes bases in one row). Ratios:
 growth (consecutive years, prior revenue > 0), operating margin, interest and other (operating
 income less pretax income, over revenue: negative is net income from it), tax rate (tax over
 pretax income, pretax > 0), share change, FCF margin. A diluted share count that moves by
-more than half in a year is a split or a merger, not buybacks (the 10-Ks state those years on
-different share bases): that year has no share change or EPS growth (`share_break`), and the
+more than half in a year is a merger or a split no filing adjusted, not buybacks (the years are
+then on different share bases): that year has no share change or EPS growth (`share_break`), and the
 years before it no P/E (`earlier_share_basis`). `ttm` is the newest TTM when its quarter
 isn't a fiscal Q4 (else the newest year is the TTM): the same lines, the latest quarter's diluted
 weighted shares, no EPS (its P/E reads price over net income per diluted share, like every

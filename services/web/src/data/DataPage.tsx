@@ -24,6 +24,7 @@ import {
   uploadDataset,
   validateFormula,
 } from "../api";
+import { FormulaCombo, useMetricCatalog } from "../chart/FormulaCombo";
 import { Choices } from "../components/Choices";
 import { Folio } from "../components/Folio";
 import { MenuButton } from "../components/MenuButton";
@@ -521,6 +522,18 @@ function NewMetric({ token, saved, datasets, count }: { token: string; saved: Sa
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const example = datasets[0]?.fields[0] ? `revenue / ${fieldRef(datasets[0].name, datasets[0].fields[0].name)}` : "operating_income / revenue";
+  // the chart builder's vocabulary and suggestions (Riley, test 10, finding 9), with the user's own fields
+  const metrics = useMetricCatalog(token);
+  const vocab = useMemo(() => ({
+    metrics: metrics ?? [],
+    tickers: [],
+    own: datasets.flatMap((d) => d.fields.map((f) => ({ ref: fieldRef(d.name, f.name), detail: d.title }))),
+  }), [metrics, datasets]);
+  // a problem shown is about what was sent: editing clears it (Riley, test 10, 44)
+  const edit = (set: (v: string) => void) => (v: string) => {
+    set(v);
+    setError(null);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -548,12 +561,12 @@ function NewMetric({ token, saved, datasets, count }: { token: string; saved: Sa
     <form className="pf-form pf-inline data-metric-form" onSubmit={(e) => void submit(e)} aria-label="New metric">
       <label className="pf-field">
         <span>Name</span>
-        <input className="field" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required placeholder="Revenue per store" />
+        <input className="field" value={name} onChange={(e) => edit(setName)(e.target.value)} maxLength={120} required placeholder="Revenue per share" />
       </label>
       <label className="pf-field wide">
         <span>Formula</span>
-        <input className="field" value={formula} onChange={(e) => setFormula(e.target.value)} maxLength={500} required placeholder={example}
-          spellCheck={false} autoComplete="off" />
+        <FormulaCombo token={token} value={formula} onChange={edit(setFormula)} vocab={vocab} placeholder={example} className="field"
+          invalid={!!error} required />
       </label>
       <div className="pf-field">
         <span>Reads</span>

@@ -128,8 +128,9 @@ it("switches quarters, and says what a quarter lacks instead of guessing", async
     report: { accession_no: "0001628280-26-026556", form: "10-Q", filed: "2026-04-22" } });
   earnings!.quarters.unshift({ ...q, period_end: "2026-12-31", estimated: true, report: null, outlook: [], adjustments: [] });
   await render(view());
-  // the newest quarter with a release opens: here the expected one, whose 10-K isn't filed yet
-  expect($(".release-card .sub")?.textContent).toBe("Quarter ended Dec 31, 2026 (expected)");
+  // the newest quarter with a release opens: here the expected one, whose 10-K isn't filed yet; its results
+  // are out, so it isn't "(expected)" beside its own release (Riley, test 10, finding 31)
+  expect($(".release-card .sub")?.textContent).toMatch(/^Quarter ended Dec 31, 2026 \(results out .+; its 10-Q or 10-K isn't filed yet\)$/);
   expect(container.textContent).toContain("isn't filed yet, and the figures come from it");
   expect(container.textContent).toContain("This release has no section headed Outlook or Guidance");
   expect(container.textContent).toContain("No reconciliation table and no note with a dollar amount in the forms Tributary reads");

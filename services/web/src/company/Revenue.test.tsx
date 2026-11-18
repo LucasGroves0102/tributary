@@ -100,6 +100,8 @@ it("draws segments and geography over time, the growth decomposition and revenue
   expect(dec.textContent).toContain("+46.2 pts"); // Compute, FY2027 Q2: (170 − 110) / 130
   expect(dec.textContent).toContain("−3.1 pts"); // Graphics: (16 − 20) / 130
   expect(dec.querySelector("tr.unattributed")?.textContent).toBe("Not attributed··+0.0 pts+0.0 pts"); // they cover revenue
+  // the quarters with no breakdown say why they have no bars (Riley, test 10, finding 23)
+  expect(container.querySelector(".decomposition-gaps")?.textContent).toContain("2 of the 4 quarters in the table have no bars");
   expect(dec.querySelector("tr.total")?.textContent).toContain("+43.1%"); // 186 / 130 − 1
   // quality: receivables 25 vs 13 a year earlier (+92%) while revenue grew 43%: flagged
   const quality = container.querySelector("table.quality")!;

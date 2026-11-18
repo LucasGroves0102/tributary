@@ -68,7 +68,7 @@ export function chartNotes(series: Series[], opts: {
     const inner = at.flatMap((has, i) => (!has && i > first && i < last ? [i] : []));
     if (inner.length) parts.push(`no value for ${periods(inner, ticks)}`);
     // companies file at different times: one quarter behind the others is not a gap
-    if (full - 1 - last >= (annual ? 1 : 2)) parts.push(`stops at ${ticks[last]!.period}`);
+    if (full - 1 - last >= (annual ? 1 : 2)) parts.push(`stops at ${ticks[last]!.period} (nothing on file after it)`);
     if (parts.length) remarks.push(`${s.name}: ${parts.join(", ")}`);
   }
   if (remarks.length) {

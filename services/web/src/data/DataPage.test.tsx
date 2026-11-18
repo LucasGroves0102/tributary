@@ -43,7 +43,18 @@ function respond(url: string, init?: RequestInit): Response {
     list = { ...list, datasets: [...list.datasets, stored] };
     return Response.json({ ...answer, preview: false, dataset: stored, stored: 1, unchanged: 0 });
   }
-  if (path.startsWith("/v1/formulas/validate")) return Response.json({ valid: true, unit: "USD", alignment: "fiscal", inputs: [] });
+  if (path.startsWith("/v1/formulas/validate")) {
+    const body = JSON.parse(String(init?.body ?? "{}"));
+    return /shares_diluted/.test(body.formula ?? "")
+      ? Response.json({ valid: false, errors: [{ message: "Unknown metric shares_diluted", pos: 10, length: 14, hint: "Start typing to see the metric names" }] })
+      : Response.json({ valid: true, unit: "USD", alignment: "fiscal", inputs: [] });
+  }
+  if (path === "/v1/screener/columns") {
+    return Response.json({ columns: [
+      { key: "weighted_shares_diluted_q", metric: "weighted_shares_diluted", span: "quarter", unit: "shares" },
+      { key: "weighted_shares_basic_q", metric: "weighted_shares_basic", span: "quarter", unit: "shares" },
+      { key: "revenue_ttm", metric: "revenue", span: "ttm", unit: "USD" }] });
+  }
   if (path.startsWith("/v1/workspace-items/")) return Response.json({ item_id: "m1", kind: "metric", name: "Per store", state: { formula: "revenue / mine.stores.stores", view: "ttm" } });
   return Response.json({ detail: "forbidden" }, { status: 403 });
 }
@@ -185,4 +196,30 @@ it("saves a metric, checked first, into Your metrics, and lists metrics with a s
   await settle();
   expect(create).toHaveBeenCalledWith("metric", "Sales per store", { formula: "mine.stores.sales / mine.stores.stores", view: "ttm" },
     { newWorkspace: METRICS_WORKSPACE });
+});
+
+it("the metric's formula box offers the chart builder's names and the user's own fields, and a problem clears on edit (Riley, test 10, finding 9)", async () => {
+  const saved = { list: { state: "ok", workspaces: [] }, create: vi.fn(async () => ({})), deleteWithUndo: vi.fn() } as unknown as Saved;
+  await show(saved);
+  const form = container.querySelector<HTMLFormElement>("form.data-metric-form")!;
+  const [name, formula] = [...form.querySelectorAll<HTMLInputElement>("input.field")];
+  expect(formula!.getAttribute("role")).toBe("combobox");
+  formula!.setSelectionRange = () => undefined;
+  await act(async () => type(formula!, "revenue / weighted_sh"));
+  await settle();
+  const options = () => [...form.querySelectorAll("[role=option] b")].map((b) => b.textContent);
+  expect(options()).toEqual(["weighted_shares_basic", "weighted_shares_diluted"]);
+  await act(async () => type(formula!, "revenue / mine.st"));
+  await settle();
+  expect(options()).toEqual(["mine.stores.stores", "mine.stores.sales"]);
+  // a refused formula says why; editing clears it
+  await act(async () => type(name!, "Per share"));
+  await act(async () => type(formula!, "revenue / shares_diluted"));
+  await settle();
+  await act(async () => form.requestSubmit());
+  await settle();
+  expect(form.querySelector(".err")?.textContent).toContain("Unknown metric shares_diluted");
+  await act(async () => type(formula!, "revenue / weighted_shares_diluted"));
+  await settle();
+  expect(form.querySelector(".err")).toBeNull();
 });

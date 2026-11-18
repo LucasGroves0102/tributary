@@ -91,3 +91,20 @@ export function sectionName(key: string): string {
   if (exhibit) return /^99(\.|$)/.test(exhibit[1]!) ? "Press release" : `Exhibit ${exhibit[1]}`;
   return `Item ${key}`;
 }
+
+/** A pointer is shorter than this: a 10-K's Item 8 that only says where the statements are (the
+ * measure parser rule 7 uses for an Item 7 that points elsewhere). */
+export const POINTER_CHARS = 2000;
+
+/** Where a 10-K's financial statements are when its Item 8 only points to them (Riley, test 10,
+ * finding 10: NVIDIA's Item 8 is one sentence, the statements are in Item 15): the longest section
+ * after Item 8 whose title names financial statements. From the outline's keys, titles and lengths
+ * only; null when Item 8 holds them itself or no section fits. */
+export function statementsElsewhere(form: string, sections: { section_key: string; title: string | null; chars: number }[],
+  key: string): { section_key: string; title: string | null } | null {
+  if (!/^10-K/.test(form) || key.replace(/^II-/, "") !== "8") return null;
+  const at = sections.findIndex((s) => s.section_key === key);
+  if (at < 0 || sections[at]!.chars >= POINTER_CHARS) return null;
+  const named = sections.slice(at + 1).filter((s) => /financial statement/i.test(s.title ?? "") && s.chars >= 5 * POINTER_CHARS);
+  return named.sort((a, b) => b.chars - a.chars)[0] ?? null;
+}

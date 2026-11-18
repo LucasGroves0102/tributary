@@ -1,6 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 
 import { NVDA } from "../fixtures";
+import { localDay } from "../format";
 import type { FormulaSeries } from "../types";
 import { apply, complete, type Vocabulary } from "./autocomplete";
 import { cached, clearChartCache, MAX_ENTRIES, remember } from "./cache";
@@ -19,6 +20,15 @@ const VOCAB: Vocabulary = {
   tickers: [{ ticker: "NVDA", name: "Nvidia" }, { ticker: "NFLX", name: "Netflix" }, { ticker: "MSFT", name: "Microsoft" }],
 };
 const labels = (text: string, cursor = text.length) => complete(text, cursor, VOCAB)?.items.map((i) => i.label) ?? null;
+
+it("completes the user's own fields after mine., and never offers metrics there (Riley, test 10, finding 9)", () => {
+  const own: Vocabulary = { ...VOCAB, own: [{ ref: "mine.stores.stores", detail: "Store counts" }, { ref: "mine.stores.sales" }] };
+  expect(complete("revenue / mine.st", 17, own)?.items.map((i) => [i.kind, i.label])).toEqual([
+    ["own", "mine.stores.stores"], ["own", "mine.stores.sales"]]);
+  expect(complete("mine.stores.sa", 14, own)?.items.map((i) => i.label)).toEqual(["mine.stores.sales"]);
+  expect(labels("revenue / mine.st")).toBeNull(); // a box without them offers nothing, not "TICKER.metric"
+  expect(labels("revenue / mine.stores.")).toBeNull();
+});
 
 it("completes metric names by prefix, then by label words", () => {
   expect(labels("net")).toEqual(["net_income"]);
@@ -114,6 +124,8 @@ it("deck subtitle and source footnote say what, when and from which filings", ()
     "Source: SEC filings via Tributary; 10-K, 10-Q for KO, PEP; latest KO 10-Q filed Jul 23, 2026; as of Oct 21, 2026.",
   );
   expect(sourceFootnote([], short, null)).toBe("Source: SEC filings via Tributary.");
+  // a moment, in the viewer's zone: 02:00 UTC on Nov 18 is Nov 17 in the Americas
+  expect(sourceFootnote([], short, "2026-11-18T02:00:00Z")).toBe(`Source: SEC filings via Tributary; as of ${localDay("2026-11-18T02:00:00Z", true)}.`);
   expect(methodNote("fiscal", "annual", new Set(["yoy"]))).toBe(
     "Fiscal years: flows are fiscal-year totals (TTM at Q4), balances year-end values; YoY over years.",
   );

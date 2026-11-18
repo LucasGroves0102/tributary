@@ -63,9 +63,9 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
       <Folio name="Your key" line="Made in Settings, shown once" lead>
         <ol className="api-steps">
           <li>
-            {signedOut ? <><a href={href({ view: "home" })}>Sign in</a> with GitHub or your account, then open Settings, API keys.</>
-              : <>Open <a href={href({ view: "settings" })}>Settings</a>, API keys.</>}{" "}
-            Demo sandboxes can't make keys.
+            {signedOut ? <><a href={href({ view: "home" })}>Sign in</a> with GitHub or your account, then open Settings: API keys is its last section.</>
+              : <>Open <a href={href({ view: "settings" })}>Settings</a>: API keys is its last section once you're signed in with GitHub or an account.</>}{" "}
+            A demo sandbox can't hold keys or connect apps, so its Settings has neither section: sign in to make one.
           </li>
           <li>
             Name the key, choose <b>Read only</b> or <b>Read and write</b>, and when it expires: in 30, 90 or 365 days.
@@ -124,7 +124,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
           server at <code className="api-mcp">{mcp}</code>: the same figures, filing text and citations, through the same permission
           checks. In claude.ai or ChatGPT, add a custom connector with that address and connect it: Tributary asks you to sign in and
           to approve the app, which then reads as you, read-only (no changes, no portfolio, no account settings), until you disconnect it
-          in Settings, Connected apps.
+          in Settings, Connected apps (signed in with GitHub or an account; a demo sandbox can't connect apps).
         </p>
         <p>
           A client that can send a header to a remote server can use an API key instead. A read-only key is enough; nothing can be

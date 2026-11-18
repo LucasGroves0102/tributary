@@ -37,7 +37,9 @@ Rules:
   wins, the provider on a tie. Each says its source and day; older than STALE_AFTER_DAYS is
   stale. Never fetched by Tributary for itself, never shared across users.
 - Reviews: an open covered holding's review falls due when the company files a 10-K or 10-Q
-  (original) after the holding was added and after the user's last journal entry of kind
+  (original), or an 8-K reporting results (item 2.02: results day is the news; its items from
+  the filing index, else the item headings the parser found, with the filings tier, as the alerts
+  job reads them), after the holding was added and after the user's last journal entry of kind
   `review` for it. Open holdings also join the filing alerts' follows (source `portfolio`,
   query_api/alerts.py), and the bell counts reviews due (`reviews_due`).
 """
@@ -81,7 +83,8 @@ MAX_BODY = 128 * 1024       # JSON bodies (an import of 500 rows fits)
 REVIEW_LOOKBACK_DAYS = 400  # reports older than this never make a review due
 CHUNK = 50                  # companies per filing-index query (like the alerts job)
 MAX_REFRESH = 25            # holdings asked of the user's provider per refresh
-REVIEW_FORMS = ["10-K", "10-Q"]
+REVIEW_FORMS = ["10-K", "10-Q", "8-K"]
+RESULTS_ITEM = "2.02"       # an 8-K's results of operations: it makes a review due
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
 Id = Annotated[str, Path(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
 SYMBOL = fidelity.SYMBOL
@@ -610,13 +613,16 @@ def filed_at(r: dict) -> datetime:
 
 def due_reviews(open_holdings: list[dict], reports: list[dict],
                 last_reviews: dict[str, datetime]) -> dict[str, dict]:
-    """company_id → the report a review is due for (module docstring): the newest 10-K/10-Q
-    filed after the holding was added and after the last review entry."""
+    """company_id → the report a review is due for (module docstring): the newest 10-K/10-Q,
+    or 8-K with results (item 2.02), filed after the holding was added and after the last review
+    entry."""
     added = {h["company_id"]: h["created_at"] for h in open_holdings}
     out: dict[str, dict] = {}
     for r in sorted(reports, key=filed_at, reverse=True):
         cid = r["company_id"]
         if cid in out or cid not in added:
+            continue
+        if r["form"].startswith("8-K") and RESULTS_ITEM not in (r.get("items") or []):
             continue
         at = filed_at(r)
         reviewed = last_reviews.get(cid)
@@ -698,6 +704,17 @@ def add_portfolio_routes(app: FastAPI, *, portfolio: AppPortfolio | None, store:
         out: list[dict] = []
         for i in range(0, len(ids), CHUNK):
             out += store.alert_filings(user_id, ids[i:i + CHUNK], REVIEW_FORMS, since)
+        # an 8-K the nightly submissions load hasn't itemised yet: the parser's item headings,
+        # with the filings tier (alert_job.complete's rule), so results day counts that day
+        unknown = [r for r in out if r["form"].startswith("8-K") and not r.get("items")]
+        access = readable(user_id) if unknown else None
+        for r in unknown:
+            if access is None or "filings" not in access.get(r["company_id"], set()):
+                continue
+            parsed = [e for e in store.company_8ks(user_id, r["company_id"], r["filing_date"])
+                      if e["accession_no"] == r["accession_no"]]
+            if parsed:
+                r["items"] = parsed[0].get("items") or parsed[0].get("parsed_items") or None
         return out
 
     def reviews(user_id: str, open_holdings: list[dict]) -> dict[str, dict]:

@@ -447,10 +447,12 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
               const missing = s !== "base" && !cases[s];
               const bad = s === "base" ? !parsed.base : !!cases[s] && !parsed[s];
               return (
-                <button key={s} className={sel === s ? "on" : undefined} aria-pressed={sel === s}
-                  title={missing ? `No ${s} case yet` : bad ? "Some numbers in this case need fixing" : `Edit the ${s} case`}
+                // a case not added yet is previewed, not applied: the chosen button reads as a preview, outlined
+                // (Riley, test 10, finding 35: a filled "Bear" looked applied)
+                <button key={s} className={sel === s ? (missing ? "on preview" : "on") : undefined} aria-pressed={sel === s}
+                  title={missing ? `No ${s} case yet: preview what it would start as` : bad ? "Some numbers in this case need fixing" : `Edit the ${s} case`}
                   onClick={() => setSel(s)}>
-                  {SCENARIO_LABELS[s]}{bad ? " ⚠" : missing ? " +" : ""}
+                  {SCENARIO_LABELS[s]}{bad ? " ⚠" : missing ? (sel === s ? ": preview" : " +") : ""}
                 </button>
               );
             })}
@@ -472,6 +474,10 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
         </div>
         {sel !== "base" && !cases[sel] ? (
           <div className="card-b scenario-empty">
+            <p className="scenario-preview-note" role="status">
+              <b>Previewing the {caseLabel} case: nothing is added yet.</b> The table marks its numbers “(preview)”; Add bear and
+              bull cases keeps them.
+            </p>
             <p>
               No {caseLabel} case yet. A bear and a bull case sit beside your base case: the same years, your numbers for
               what happens if it goes worse or better. Each starts from the base case {sel === "bear" ? "minus" : "plus"} half

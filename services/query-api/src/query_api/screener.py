@@ -43,7 +43,9 @@ of a day gold.latest_reading), and the latest day of the caller's own datasets i
 (userdata.field_points, as known at the end of `as_of`): each input's comparable value (k<i>'s
 rule: none for n/m, n/a, old, stale or another currency), then the formula, so a figure that
 doesn't read as a value never makes one. Without a value the column says the first input's
-reading, named by its ref. It sorts and filters like any column. A formula with a ticker or a lag
+reading, named by its ref, else (no input reads oddly) the first input with no figure at all:
+status `not_reported`, reason "<ref>: no figure on file" (Riley, test 10, finding 26: blank cells
+said nothing). It sorts and filters like any column. A formula with a ticker or a lag
 isn't a column (each row is its own company; only the latest figures are read): ScreenError. Its
 SQL is fixed fragments too: input slots and named parameters, never the formula's text.
 """
@@ -352,12 +354,18 @@ def _metric_values(i: int, m: MetricColumn, company: str, sic: str, inputs: tupl
     status = first(lambda x, _: f"{x}.status")
     reason = first(lambda x, j: f"%(r{i}_{j})s || ': ' || coalesce({x}.reason,"
                                 f" replace({x}.status, '_', ' '))")
+    # no input reads oddly: the first input with no figure at all says why the value is blank
+    missing = ("coalesce(" + ", ".join(f"CASE WHEN {x}.value IS NULL AND {x}.status IS NULL"
+                                       f" THEN %(r{i}_{j})s END"
+                                       for j, x in enumerate(reads)) + ")")
     unit = ("coalesce(" + ", ".join(f"CASE WHEN {x}.status = 'other_currency' THEN {x}.unit END"
                                     for x in reads) + ")")
     behind = " OR ".join(f"{x}.status = 'behind'" for x in reads)
     outputs = [f"{expr} AS v{i}", f"NULL::jsonb AS src{i}",
-               f"CASE WHEN {blank} THEN {status} WHEN {behind} THEN 'behind' END AS st{i}",
-               f"CASE WHEN {blank} THEN {reason} END AS why{i}",
+               f"CASE WHEN {blank} THEN coalesce({status}, CASE WHEN {missing} IS NOT NULL"
+               f" THEN 'not_reported' END) WHEN {behind} THEN 'behind' END AS st{i}",
+               f"CASE WHEN {blank} THEN coalesce({reason}, {missing} || ': no figure on file')"
+               f" END AS why{i}",
                f"CASE WHEN {blank} THEN {unit} END AS u{i}", f"{expr} AS k{i}"]
     return outputs, joins
 
