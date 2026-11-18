@@ -53,10 +53,18 @@ the parser image's `parser-peers` job, not in SQL.
 | `ops.statement_comparisons(text[])` (each filing's statement lines against gold: own, agree, clear), `ops.core_figures(company)`, `ops.entity_kind(company, sic)` | `074_statement_reconciliation_confidence.sql` |
 | `ops.recheck(kind, text[])` | `071_auto_catchup.sql` |
 | `ops.quality_tier(check, severity)` (the status page's groups), views `ops.quality_tiers` and `ops.quality_summary`, `ops.public_quality()` | `072_data_trust_checks.sql` (`ops.quality_tiers` with `statement_mismatch`: `074_statement_reconciliation_confidence.sql`) |
-| `ops.check_sections(text[])` (parser-output checks per document), `ops.check_sections_version()`, `ops.section_key_valid(form, key)`, `ops.core_section_keys(form)`, `ops.section_check_backlog(int)`, `ops.public_parser_quality()` | `072_data_trust_checks.sql` |
+| `ops.check_sections(text[])` (parser-output checks per document; a 20-F laid out by a cross-reference index or split into one `20-F` section has no core items), `ops.check_sections_version()`, `ops.section_key_valid(form, key)` (20-F, 40-F, 6-K keys), `ops.core_section_keys(form)` (a 20-F's 3.D, 4, 5, 18) | `095_foreign_filers.sql` (before: `072_data_trust_checks.sql`) |
+| `ops.section_check_backlog(int)`, `ops.public_parser_quality()` | `072_data_trust_checks.sql` |
 | `ops.refresh_extremes(int)`, `ops.extreme_columns()` (the screener's columns), view `ops.extremes_report` | `072_data_trust_checks.sql` |
 | `ops.coverage_found()` (the coverage sweep's rule: every listed company's gaps, cause and reason), `ops.refresh_coverage()`, views `ops.coverage_report` / `coverage_summary`, `ops.public_coverage_gaps()`, `ops.rebuild_soon(text[])` | `076_coverage.sql` |
 | `ops.figures_landed_at()` (the newest coverage run: when watched screens are checked) | `110_figures_landed.sql` |
+
+## Documents
+
+| Function | Latest definition |
+|---|---|
+| `ops.doc_crawl_plan(date, text[])` (the document crawl's targets: 10-K, 10-Q, 8-K by item, 20-F, 40-F and their amendments, results-release 6-Ks, of companies with gold financials) | `095_foreign_filers.sql` (before: `020_doc_crawl.sql`) |
+| `ops.results_release(period, filed, fiscal year end, document, description)` (whether a 6-K is a results release, from the filing index; the crawl plan and doc-fetcher's live path both call it) | `095_foreign_filers.sql` |
 
 ## Catch-up
 

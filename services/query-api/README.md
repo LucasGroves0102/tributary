@@ -76,11 +76,11 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/companies/{id}/filing-index?form=&from=&to=&limit=&offset=` | token | every filing in the SEC index (public metadata), newest first; `sections` count only where the caller reads filings |
 | `GET /v1/filing-index?company_id=&form=&from=&to=&limit=&offset=` | token | the same across up to 50 companies (default: the caller's readable companies) |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings the caller can read |
-| `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `max_chars` default 8,000, up to 1,000,000 |
+| `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `form` 10-K, 10-Q, 8-K, 20-F, 40-F or 6-K; `max_chars` default 8,000, up to 1,000,000 |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=&view=&q=&numbers=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs against the earlier filing; `view` reads them for materiality ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=&sort=&window=` | filings (every company searched) | best passage per section, with snippet, citation and a total ([Search](#search)) |
 | `GET /v1/companies/{id}/events` | filings | 8-Ks since the latest 10-Q/10-K period end: items, an excerpt, the press release, `announced`, `stale` figures ([Earnings and events](#earnings-and-events)) |
-| `GET /v1/companies/{id}/earnings?quarters=&tables=` | filings | each quarter's earnings release (Item 2.02), `quarters` 1-8 (default 4): headline, outlook, adjustments; `tables=true` adds the release's tables as grids |
+| `GET /v1/companies/{id}/earnings?quarters=&tables=` | filings | each quarter's earnings release (Item 2.02; a foreign filer's 6-K), `quarters` 1-8 (default 4): headline, outlook, adjustments; `tables=true` adds the release's tables as grids |
 | `GET /v1/companies/{id}/data-notes` | financials | data-quality and freshness notes, ranked, each with its filings, and the company's coverage gaps ([Data notes](#data-notes)) |
 | `GET /v1/companies/{id}/annual-per-share?years=` | financials | EPS and weighted shares per fiscal year as the 10-K states them (036; `years` 1-30, default 10) |
 | `GET /v1/companies/{id}/per-share?view=&basis=&shares=&quarters=` | financials | EPS and weighted shares on one share basis: `view` quarter, ttm or annual; `shares` adjusted (default) or as_filed; `quarters` 1-120 (default 40) ([Per-share figures](#per-share-figures-on-one-share-basis)) |
@@ -661,6 +661,13 @@ filing.
 - **Earnings releases**: each quarter's 2.02 release with its headline, outlook and adjustments,
   by fixed rules; no beat or miss. `tables=true` adds the release's own tables as grids (parser v7,
   `silver.filing_tables`, migration 067).
+- **Foreign filers** (migration 095): a company with no 10-Q in the window gets its 20-F/40-F
+  period ends (`Store.foreign_reports`, the public filing index) and its stored 6-Ks
+  (`Store.results_6ks`: doc-fetcher stores only results releases) mapped to the quarter or half
+  each reports, the first 6-K of a period as its release (its EX-99.1, else the `6-K` section);
+  `report` is the 20-F/40-F for a fiscal year, none for an interim period. Search and the sections
+  route take `form` 20-F, 40-F and 6-K too. The agent's and MCP tools' `form` enums still list
+  10-K, 10-Q and 8-K (a tool-schema change re-records the replays).
 
 The rules, the stale-figure table and what was measured: [DESIGN.md](DESIGN.md#earnings-and-events).
 

@@ -540,3 +540,81 @@ def test_rebuild_commits_each_batch_instead_of_holding_one_transaction():
         filings.rebuild(spy, filings.RunStats())
         assert spy.starts and set(spy.starts) == {"IDLE"}
         assert c.info.transaction_status.name == "IDLE"
+
+
+# foreign annual reports (roadmap f) ------------------------------------------------------------
+
+TSMC = "0001046179"
+
+
+def ifrs_instance(cik: str, year: int, revenue: int, usd_revenue: int) -> bytes:
+    """An inline 20-F's instance shaped like TSMC's: IFRS facts in New Taiwan dollars, the
+    convenience translation of the year in US dollars beside them, two years of the income
+    statement, both balance sheets (values made up, at TSMC's scale)."""
+    cur, prior = (f"{year}-01-01", f"{year}-12-31"), (f"{year - 1}-01-01", f"{year - 1}-12-31")
+    facts = [("Revenue", "y", "TWD", revenue), ("Revenue", "p", "TWD", revenue * 3 // 4),
+             ("Revenue", "y", "USD", usd_revenue),
+             ("ProfitLossAttributableToOwnersOfParent", "y", "TWD", revenue * 45 // 100),
+             ("ProfitLossFromOperatingActivities", "y", "TWD", revenue // 2),
+             ("CashFlowsFromUsedInOperatingActivities", "y", "TWD", revenue * 6 // 10),
+             ("Assets", "e", "TWD", revenue * 2), ("Assets", "pe", "TWD", revenue * 3 // 2),
+             ("Liabilities", "e", "TWD", revenue * 2 // 3),
+             ("EquityAttributableToOwnersOfParent", "e", "TWD", revenue * 4 // 3),
+             ("CashAndCashEquivalents", "e", "TWD", revenue // 2)]
+    contexts = {"y": f"<x:startDate>{cur[0]}</x:startDate><x:endDate>{cur[1]}</x:endDate>",
+                "p": f"<x:startDate>{prior[0]}</x:startDate><x:endDate>{prior[1]}</x:endDate>",
+                "e": f"<x:instant>{cur[1]}</x:instant>", "pe": f"<x:instant>{prior[1]}</x:instant>"}
+    out = ['<?xml version="1.0"?><x:xbrl xmlns:x="http://www.xbrl.org/2003/instance"'
+           ' xmlns:ifrs-full="https://xbrl.ifrs.org/taxonomy/2025-03-27/ifrs-full"'
+           ' xmlns:dei="http://xbrl.sec.gov/dei/2025"'
+           ' xmlns:iso4217="http://www.xbrl.org/2003/iso4217">']
+    for cid, period in contexts.items():
+        out.append(f'<x:context id="{cid}"><x:entity><x:identifier scheme="http://www.sec.gov/CIK">'
+                   f'{cik}</x:identifier></x:entity><x:period>{period}</x:period></x:context>')
+    for unit in ("TWD", "USD"):
+        out.append(f'<x:unit id="{unit}"><x:measure>iso4217:{unit}</x:measure></x:unit>')
+    out.append(f'<dei:EntityCentralIndexKey contextRef="y">{cik}</dei:EntityCentralIndexKey>')
+    for tag, cid, unit, v in facts:
+        out.append(f'<ifrs-full:{tag} contextRef="{cid}" unitRef="{unit}" decimals="-6">{v}'
+                   f'</ifrs-full:{tag}>')
+    return ("".join(out) + "</x:xbrl>").encode()
+
+
+@db
+def test_a_20f_companyfacts_lacks_reaches_gold_in_its_own_currency(conn):
+    # TSMC's FY2025 20-F (filed 2026-04-16): seven months on, companyfacts still ended at FY2024
+    conn.execute("UPDATE silver.company_ciks SET cik = %s WHERE company_id = %s", (TSMC, CO))
+    conn.execute("UPDATE silver.companies SET sic = '3674' WHERE company_id = %s", (CO,))
+    index(conn, "tsm-fy25", [TSMC], form="20-F", filed=date(2026, 4, 16))
+    index(conn, "tsm-fy25-a", [TSMC], form="20-F/A", filed=date(2026, 5, 20))
+    cover = (b'<?xml version="1.0"?><x:xbrl xmlns:x="http://www.xbrl.org/2003/instance"'
+             b' xmlns:dei="http://xbrl.sec.gov/dei/2025"><x:context id="c"><x:entity>'
+             b'<x:identifier scheme="http://www.sec.gov/CIK">0001046179</x:identifier></x:entity>'
+             b'<x:period><x:instant>2026-05-20</x:instant></x:period></x:context>'
+             b'<dei:AmendmentFlag contextRef="c">true</dei:AmendmentFlag></x:xbrl>')
+    asked = []
+
+    def fetch(cik, accession):
+        asked.append(accession)
+        return (f"https://www.sec.gov/Archives/edgar/data/1046179/{accession}/tsm-20251231_htm.xml",
+                ifrs_instance(TSMC, 2025, 3_809_000_000_000, 122_400_000_000)
+                if accession == "tsm-fy25" else cover)
+
+    stats = run(conn, fetch, since=date(2025, 10, 1))
+    assert sorted(asked) == ["tsm-fy25", "tsm-fy25-a"] and stats.sec_requests == 0  # injected
+    revenue = conn.execute(
+        "SELECT value, unit, source_tag FROM gold.financials WHERE company_id = %s"
+        " AND span = 'ttm' AND metric = 'revenue' AND period_end = '2025-12-31'", (CO,)).fetchone()
+    assert revenue == (Decimal("3809000000000"), "TWD", "ifrs-full:Revenue")  # never converted
+    assert conn.execute(
+        "SELECT unit FROM gold.financials WHERE company_id = %s AND metric = 'total_assets'"
+        " AND period_end = '2025-12-31'", (CO,)).fetchone() == ("TWD",)
+    assert dict(silver(conn, "tsm-fy25"))["filing"] >= 10
+    assert silver(conn, "tsm-fy25-a") == []  # a cover-page amendment maps no fact
+    assert run(conn, fetch, since=date(2025, 10, 1)).filings == 0 and len(asked) == 2
+
+
+@db
+def test_a_10k_amendment_is_still_no_gap(conn):
+    index(conn, "k-a", [CO], form="10-K/A", filed=date(2026, 3, 1))
+    assert filings.gaps(conn, date(2025, 10, 1), 3, 10) == []

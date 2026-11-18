@@ -13,6 +13,9 @@ it.each([
   ["EX-99", "Press release"],
   ["EX-10.1", "Exhibit 10.1"],
   ["3C", "Item 3C"],
+  ["3.D", "Risk Factors"],
+  ["6-K", "Results release"],
+  ["40-F", "Form 40-F"],
 ])("%s reads %s", (key, name) => expect(sectionName(key)).toBe(name));
 
 it("a title the parser left empty (rule 10) reads as the section's name", () => {

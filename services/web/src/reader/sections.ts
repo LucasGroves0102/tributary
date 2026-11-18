@@ -73,9 +73,19 @@ export function sectionTitle(key: string, title: string | null | undefined): str
   return title?.trim() || sectionName(key);
 }
 
+/** Keys only foreign filers' forms have (parser rules 12 and 13, migration 095): a 20-F's risk
+ * factors (Item 3.D), and a 6-K's, 40-F's or cross-referenced 20-F's whole document. A 20-F's other
+ * items are numbered like a 10-K's but mean other things: their own titles name them. */
+const FOREIGN: Record<string, string> = {
+  "3.D": "Risk Factors",
+  "6-K": "Results release",
+  "40-F": "Form 40-F",
+  "20-F": "Annual report",
+};
+
 /** "MD&A", "Risk Factors", "Press release", "Exhibit 10.1", "Item 3C" for one it doesn't know. */
 export function sectionName(key: string): string {
-  const known = TEN_Q[key] ?? TEN_K[key] ?? EIGHT_K_ITEMS[key];
+  const known = TEN_Q[key] ?? TEN_K[key] ?? EIGHT_K_ITEMS[key] ?? FOREIGN[key];
   if (known) return known;
   const exhibit = /^EX-(\d+(?:\.\d+)?)/i.exec(key);
   if (exhibit) return /^99(\.|$)/.test(exhibit[1]!) ? "Press release" : `Exhibit ${exhibit[1]}`;

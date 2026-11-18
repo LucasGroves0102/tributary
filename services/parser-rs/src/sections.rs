@@ -11,9 +11,10 @@ use crate::pystr::{
     CharIndex, char_len, fold_letter, is_decimal, is_space, is_word, py_strip, upper,
 };
 
-pub const PARSER_VERSION: &str = "rust-7"; // 7: tables beside the text (rule 11; the text is
-// 6's); 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title headings
-// (rule 9); 3: MD&A by reference, exhibits, SGML envelope
+pub const PARSER_VERSION: &str = "rust-8"; // 8: 20-F items with 3.D and sub-item headings
+// dropped (rule 12), 6-K / 40-F whole documents (rule 13); 7: tables beside the text (rule 11; the
+// text is 6's); 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title
+// headings (rule 9); 3: MD&A by reference, exhibits, SGML envelope
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
@@ -98,10 +99,20 @@ struct Heading {
     title_part: Option<&'static str>, // rule 9 title heading: the Part its title belongs to
     xref: bool,       // Part heading followed by ",": "Part I, Item 2" (rule 9 ignores it)
     title_end: usize, // rule 10: byte offset where the title's line ends ('\n' or the text's end)
+    sub: bool,        // rule 12a: an item number followed by ".<letter>" ("Item 3.D")
 }
 
 pub fn find_sections(text: &str, form: &str) -> Result<Vec<Section>, Error> {
-    let headings = headings(text);
+    if form.starts_with("6-K") || form.starts_with("40-F") {
+        return whole(text, form); // rule 13
+    }
+    let mut headings = headings(text);
+    if form.starts_with("20-F") {
+        headings.retain(|h| !sub_item_20f(h)); // rule 12a
+        if headings.iter().all(|h| h.item.is_none()) {
+            return whole(text, form); // rule 12c
+        }
+    }
     if (form.starts_with("10-K") || form.starts_with("10-Q"))
         && headings.iter().all(|h| h.item.is_none())
     {
@@ -152,6 +163,7 @@ fn sections(text: &str, mut body: Vec<Heading>, form: &str) -> Vec<Section> {
         .collect();
 
     let mut sections = Vec::with_capacity(kept.len());
+    let mut ranges = Vec::with_capacity(kept.len()); // each section's byte range in the text
     for (i, h) in kept.iter().enumerate() {
         let mut end = kept
             .get(i + 1)
@@ -159,6 +171,7 @@ fn sections(text: &str, mut body: Vec<Heading>, form: &str) -> Vec<Section> {
         if let Some(&p) = part_starts.iter().find(|p| h.start < p.0 && p.0 < end.0) {
             end = p;
         }
+        ranges.push((h.start, end.0));
         sections.push(Section {
             key: h.key.clone(),
             part: h.part.clone(),
@@ -177,8 +190,118 @@ fn sections(text: &str, mut body: Vec<Heading>, form: &str) -> Vec<Section> {
             }
         }
     }
+    if form.starts_with("20-F") {
+        split_3d(text, &mut sections, &ranges, form);
+    }
     sections
 }
+
+/// Rule 12a: a 20-F sub-item heading: "Item 3.D", or a lettered item number other than 4A and
+/// 16A-16K ("Item 5A").
+fn sub_item_20f(h: &Heading) -> bool {
+    let Some(item) = h.item.as_deref() else {
+        return false;
+    };
+    let digit = item.chars().next_back().is_some_and(is_decimal);
+    h.sub || !(digit || item == "4A" || is_16_letter(item))
+}
+
+/// Items 16A-16K of a 20-F.
+fn is_16_letter(item: &str) -> bool {
+    match item.as_bytes() {
+        [b'1', b'6', c] => (b'A'..=b'K').contains(c),
+        _ => false,
+    }
+}
+
+/// Rule 13: the whole text as one section keyed by the form without "/A".
+fn whole(text: &str, form: &str) -> Result<Vec<Section>, Error> {
+    if text.is_empty() {
+        return Err(Error::NoHeadings);
+    }
+    let key = form.split('/').next().unwrap_or(form);
+    Ok(vec![Section {
+        key: key.to_string(),
+        part: None,
+        item: key.to_string(),
+        title: format!("Form {key}"),
+        text: text.to_string(),
+        char_start: 0,
+        char_end: char_len(text),
+        tables: Vec::new(),
+    }])
+}
+
+/// Rule 12b: section 3 ends at its first 3.D heading line after its first line, where "3.D"
+/// starts and runs to section 3's end.
+fn split_3d(text: &str, sections: &mut Vec<Section>, ranges: &[(usize, usize)], form: &str) {
+    let Some(at) = sections.iter().position(|s| s.key == "3") else {
+        return;
+    };
+    let (start, end) = ranges[at];
+    let mut p = match text[start..].find('\n') {
+        Some(i) => start + i + 1,
+        None => end,
+    };
+    while p < end {
+        let rest = &text[p..];
+        let line = &rest[..rest.find('\n').unwrap_or(rest.len())];
+        if is_3d_heading(line) {
+            let cp = CharIndex::new(text).at(p);
+            let part = sections[at].part.clone();
+            let heading = Heading {
+                start: p,
+                cstart: cp,
+                part: part.clone(),
+                item: Some("3.D".to_string()),
+                title: line.to_string(),
+                inline_title: String::new(),
+                key: "3.D".to_string(),
+                span: 0,
+                title_part: None,
+                xref: false,
+                title_end: p + line.len(),
+                sub: false,
+            };
+            let risk = Section {
+                key: "3.D".to_string(),
+                part,
+                item: "3.D".to_string(),
+                title: section_title(&heading, text, form),
+                text: py_strip(&text[p..end]).to_string(),
+                char_start: cp,
+                char_end: sections[at].char_end,
+                tables: Vec::new(),
+            };
+            sections[at].text = py_strip(&text[start..p]).to_string();
+            sections[at].char_end = cp;
+            sections.insert(at + 1, risk);
+            return;
+        }
+        p += line.len() + 1;
+    }
+}
+
+/// Rule 12b's 3.D heading: "D. Risk Factors", "3.D RISK FACTORS", "Item 3.D. Risk factors" or
+/// "Risk Factors" (rule 9's core, folded).
+fn is_3d_heading(line: &str) -> bool {
+    if char_len(line) > 120 {
+        return false;
+    }
+    let core: String = title_core(line).chars().map(fold_title).collect();
+    let Some(head) = core.strip_suffix("risk factors") else {
+        return false;
+    };
+    if head.is_empty() {
+        return true;
+    }
+    let bare = head.trim_end_matches([' ', '.', ':', '-', '\u{2013}', '\u{2014}']);
+    let joined: String = bare.split(is_space).collect();
+    bare.len() < head.len() && RISK_PREFIXES.contains(&joined.as_str())
+}
+
+/// Rule 12b: what may come before "risk factors", its separators and whitespace taken out.
+const RISK_PREFIXES: [&str; 5] = ["d", "3d", "3.d", "item3d", "item3.d"];
 
 /// Rule 7.
 fn mdna_by_reference(text: &str, item7: &mut Section) {
@@ -293,6 +416,7 @@ fn headings(text: &str) -> Vec<Heading> {
                 title_part: None,
                 xref: m.rest.starts_with(','),
                 title_end: 0,
+                sub: false,
             },
             Number::Item(item) => {
                 let inline = py_strip(m.rest).to_string();
@@ -321,6 +445,7 @@ fn headings(text: &str) -> Vec<Heading> {
                     title_part: None,
                     xref: false,
                     title_end,
+                    sub: m.sub,
                 }
             }
         };
@@ -338,6 +463,7 @@ struct HeadingMatch<'a> {
     number: Number<'a>,
     rest: &'a str,
     end: usize,
+    sub: bool, // rule 12a
 }
 
 /// `^(?:part\s+(?P<part>iv|i{1,3})\b|item\s+(?P<item>\d{1,2}\.\d{2}(?!\d)|\d{1,2}[a-z]?\b))
@@ -352,6 +478,7 @@ fn match_heading(s: &str) -> Option<HeadingMatch<'_>> {
         (Number::Item(&s[n..n + len]), n + len)
     };
     let tail = &s[after..];
+    let sub = matches!(number, Number::Item(item) if !item.contains('.')) && sub_item(tail);
     let punct = tail
         .char_indices()
         .find(|&(_, c)| !matches!(c, ' ' | '.' | ':' | '-' | '\u{2013}' | '\u{2014}'))
@@ -362,7 +489,16 @@ fn match_heading(s: &str) -> Option<HeadingMatch<'_>> {
         number,
         end: after + punct + rest.len(),
         rest,
+        sub,
     })
+}
+
+/// Rule 12a: `\.[A-Za-z](?!\w)` at the start of `s`.
+fn sub_item(s: &str) -> bool {
+    let mut chars = s.chars();
+    chars.next() == Some('.')
+        && chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && !chars.next().is_some_and(is_word)
 }
 
 /// `word\s+`: the byte offset after the spaces.
@@ -553,6 +689,7 @@ fn title_headings(text: &str, form: &str) -> Vec<Heading> {
             title_part: Some(part),
             xref: false,
             title_end: start + line.len(),
+            sub: false,
         });
     }
     out
@@ -825,5 +962,14 @@ mod tests {
         ));
         assert!(match_heading("Part IIII").is_none());
         assert!(match_heading("Partial").is_none());
+        // rule 12a: a sub-item letter right after the item number
+        let sub = |s: &str| match_heading(s).map(|m| m.sub);
+        assert_eq!(sub("Item 3.D Risk Factors"), Some(true));
+        assert_eq!(sub("ITEM 5.A."), Some(true));
+        assert_eq!(sub("Item 3.Dividends"), Some(false));
+        assert_eq!(sub("Item 4A. Unresolved"), Some(false));
+        assert_eq!(sub("Item 2.02.A"), Some(false));
+        assert!(is_3d_heading("3.D. RISK FACTORS") && is_3d_heading("Risk Factors"));
+        assert!(!is_3d_heading("Summary of risk factors") && !is_3d_heading("dRisk Factors"));
     }
 }

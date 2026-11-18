@@ -427,3 +427,106 @@ def test_tables_on_real_filings(name, form, least):
                     c.text for c in r.cells if c.text)
             last = t.start
     assert rows >= least
+
+
+# rules 12 and 13: Form 20-F items, 6-K and 40-F documents. A 20-F laid out as most are (Workiva and
+# Donnelley: a contents table listing items and sub-items, "3.D. Risk Factors" under Item 3, Item 18
+# pointing to the F-pages). No 20-F, 40-F or 6-K was stored on hermes when these rules were written:
+# the documents below are shaped like them, not copied.
+
+TWENTY_F = (
+    b"<html><body><p>FORM 20-F</p><p>TABLE OF CONTENTS</p><table>"
+    b"<tr><td>PART I</td></tr>"
+    b"<tr><td>Item 1.</td><td>Identity of Directors, Senior Management and Advisers</td></tr>"
+    b"<tr><td>Item 3.</td><td>Key Information</td></tr>"
+    b"<tr><td>Item 3.D.</td><td>Risk Factors</td></tr>"
+    b"<tr><td>Item 4.</td><td>Information on the Company</td></tr>"
+    b"<tr><td>Item 4A.</td><td>Unresolved Staff Comments</td></tr>"
+    b"<tr><td>Item 5.</td><td>Operating and Financial Review and Prospects</td></tr>"
+    b"<tr><td>PART III</td></tr>"
+    b"<tr><td>Item 18.</td><td>Financial Statements</td></tr>"
+    b"<tr><td>Item 19.</td><td>Exhibits</td></tr></table>"
+    b"<p>PART I</p>"
+    b"<p>ITEM 1. IDENTITY OF DIRECTORS, SENIOR MANAGEMENT AND ADVISERS</p><p>Not applicable.</p>"
+    b"<p>ITEM 3. KEY INFORMATION</p><p>3.A. [Reserved]</p><p>3.B. Capitalization and"
+    b" Indebtedness</p><p>Not applicable.</p>"
+    b"<p>3.D. RISK FACTORS</p><p>Risks Relating to Our Business</p>"
+    b"<p>Demand for our wafers may fall.</p>"
+    b"<p>ITEM 4. INFORMATION ON THE COMPANY</p><p>4.A. History and Development</p>"
+    b"<p>We were founded in 1987.</p><p>Item 4.B. Business Overview</p><p>We make chips.</p>"
+    b"<p>ITEM 4A. UNRESOLVED STAFF COMMENTS</p><p>None.</p>"
+    b"<p>ITEM 5. OPERATING AND FINANCIAL REVIEW AND PROSPECTS</p>"
+    b"<p>Item 5.A. Operating Results</p><p>Net revenue rose 31.6%.</p>"
+    b"<p>Item 5.B. Liquidity and Capital Resources</p><p>Cash was NT$2.1 trillion.</p>"
+    b"<p>PART III</p>"
+    b"<p>ITEM 18. FINANCIAL STATEMENTS</p><p>See pages F-1 through F-90.</p>"
+    b"<p>ITEM 19. EXHIBITS</p><p>1.1 Articles of Incorporation</p>"
+    b"</body></html>"
+)
+
+
+def test_20f_items_with_3d_and_sub_items_kept_in_their_item():
+    text = html_to_text(TWENTY_F)
+    sections = parse(TWENTY_F, "20-F")
+    assert [s.key for s in sections] == ["1", "3", "3.D", "4", "4A", "5", "18", "19"]
+    by = {s.key: s for s in sections}
+    assert by["3"].text == ("ITEM 3. KEY INFORMATION\n3.A. [Reserved]\n3.B. Capitalization and"
+                            " Indebtedness\nNot applicable.")
+    risk = by["3.D"]
+    assert (risk.item, risk.part, risk.title) == ("3.D", "I", "3.D. RISK FACTORS")
+    assert risk.text.endswith("Demand for our wafers may fall.")
+    assert "Business Overview\nWe make chips." in by["4"].text  # a sub-item stays in its item
+    assert by["5"].text.endswith("Cash was NT$2.1 trillion.")  # 5.A and 5.B: one Item 5
+    assert by["18"].part == "III" and by["4A"].title == "UNRESOLVED STAFF COMMENTS"
+    _check_offsets(text, sections)
+    assert by["3"].char_end == risk.char_start
+
+
+def test_20f_sub_item_headings_and_3d_lines():
+    from filing_parser.sections import _headings, _is_3d_heading
+
+    subs = [(h.item, h.sub) for h in _headings(
+        "Item 3.D Risk\nITEM 5.A.\nItem 3.Dividends\nItem 4A. x\nItem 2.02.A\nItem 4.b")]
+    assert subs == [("3", True), ("5", True), ("3", False), ("4A", False), ("2.02", False),
+                    ("4", True)]
+    for line in ("D. Risk Factors", "3.D RISK FACTORS", "Item 3.D. Risk factors", "Risk Factors",
+                 "D Risk Factors (continued)", "İtem 3.d - Rİsk factors", "3D. Risk Factors:"):
+        assert _is_3d_heading(line), line
+    for line in ("Summary of Risk Factors", "dRisk Factors", "E. Risk Factors",
+                 "Item 3. Risk Factors", "D. Risk Factors" + " " * 120):
+        assert not _is_3d_heading(line), line
+
+
+def test_20f_lettered_sub_items_stay_in_their_item_and_16a_16k_are_items():
+    text = ("PART I\nItem 5. Operating Review\nItem 5A. Operating Results\nRevenue.\nPART II\n"
+            "Item 16A. Audit Committee\nx\nItem 16F. Change in Accountant\nNone.\nItem 16L. y\nz")
+    sections = find_sections(text, "20-F")
+    assert [s.key for s in sections] == ["5", "16A", "16F"]
+    assert sections[0].text.endswith("Revenue.") and sections[2].text.endswith("Item 16L. y\nz")
+
+
+def test_20f_without_3d_line_keeps_item_3_whole():
+    sections = find_sections("PART I\nItem 3. Key Information\nNone.\nItem 4. The Company\nx",
+                             "20-F")
+    assert [s.key for s in sections] == ["3", "4"]
+
+
+def test_20f_laid_out_by_a_cross_reference_index_is_one_section():
+    text = "Annual Report and Form 20-F 2025\nStrategic report\nRisk factors\nOur risks."
+    (s,) = find_sections(text, "20-F/A")
+    assert (s.key, s.item, s.part, s.title) == ("20-F", "20-F", None, "Form 20-F")
+    assert (s.text, s.char_start, s.char_end) == (text, 0, len(text))
+
+
+def test_6k_and_40f_primary_documents_are_one_section_with_their_tables():
+    raw = (b"<html><body><p>TSMC Reports Third Quarter EPS of NT$17.44</p><p>Item 2. x</p>"
+           b"<table><tr><td>Net revenue</td><td>989.92</td></tr>"
+           b"<tr><td>Gross margin</td><td>59.5%</td></tr></table></body></html>")
+    for form, key in (("6-K", "6-K"), ("40-F", "40-F"), ("40-F/A", "40-F")):
+        (s,) = parse(raw, form)
+        assert (s.key, s.item, s.part, s.title) == (key, key, None, f"Form {key}")
+        assert s.text == html_to_text(raw) and (s.char_start, s.char_end) == (0, len(s.text))
+        assert [[c.text for c in r.cells] for r in s.tables[0].rows] == [
+            ["Net revenue", "989.92"], ["Gross margin", "59.5%"]]
+    with pytest.raises(ValueError):
+        parse(b"<html><body><p> </p></body></html>", "6-K")

@@ -59,7 +59,7 @@ interface Props {
   onRead?: (sectionKey: string | null) => void;
 }
 
-const SEARCH_FORMS = /^(10-K|10-Q|8-K)(\/A)?$/;
+const SEARCH_FORMS = /^(10-K|10-Q|8-K|20-F|40-F|6-K)(\/A)?$/;
 /** The filing index's largest page. */
 const INDEX_MAX = 100;
 const NEXT_8K_WITHIN_DAYS = 400;

@@ -93,8 +93,12 @@ with its measurements.
 - **Insider filings.** Forms 3, 4 and 5 parsed from the SEC's ownership XML (33,572 stored)
   ([query-api](services/query-api/README.md#insider-filings),
   [doc-fetcher](services/doc-fetcher/README.md#insider-filings-forms-3-4-5)).
-- **Foreign filers in their own currency**, never converted, kept out of cross-company sorts
-  ([db](db/README.md)).
+- **Foreign filers** (20-F, 40-F): figures in their own currency, never converted, kept out of
+  cross-company sorts, and current to the latest annual report where the SEC's companyfacts lags
+  (read from the filing's own XBRL); the annual reports in the reader and search (a 20-F's items
+  with its risk factors, a 40-F's exhibits), and 6-K results releases on the Earnings tab
+  ([db](db/README.md), [parser](services/parser/README.md#foreign-filers-rules-12-and-13),
+  [doc-fetcher](services/doc-fetcher/README.md)).
 - **The assistant** on every screen, answering through Query API tools with every figure verified
   ([agent](services/agent/README.md)).
 - **API keys.** Personal access tokens for your own scripts: read or read and write, rate-limited
@@ -127,7 +131,7 @@ flowchart LR
     feed[latest-filings feed]
     idx[daily index + bulk submissions]
     xbrl[XBRL companyfacts]
-    docs[10-K / 10-Q / 8-K documents, Forms 3/4/5]
+    docs[10-K / 10-Q / 8-K / 20-F / 40-F / 6-K documents, Forms 3/4/5]
   end
   subgraph ingest["Ingestion (Python, shared SEC rate limiter)"]
     poller[poller + completeness check]

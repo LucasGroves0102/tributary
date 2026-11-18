@@ -996,6 +996,40 @@ class Store:
                 """, (company_id,))
             return cur.fetchall()
 
+    def foreign_reports(self, user_id: str, company_id: str) -> list[dict]:
+        """The company's 20-F and 40-F (amendments too) from the public filing index with the
+        period each covers, for a foreign filer's Earnings tab (migration 095). Index probes on
+        its CIKs, as in annual_reports."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (f.accession_no) f.accession_no, f.form, f.filing_date,
+                       f.report_date AS period_end
+                FROM silver.filings f
+                WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
+                                        WHERE k.company_id = %s))
+                  AND f.form IN ('20-F', '20-F/A', '40-F', '40-F/A')
+                  AND f.report_date IS NOT NULL AND f.report_date <> f.filing_date
+                ORDER BY f.accession_no, f.report_date
+                """, (company_id,))
+            return cur.fetchall()
+
+    def results_6ks(self, user_id: str, company_id: str, since: date) -> list[dict]:
+        """The company's stored 6-Ks filed on or after `since`, newest first: results releases,
+        the only 6-Ks doc-fetcher stores (migration 095). Read from the parsed sections under
+        RLS (the filings tier), so a 6-K not parsed yet isn't listed; no text."""
+        with self._session(user_id) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT ON (accession_no) accession_no, cik, form, filed AS filing_date,
+                       period_of_report AS report_date
+                FROM gold.filing_sections
+                WHERE company_id = %s AND form = '6-K' AND filed >= %s
+                ORDER BY accession_no
+                """, (company_id, since))
+            rows = cur.fetchall()
+        return sorted(rows, key=lambda r: (r["filing_date"], r["accession_no"]), reverse=True)
+
     def company_8ks(self, user_id: str, company_id: str, since: date) -> list[dict]:
         """The company's 8-K and 8-K/A filed on or after `since`, newest first, with their items
         from the filing index (silver.company_8ks, migration 045); for a filing the nightly

@@ -10,8 +10,11 @@ SEC_BASE = "https://www.sec.gov"
 EXHIBIT = re.compile(r"EX-99\.\d{1,2}")
 # The exhibits stored with each form: an 8-K's press releases and similar (EX-99.x); a 10-K's
 # annual report to shareholders (EX-13), where IBM, Wells Fargo and others print their financial
-# statements, Item 8 only pointing to it (the coverage sweep's statements_exhibit, migration 076).
-EXHIBITS = {"8-K": EXHIBIT, "10-K": re.compile(r"EX-13(\.\d{1,2})?")}
+# statements, Item 8 only pointing to it (the coverage sweep's statements_exhibit, migration 076);
+# a 6-K's press release and a 40-F's annual information form, MD&A and statements (EX-99.x,
+# migration 095: a 40-F's own document is a cover).
+EXHIBITS = {"8-K": EXHIBIT, "10-K": re.compile(r"EX-13(\.\d{1,2})?"), "6-K": EXHIBIT,
+            "40-F": EXHIBIT, "40-F/A": EXHIBIT}
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,7 @@ class FilingIndex:
     period_of_report: date | None
     document_name: str
     url: str
+    description: str | None = None  # the primary document's, "FORM 6-K"; None when it's the type
 
 
 def parse_index(raw: bytes, form: str) -> FilingIndex:
@@ -37,6 +41,7 @@ def parse_index(raw: bytes, form: str) -> FilingIndex:
                                   if "Period of Report" in info else None),
                 document_name=href.rsplit("/", 1)[-1],
                 url=SEC_BASE + href,
+                description=cells[1] if cells[1] and cells[1] != cells[3] else None,
             )
     raise ValueError(f"no {form} document in filing index")
 

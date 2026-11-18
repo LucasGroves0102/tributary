@@ -1,11 +1,14 @@
-"""Consume filings.raw → fetch 10-K/10-Q/8-K documents → bronze → documents.fetched.
+"""Consume filings.raw → fetch 10-K/10-Q/8-K/20-F/40-F/6-K documents → bronze → documents.fetched.
 
 Which filings (`Coverage.scope`):
-- tracked companies: every 10-K, 10-Q and 8-K event, whatever its source (feed, daily index, seed);
+- tracked companies: every FORMS event, whatever its source (feed, daily index, seed);
 - every other operating company (gold financials, the document crawl's set): new filings from the
   live feed, so they're stored within minutes instead of at the crawl's next plan (up to
   CRAWL_PLAN_HOURS later, H10). 8-Ks only when one of their items (read from the filing index,
   the first request anyway) is in `FETCH_8K_ITEMS`; an index that lists no items is fetched.
+- 6-Ks (foreign filers' current reports) only when they are a results release, by the crawl
+  plan's rule (migration 095, ops.results_release) on the index page's period of report and the
+  primary document's name and description; a 6-K's and a 40-F's EX-99.x exhibits are stored.
 
 Everything else (amendments, the daily index's late filings, the 8-Ks left out here, anything a
 fetch error dropped) is the document crawl's, which skips whatever this stored first.
@@ -48,6 +51,7 @@ from doc_fetcher.db import (
     owe_event,
     owed_events,
     paid_events,
+    results_release,
     tracked_ciks,
 )
 from doc_fetcher.index import Exhibit, parse_exhibits, parse_index, parse_items
@@ -58,7 +62,7 @@ from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, count_deli
 IN_TOPIC = "filings.raw"
 OUT_TOPIC = "documents.fetched"
 GROUP_ID = "doc-fetcher"
-FORMS = {"10-K", "10-Q", "8-K"}
+FORMS = {"10-K", "10-Q", "8-K", "20-F", "40-F", "6-K"}
 TRACKED_REFRESH_SECONDS = 300
 OUTBOX_SWEEP_SECONDS = 60      # republish documents.fetched events Kafka didn't confirm
 INSIDER_IDLE_BUDGET = 10.0     # seconds of queued insider filings per idle poll
@@ -78,7 +82,7 @@ DOCUMENTS = Counter("tributary_documents_fetched_total",
                     "Primary documents fetched and stored in bronze", ["form"])
 PASSED = Counter("tributary_documents_passed_total",
                  "Filings of operating companies read but not stored: 8-Ks with none of the"
-                 " fetched items", ["form"])
+                 " fetched items, 6-Ks that aren't results releases", ["form"])
 INSIDERS = Counter("tributary_insider_filings_fetched_total",
                    "Insider filings (Forms 3/4/5) fetched from the live feed and stored", ["form"])
 REPUBLISHED = Counter("tributary_documents_republished_total",
@@ -209,8 +213,9 @@ def main() -> None:
 
 def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, event: dict,
            eight_k_items: frozenset[str] | None = None) -> bool:
-    """Fetch, store and announce one filing; False when it was stored already or is an 8-K
-    with none of `eight_k_items` (None: every 8-K). Every file is fetched before anything is
+    """Fetch, store and announce one filing; False when it was stored already, is an 8-K
+    with none of `eight_k_items` (None: every 8-K) or a 6-K that isn't a results release
+    (db.results_release, whoever's it is). Every file is fetched before anything is
     stored (an HTTP error stores nothing); the document, its exhibits and the owed event commit
     together; the event's outbox row goes when Kafka confirms it, else `sweep` sends it again."""
     accession, cik, form = event["accession_no"], event["cik"], event["form_type"]
@@ -227,9 +232,14 @@ def handle(conn: psycopg.Connection, client: httpx.Client, producer: Producer, e
                                                      "accession_no": accession})
             return False
     index = parse_index(index_resp.content, form)
+    if form == "6-K" and not results_release(conn, cik, index):
+        PASSED.labels(form).inc()
+        log.info("%s %s %s: not a results release", cik, form, accession,
+                 extra={"cik": cik, "form": form, "accession_no": accession})
+        return False
     doc_resp = client.get(index.url)
     doc_resp.raise_for_status()
-    exhibits = exhibit_bodies(client, index_resp.content, form)  # 8-K EX-99.x, 10-K EX-13
+    exhibits = exhibit_bodies(client, index_resp.content, form)  # index.EXHIBITS
     blob = Blob.of(doc_resp.content)
     with conn.transaction():
         insert_document(conn, accession, cik, form, index, blob)
@@ -288,8 +298,8 @@ def drain_insiders(conn: psycopg.Connection, client: httpx.Client, budget: float
 
 def exhibit_bodies(client: httpx.Client, index_html: bytes,
                    form: str = "8-K") -> list[tuple[Exhibit, bytes]]:
-    """Every exhibit of an index the form stores (index.EXHIBITS: an 8-K's EX-99.x, a 10-K's
-    EX-13), fetched; an HTTP error raises (nothing is stored)."""
+    """Every exhibit of an index the form stores (index.EXHIBITS: an 8-K's, 6-K's or 40-F's
+    EX-99.x, a 10-K's EX-13), fetched; an HTTP error raises (nothing is stored)."""
     bodies = []
     for exhibit in parse_exhibits(index_html, form):
         resp = client.get(exhibit.url)

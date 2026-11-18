@@ -1,10 +1,12 @@
 # doc-fetcher
 
-FR2b, week 1. Consumes `filings.raw`; for 10-K, 10-Q and 8-K filings, fetches the filing index
+FR2b, week 1. Consumes `filings.raw`; for 10-K, 10-Q and 8-K filings, and foreign filers' 20-F,
+40-F and results-release 6-Ks (migration 095, [below](#foreign-filers)), fetches the filing index
 page, then the primary document, stores it gzip-compressed in `bronze.filing_documents` and
-publishes `documents.fetched` for the [parser](../parser). For 8-Ks it also stores the EX-99.x
-exhibits (press releases), for 10-Ks the EX-13 (the annual report to shareholders, where IBM, Wells
-Fargo and others print their statements, Item 8 only pointing to it; 076), in `bronze.filing_exhibits`
+publishes `documents.fetched` for the [parser](../parser). For 8-Ks and 6-Ks it also stores the
+EX-99.x exhibits (press releases), for 40-Fs the EX-99.x (annual information form, MD&A,
+statements), for 10-Ks the EX-13 (the annual report to shareholders, where IBM, Wells Fargo and
+others print their statements, Item 8 only pointing to it; 076), in `bronze.filing_exhibits`
 (`index.EXHIBITS`). Each accession is fetched once. Forms 3, 4
 and 5 in the same feed are queued and stored as [insider filings](#insider-filings-forms-3-4-5).
 
@@ -49,7 +51,7 @@ filing a minute or two.
 |---|---|
 | Input | `filings.raw` (consumer group `doc-fetcher`); tracked CIKs (`silver.companies.tracked`) and operating CIKs (companies with `gold.quarterly_financials`) via `silver.company_ciks`, re-read every 5 minutes |
 | Output | `bronze.filing_documents`, `bronze.filing_exhibits`, `documents.fetched`; insider filings: `bronze.ownership_documents` → `silver.insider_filings`, `silver.insider_transactions` (below) |
-| Metrics | `tributary_documents_fetched_total{form}`, `tributary_documents_passed_total{form}` (8-Ks of operating companies with none of `FETCH_8K_ITEMS`), `tributary_documents_republished_total` (owed events sent again), `tributary_insider_filings_fetched_total{form}`, shared Kafka counters from [libs/telemetry](../../libs/telemetry) |
+| Metrics | `tributary_documents_fetched_total{form}`, `tributary_documents_passed_total{form}` (8-Ks of operating companies with none of `FETCH_8K_ITEMS`, 6-Ks that aren't results releases), `tributary_documents_republished_total` (owed events sent again), `tributary_insider_filings_fetched_total{form}`, shared Kafka counters from [libs/telemetry](../../libs/telemetry) |
 | Ops tables | `ops.document_outbox` (events owed), `ops.insider_queue` (Forms 3/4/5 waiting, or `failed` with the error), `ops.insider_findings` (what parsing one noticed) |
 
 Documents are referenced, not embedded, in `documents.fetched`: a 10-K is ~2 MB of HTML,
@@ -125,11 +127,34 @@ about five lines of ~130 bytes each. So a year is ~300 MB of bronze and ~110 MB 
 indexes; the 90-day backfill ~44,000 requests (about 2 h at the full 7/s when the bulk class is
 idle, longer while the document crawl runs), ~75 MB and ~30 MB.
 
+## Foreign filers
+
+Migration 095 (roadmap f). For every operating company (gold financials) the live path and the
+crawl store the 20-F and 40-F (the crawl also 20-F/A and 40-F/A) since the crawl's window (2016 on
+hermes), and only the 6-Ks that are results releases, by one SQL rule,
+`ops.results_release(period, filed, fiscal year end, document, description)`: the crawl plan reads
+it from `bronze.submission_filings`, the live path (`db.results_release`) from the filing's index
+page. A 6-K has no items and most are described just "6-K" or "Form 6-K", so the rule takes one
+whose period of report is a fiscal quarter's end and that was filed 8-120 days after it (a results
+release or the interim statements behind it report the quarter; most other 6-Ks give their filing
+month or day), or whose document name or description says results (results, earnings, quarter,
+Q1-Q4, interim, half-year, financial statements, annual report, trading update) and nothing a
+notice says (date, notice, voting, AGM, meeting, dividend, conference call, trial, publication,
+20-F), never a Brazilian CVM 358 insider report, a notification or a bought deal. Measured on hermes
+(2026-11-17, read-only): of 211,135 6-Ks filed since November 2015 by 1,326 operating companies it
+takes 16,712 (about 958 companies). A random 100: 71 results releases, interim reports or
+statements by name, description or XBRL, 23 opaque names filed when interim results are, 6 not (4
+of them now excluded). A release dated its filing day under a generic name is missed (that
+quarter's interim statements are usually taken). The plan adds 9,568 annual reports (20-F 7,296 at
+1,171 companies, 20-F/A 956, 40-F 1,184 at 187, 40-F/A 132): with the 6-Ks about 64,000 SEC
+requests, about 4 GB stored and about 18 GB with sections and search passages (db/DESIGN.md "095").
+
 ## Document crawl
 
-`doc-crawler` (`crawl.py`, `crawl_fetch.py`, `crawl_db.py`; migration `020_doc_crawl.sql`)
-fetches the 10-K, 10-K/A, 10-Q, 10-Q/A and 8-K primary documents, 8-K EX-99.x and 10-K EX-13 exhibits (a 10-K
-reads its index first since 076: one more request) of
+`doc-crawler` (`crawl.py`, `crawl_fetch.py`, `crawl_db.py`; migration `020_doc_crawl.sql`, plan
+replaced in 095) fetches the 10-K, 10-K/A, 10-Q, 10-Q/A, 8-K, 20-F, 20-F/A, 40-F, 40-F/A and
+results-release 6-K primary documents, 8-K, 6-K and 40-F EX-99.x and 10-K EX-13 exhibits (a 10-K,
+6-K or 40-F reads its index first: one more request) of
 every company with gold financials (the operating companies, ~6,000) for the last `CRAWL_YEARS`
 years (or since `CRAWL_SINCE`, a date, when that is earlier: a backfill's fixed start), into the same
 bronze tables, in the same gzip format the live doc-fetcher writes and
@@ -148,7 +173,7 @@ the crawl's spare rate, then search indexing.
 | Output | `bronze.filing_documents`, `bronze.filing_exhibits`, `documents.backfill` (parsed by `parser-backfill`), `ops.doc_crawl_targets` |
 | Ops | `ops.doc_crawl_status` (one row: state, totals, rate, ETA, projected size), `ops.doc_crawl_progress` (per form and year), both readable by `ops_reader` |
 | Metrics | `tributary_doc_crawl_filings_total{form,outcome}`, `_files_total`, `_bytes_total{kind=raw\|stored}`, `_events_published_total`, `_remaining_filings`, `_disk_free_bytes`, `_min_free_bytes`, `_state{state}`, `_last_progress_timestamp_seconds` |
-| Alerts | `DocCrawlStalled`, `DocCrawlPausedForDisk`, `DiskSpaceLow` (monitoring chart) |
+| Alerts | `DocCrawlStalled`, `DocCrawlPausedForDisk`, `DiskSpaceUnder100GB`, `DiskSpaceLow` (monitoring chart) |
 
 How it runs:
 

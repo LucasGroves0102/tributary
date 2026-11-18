@@ -1075,6 +1075,35 @@ company's history is behind the rules). gold.company_confidence (074) read tribu
 cast: an as-of session sets it locally, and a pooled connection then reads '' (never NULL again), so the
 next screen on that connection failed; it reads it through nullif now, as gold.is_stale does.
 
+### 095_foreign_filers.sql
+
+Foreign filers' documents (roadmap f). `ops.results_release` decides which 6-Ks are results releases
+from the filing index alone: a 6-K carries no items, and two thirds are described just "6-K" or
+"Form 6-K". Rule A: the period of report is a fiscal quarter's end (within 7 days before the end of
+a quarter month: 52-53 week quarters such as ASML's September 28) and the filing came 8-120 days
+after it. Rule B: the document's name or description says results and nothing a notice says. Rule
+C: never a Brazilian CVM 358 insider report (monthly, so at quarter ends too), a notification or a
+bought deal. Measured on hermes (2026-11-17), 6-Ks filed since November 2015 by operating
+companies: 211,135; A takes 13,241, B alone 3,590, C removes 119: 16,712 at about 958 companies.
+Per company and quarter A finds one 6-K 7,304 times, two 1,529 (a release and its interim
+statements: TSMC's October 15 release and November 13 statements both report September 30), three
+or more 702. A random 100 taken by A or B: 71 results releases, interim reports or statements by
+name, description or XBRL; 23 opaque names filed when interim results are (25-90 days after a
+quarter); 6 not (two CVM 358 reports, a bought-deal notice and a results-date notification, now C;
+a "seq1" file name; a notice that an annual report was published). Missed: a release dated its
+filing day under a generic name (Spotify's own release; its interim report of that day is taken).
+Taken though not results: monthly revenue reports at a quarter end (TSMC's September revenue, filed
+8 days on). doc-fetcher's live path calls the same function with the index page's period, name and
+description, so both paths store the same 6-Ks.
+
+`ops.doc_crawl_plan` adds 20-F, 20-F/A, 40-F, 40-F/A and those 6-Ks of operating companies: 9,568
+annual reports since November 2015 (20-F 7,296 at 1,171 companies, 20-F/A 956, 40-F 1,184 at 187,
+40-F/A 132). Expected size about 4 GB stored, about 18 GB with section text and search passages (the
+10-K's and 8-K's measured ratios, doc-fetcher README "Documents before 2021"). The parser checks learn
+the keys (parser rules 12 and 13): a 20-F's items and 3.D, a 6-K's and 40-F's whole-document section;
+an original 20-F's core items are 3.D, 4, 5 and 18 unless it is laid out by a cross-reference index.
+Not in this change: What changed for 20-Fs, quarterly figures from 6-K releases' tables.
+
 ### 100_userdata.sql
 
 Bring your own data (B2c): the schema `userdata` beside gold, a user's own datasets (`datasets`,

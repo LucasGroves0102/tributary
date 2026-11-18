@@ -9,13 +9,18 @@ document, fetched from EDGAR once and stored (bronze.filing_instances). A run:
 1. Caught up: filings read here that companyfacts now carries (silver.filing_facts_caught_up) leave
    silver (silver.supersede_filing_facts); their filers' companyfacts payloads are refreshed into
    silver again and the companies' gold rebuilt. No SEC request.
-2. Gaps: 10-K and 10-Q filings with XBRL, filed between --since (default 400 days back) and
-   --after-days ago (default 3: companyfacts normally has a filing within a day), at a company here,
-   with no fact in silver under any CIK. Not amendments: of the 2,051 since 2019 companyfacts
-   lacks, 1,830 are amendments, nearly all Part III alone (an amendment with statements can be
-   named with --accessions). The stored extract when it has at least MIN_STATEMENT_FACTS
-   undimensioned facts of mapped tags, else the instance: two SEC requests (the folder's index.json
-   and the instance), through libs/sec's shared rate limit.
+2. Gaps: 10-K, 10-Q, 20-F and 40-F filings (and 20-F/A, 40-F/A) with XBRL, filed between --since
+   (default 400 days back) and --after-days ago (default 3: companyfacts normally has a filing
+   within a day), at a company here, with no fact in silver under any CIK. Not 10-K/10-Q
+   amendments: of the 2,051 since 2019 companyfacts lacks, 1,830 are amendments, nearly all Part
+   III alone (an amendment with statements can be named with --accessions). Foreign annual reports
+   are (roadmap f): companyfacts carried 330 of the 517 XBRL 20-Fs filed in 2026's second quarter
+   and lacked the latest 20-F or 40-F of 212 listed foreign filers (TSMC's FY2025, filed
+   2026-04-16); their amendments as companyfacts carries them (one with only a cover page maps no
+   fact). The stored extract when it has at least MIN_STATEMENT_FACTS undimensioned facts of
+   mapped tags, else the instance: two SEC requests (the folder's index.json and the instance),
+   through libs/sec's shared rate limit. IFRS and US GAAP facts alike, each in its own currency
+   (migration 056: silver keeps any ISO currency, gold reads a company in one; nothing converts).
 3. Extras: the stored documents of companies with their own tags, member sums or member picks
    (silver.metric_tags with a company_id, silver.member_sums, silver.member_picks) not read yet, or
    read before the company's latest pick was added (073: a new pick reads the history by itself).
@@ -53,7 +58,7 @@ from tributary_telemetry import configure_logging
 
 log = logging.getLogger("facts_fetcher.filings")
 
-GAP_FORMS = ("10-K", "10-Q")
+GAP_FORMS = ("10-K", "10-Q", "20-F", "40-F", "20-F/A", "40-F/A")  # module docstring, 2
 SINCE_DAYS = 400
 AFTER_DAYS = 3
 LIMIT = 500             # filings per run

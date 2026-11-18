@@ -24,7 +24,8 @@ rules are off.
   `opsDatabase.enabled`), `PostgresBackupMissing`, `PostgresRestoreTestFailed`,
   `PostgresRestoreTestMissing` (no passing weekly restore test in 8 days), `PostgresDown`,
   `ReplicationSlotRetainingWal` (a slot holding over 10 GB of WAL), `PostgresConnectionsHigh`,
-  `DiskUsageHigh`, `DiskSpaceLow` (under 50 GB free), and for the document crawl
+  `DiskUsageHigh`, `DiskSpaceUnder100GB` (a warning: runbook below), `DiskSpaceLow` (under 50
+  GB free), and for the document crawl
   `DocCrawlPausedForDisk` and `DocCrawlStalled` (its `tributary_doc_crawl_*` metrics), and
   `CatchupStalled` (a kind of stored data an older rule built hasn't moved in a day, a paused kind
   never; migration 071;
@@ -42,6 +43,17 @@ rules are off.
   `CompanyFactsBehindEdgar` has no data. The public Data status page (Query API
   `GET /v1/status/data`) reports freshness, coverage and data quality from the `ops` schema
   instead.
+
+## Disk space
+
+`DiskSpaceUnder100GB` (warning): plan before `DiskSpaceLow` (50 GB, critical) and the crawl's own
+50 GB guard. On hermes, read-only: `df -h /`; the biggest tables (`SELECT relname,
+pg_size_pretty(pg_total_relation_size(oid)) FROM pg_class ORDER BY
+pg_total_relation_size(oid) DESC LIMIT 10`: `gold.section_search` leads, then
+`bronze.filing_documents`); `ops.doc_crawl_status` (`projected_stored_bytes`, what is still to
+come); backups in `deploy/host/pg-backup.sh`'s directory (14 days kept). To stop growth while you
+decide: `UPDATE ops.doc_crawl_control SET paused = true` (the crawl only; the live doc-fetcher
+keeps storing new filings).
 
 ## Prerequisites
 

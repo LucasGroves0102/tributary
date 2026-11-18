@@ -4,8 +4,8 @@ Usage: python scripts/fuzz.py [--n 20000] [--seed 1] [--tokens 60] [--rust CMD]
 
 Use --tokens 2000 for documents larger than libxml2's 4000-byte read size.
 
-Each document is parsed as an exhibit (the whole html_to_text) and as a 10-K, 10-Q and 8-K;
-sections are compared with their rule 11 tables.
+Each document is parsed as an exhibit (the whole html_to_text) and as a 10-K, 10-Q, 8-K, 20-F
+(rule 12) and 6-K and 40-F/A (rule 13); sections are compared with their rule 11 tables.
 Failing inputs are written to fuzz-failures/ for replay.
 """
 
@@ -63,7 +63,13 @@ TEXT = ["Item 7.", "Item 1A", "ITEM 2.02 Results", "PART II", "Part I", "Item 8.
         "<tr><td>a</td><td colspan=2> b  c </td></tr>", "<tr><th>x</th><th></th></tr>",
         "<thead><tr><td></td><td colspan='3'>Three Months Ended</td></tr></thead>",
         "<td>\xa0</td>", "<td>$\xa0 1,100 </td>", "<td><p>Net</p><p>sales</p></td>", "</td><td>",
-        "</tr><tr>", "<table><tr><td>in<table><tr><td>ner</td></tr></table></td></tr></table>"]
+        "</tr><tr>", "<table><tr><td>in<table><tr><td>ner</td></tr></table></td></tr></table>",
+        # rule 12: 20-F items, sub-item headings and the 3.D risk factors line
+        "\nItem 3. Key Information\n", "\nD. Risk Factors\n", "\n3.D RISK FACTORS\n", "Item 3.D",
+        "\nItem 3.D. Risk factors\n", "Item 5.A", "ITEM 4.B.", "Item 3.Dividends", "Item 4A",
+        "Item 5A",
+        "Item 16F", "\nItem 18. Financial Statements\n", "\n3.D\u2014Risk Factors (continued)\n",
+        "\nİtem 3.d - Rİsk factors\n", "\nD Risk Factors.\n", "Item 2.02.A", "\ndRisk Factors\n"]
 BYTES = [b"\xff", b"\x80", b"\xe2\x80", b"\xc3\xa9"]
 RARE = [b"\x0c", b"\x01", b"&#12;", b"&#xFFFE;", b"\xef\xbf\xbe"]  # lxml rejects them in tails
 PREFIXES = [b"", b"<?xml version='1.0' encoding='ASCII'?>", b"<html>", b"<!DOCTYPE html>",
@@ -109,7 +115,7 @@ def main() -> None:
             for i in range(args.n):
                 path = Path(tmp) / f"{i}.htm"
                 path.write_bytes(document(rng, args.tokens))
-                for kind in ("EX-99.1", "10-K", "10-Q", "8-K"):
+                for kind in ("EX-99.1", "10-K", "10-Q", "8-K", "20-F", "6-K", "40-F/A"):
                     e = {"id": f"{i}/{kind}", "path": str(path)}
                     e |= {"exhibit_type": kind} if kind.startswith("EX") else {"form": kind}
                     entries.append(e)
@@ -128,7 +134,7 @@ def main() -> None:
             (failures / Path(e["path"]).name).write_bytes(raw)
             if bad <= 5:
                 print(f"DIFF {e['id']}: {raw[:300]!r}\n  python {py}\n  rust   {rs}")
-    print(f"{args.n} documents x 4 parses: {bad} differences; python outcomes {dict(outcomes)}")
+    print(f"{args.n} documents x 7 parses: {bad} differences; python outcomes {dict(outcomes)}")
     if bad:
         raise SystemExit(1)
 

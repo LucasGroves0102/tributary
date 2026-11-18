@@ -4,7 +4,7 @@ items and release texts of Vertiv and Deckers, fixtures/releases)."""
 
 import gzip
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,11 +16,13 @@ from query_api.events import (
     assign_releases,
     excerpt,
     excerpt_section,
+    foreign_periods,
     items_of,
     material,
     next_quarter_end,
     opening,
     periods,
+    quarter_end_before,
     release_section,
 )
 
@@ -73,8 +75,10 @@ UIG_TEXT = ("On October 27, 2026, Vertiv Holdings Co completed its previously an
 
 
 class Store:
-    def __init__(self, reports=VRT_REPORTS, rows=VRT_8KS, heads=None, texts=None, tables=None):
+    def __init__(self, reports=VRT_REPORTS, rows=VRT_8KS, heads=None, texts=None, tables=None,
+                 foreign=(), sixks=()):
         self.reports, self.rows = reports, rows
+        self.foreign, self.sixks = list(foreign), list(sixks)
         self.heads = heads if heads is not None else {
             UIG: [section("2.01", UIG_TEXT, "Completion of Acquisition", start=1200),
                   section("7.01", "On October 27, 2026, Vertiv issued a press release."),
@@ -93,6 +97,14 @@ class Store:
     def company_8ks(self, user_id, company_id, since):
         self.calls.append(("company_8ks", company_id, since))
         return [r for r in self.rows if r["filing_date"] >= since]
+
+    def foreign_reports(self, user_id, company_id):
+        self.calls.append(("foreign_reports", company_id))
+        return self.foreign
+
+    def results_6ks(self, user_id, company_id, since):
+        self.calls.append(("results_6ks", company_id, since))
+        return [r for r in self.sixks if r["filing_date"] >= since]
 
     def section_heads(self, user_id, company_id, accessions, head_chars):
         self.calls.append(("section_heads", company_id, tuple(accessions), head_chars))
@@ -429,3 +441,81 @@ def test_a_quarter_without_a_release_says_so(token):
     assert quarter["release"] is None and quarter["outlook"] == []
     assert quarter["report"]["accession_no"] == "0001628280-26-067893"
     assert not any(c[0] == "section_texts" for c in store.calls)
+
+
+# --- foreign filers (migration 095) -----------------------------------------------------------
+
+TSM = "0001046179"
+
+
+def six_k(acc, filed, period):
+    return {"accession_no": acc, "cik": TSM, "form": "6-K", "filing_date": filed,
+            "report_date": period}
+
+
+# TSMC as the filing index has it (hermes, 2026-11-17): its FY2025 20-F, and the 6-Ks
+# ops.results_release takes (the Q3 2026 earnings release of Oct 15 and the quarter's statements
+# of Nov 13 both report Sep 30; a UK-style release on its filing day maps to the quarter before)
+TSM_20F = [report("0001628280-26-025362", "20-F", date(2026, 4, 16), date(2025, 12, 31))]
+TSM_6KS = [six_k("0001046179-26-000801", date(2026, 11, 13), date(2026, 9, 30)),
+           six_k("0001046179-26-000726", date(2026, 10, 15), date(2026, 9, 30)),
+           six_k("0001046179-26-000451", date(2026, 7, 16), date(2026, 7, 16)),
+           six_k("0001046179-26-000020", date(2026, 1, 15), date(2025, 12, 31))]
+
+
+@pytest.mark.parametrize(("filed", "fiscal_month", "expected"), [
+    (date(2026, 7, 16), 12, date(2026, 6, 30)), (date(2026, 1, 15), 12, date(2025, 12, 31)),
+    (date(2026, 5, 2), 3, date(2026, 3, 31)), (date(2026, 6, 13), 10, date(2026, 4, 30)),
+    (date(2026, 10, 1), 12, date(2026, 9, 30)), (date(2026, 9, 30), 12, date(2026, 6, 30))])
+def test_quarter_end_before(filed, fiscal_month, expected):
+    assert quarter_end_before(filed, fiscal_month) == expected
+
+
+def test_foreign_periods_are_the_annual_reports_and_the_releases_quarters():
+    found = foreign_periods(TSM_20F, TSM_6KS)
+    assert [(q["period_end"], q["report"] and q["report"]["form"]) for q in found] == [
+        (date(2026, 9, 30), None), (date(2026, 6, 30), None), (date(2025, 12, 31), "20-F")]
+    assert not any(q["estimated"] for q in found)
+    assign_releases(found, TSM_6KS)
+    q3, q2, fy = found
+    assert q3["release_row"]["accession_no"] == "0001046179-26-000726"  # the first: the release
+    assert [r["accession_no"] for r in q3["others"]] == ["0001046179-26-000801"]
+    assert q2["release_row"]["filing_date"] == date(2026, 7, 16)
+    assert fy["release_row"]["filing_date"] == date(2026, 1, 15)  # before the 20-F
+    # a fiscal year ending in March: its quarter months are 3, 6, 9 and 12 as well
+    march = foreign_periods([report("a", "20-F", date(2026, 7, 30), date(2026, 3, 31))],
+                            [six_k("b", date(2026, 8, 10), date(2026, 8, 10))])
+    assert [q["period_end"] for q in march] == [date(2026, 6, 30), date(2026, 3, 31)]
+
+
+def test_a_6k_release_is_its_exhibit_else_its_own_document():
+    assert release_section(["6-K", "EX-99.1"]) == "EX-99.1"
+    assert release_section(["6-K"]) == "6-K"
+    assert release_section(["2.02", "9.01"]) == "2.02"
+
+
+def test_earnings_of_a_foreign_filer_are_its_6k_releases_beside_its_20f(token):
+    text = "TSMC Reports Third Quarter EPS of NT$17.44\nRevenue rose 41% year over year."
+    store = Store(reports=[], rows=[], foreign=TSM_20F, sixks=TSM_6KS, heads={
+        "0001046179-26-000726": [section("6-K", "Form 6-K", "Form 6-K"),
+                                 section("EX-99.1", "", "Earnings release", chars=len(text))],
+        "0001046179-26-000451": [section("6-K", "Second quarter results", "Form 6-K")]},
+        texts={("0001046179-26-000726", "EX-99.1"): text})
+    body = client(store).get(f"/v1/companies/{VRT}/earnings?quarters=4",
+                             headers=token("bob")).json()
+    got = [(q["period_end"], q["report"] and q["report"]["form"],
+            q["release"] and (q["release"]["form"], q["release"]["section_key"]))
+           for q in body["quarters"]]
+    assert got == [("2026-09-30", None, ("6-K", "EX-99.1")), ("2026-06-30", None, ("6-K", "6-K")),
+                   ("2025-12-31", "20-F", ("6-K", None))]
+    q3 = body["quarters"][0]
+    assert q3["release"]["items"] == [] and q3["headline"]["text"].startswith("TSMC Reports")
+    assert [o["accession_no"] for o in q3["other_releases"]] == ["0001046179-26-000801"]
+    assert "6-K" in body["method"]
+    assert ("results_6ks", VRT, date(2026, 11, 8) - timedelta(days=4 * 92 + 151)) in store.calls
+
+
+def test_a_company_filing_10qs_never_reads_6ks(token):
+    store = Store()
+    client(store).get(f"/v1/companies/{VRT}/earnings", headers=token("bob"))
+    assert not any(c[0] in ("foreign_reports", "results_6ks") for c in store.calls)

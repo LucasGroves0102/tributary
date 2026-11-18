@@ -752,8 +752,9 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
     def sections(
         user_id: User, company_id: CompanyId,
         section_key: Annotated[str, Path(pattern=r"^[A-Z0-9.?-]{1,8}$",
-                                         description='10-K "1A", 10-Q "II-1A", 8-K "2.02"')],
-        form: Annotated[str | None, Query(pattern=r"^(10-K|10-Q|8-K)$")] = None,
+                                         description='10-K "1A", 10-Q "II-1A", 8-K "2.02", 20-F'
+                                                     ' "3.D", 6-K "6-K"')],
+        form: Annotated[str | None, Query(pattern=r"^(10-K|10-Q|8-K|20-F|40-F|6-K)$")] = None,
         accession_no: Annotated[str | None, Query(pattern=r"^\d{10}-\d{2}-\d{6}$")] = None,
         limit: Annotated[int, Query(ge=1, le=5)] = 1,
         max_chars: Annotated[int, Query(ge=100, le=1_000_000, description=(

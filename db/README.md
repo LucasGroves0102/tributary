@@ -181,5 +181,6 @@ One line each; the full notes (what it changes, why, the measurements) are in [D
 - [`085_point_in_time_pipeline.sql`](DESIGN.md#085_point_in_time_pipelinesql): gold's pipeline as pure functions of a knowledge date (`p_as_of`); the same rows.
 - [`086_financials_known.sql`](DESIGN.md#086_financials_knownsql): gold's history of itself (`gold.financials_known`): every version of every row, from the filing that first stated it; the 'known' catch-up kind.
 - [`087_point_in_time_reads.sql`](DESIGN.md#087_point_in_time_readssql): reading gold as of a day: `gold.financials_at`, the single-company read, the readings' probes with `p_as_of`, restatements.
+- [`095_foreign_filers.sql`](DESIGN.md#095_foreign_filerssql): foreign filers' 20-F, 40-F and results-release 6-Ks in the document crawl (`ops.results_release`), and the parser checks' keys for them.
 - [`100_userdata.sql`](DESIGN.md#100_userdatasql): Bring your own data: the schema `userdata` (a user's own datasets, their rows by company, day and when known, the upload log), owner-only under forced RLS, in every backup.
 - [`110_figures_landed.sql`](DESIGN.md#110_figures_landedsql): `ops.figures_landed_at()`, when the nightly figures last landed (the bulk job's coverage run): when watched screens are checked.

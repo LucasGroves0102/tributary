@@ -8,7 +8,7 @@ import { day } from "../format";
 import { href } from "../route";
 import type { EarningsQuarter, EarningsRelease, ReleasePassage } from "../types";
 import { recapRows } from "./data";
-import { firstQuarter, itemLabel, passageLines, quarterName } from "./events";
+import { firstQuarter, foreignForm, itemLabel, passageLines, quarterName } from "./events";
 import { RecapTable } from "./RecapTable";
 import { ReleaseParts } from "./ReleaseTable";
 import { Gate } from "./Tables";
@@ -72,8 +72,16 @@ export function EarningsView({ token, companyId, name, canReadFilings, canReadFi
 
 function exhibitName(key: string | null): string {
   if (!key) return "the 8-K";
+  if (key === "6-K") return "the 6-K itself";
   const ex = /^EX-(\d+(?:\.\d+)?)$/.exec(key);
   return ex ? `Exhibit ${ex[1]}` : `Item ${key}`;
+}
+
+/** "8-K filed Oct 28, 2026 · Results of operations" or, for a foreign filer (migration 095),
+ * "6-K filed Oct 15, 2026 · results release": a 6-K has no items. */
+function releaseLine(rel: EarningsRelease): string {
+  if (rel.form === "6-K") return `6-K filed ${day(rel.filed, true)} · results release`;
+  return `8-K filed ${day(rel.filed, true)} · ${rel.items.filter((i) => i.item !== "9.01").map(itemLabel).join(", ") || "Results of operations"}`;
 }
 
 /** What a pinned passage of this release says about where it's from (its quarter: H13). */
@@ -109,14 +117,15 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
           </div>
           {!rel ? (
             <p className="empty">
-              No earnings release (an 8-K with Item 2.02) for this quarter in the filing index. Many smaller companies report
-              only in the 10-Q or 10-K.
+              {foreignForm(q.report?.form)
+                ? `No results release (a 6-K) stored for this year: Tributary keeps the 6-Ks whose period or title says results. The ${q.report!.form} is the annual report.`
+                : "No earnings release (an 8-K with Item 2.02) for this quarter in the filing index. Many smaller companies report only in the 10-Q or 10-K."}
             </p>
           ) : (
             <div className="card-b">
               {q.headline ? <blockquote className="release-headline">{q.headline.text}</blockquote> : null}
               <p className="small muted">
-                8-K filed {day(rel.filed, true)} · {rel.items.filter((i) => i.item !== "9.01").map(itemLabel).join(", ") || "Results of operations"}
+                {releaseLine(rel)}
                 {rel.section_key ? ` · ${exhibitName(rel.section_key)}` : " · its text isn't stored here"}
               </p>
               <div className="row wrap">
@@ -127,16 +136,16 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
                 )}
                 {(rel.document_url ?? rel.filing_url) && (
                   <a className="edgar-link" href={(rel.document_url ?? rel.filing_url)!} target="_blank" rel="noopener noreferrer"
-                    title={`The 8-K on EDGAR, sec.gov (${rel.accession_no})`}>EDGAR ↗</a>
+                    title={`The ${rel.form} on EDGAR, sec.gov (${rel.accession_no})`}>EDGAR ↗</a>
                 )}
               </div>
               {q.other_releases.length > 0 && (
                 <p className="faint small">
-                  Also filed under Item 2.02 for this quarter:{" "}
+                  {rel.form === "6-K" ? "Also stored for this period:" : "Also filed under Item 2.02 for this quarter:"}{" "}
                   {q.other_releases.map((o, i) => (
                     <span key={o.accession_no}>
                       {i ? ", " : ""}
-                      {o.filing_url ? <a href={o.filing_url} target="_blank" rel="noopener noreferrer">8-K of {day(o.filed, true)} ↗</a> : `8-K of ${day(o.filed, true)}`}
+                      {o.filing_url ? <a href={o.filing_url} target="_blank" rel="noopener noreferrer">{rel.form} of {day(o.filed, true)} ↗</a> : `${rel.form} of ${day(o.filed, true)}`}
                     </span>
                   ))}
                 </p>
@@ -234,7 +243,8 @@ function Block({ p, at, make, what }: { p: ReleasePassage; at: string | null; ma
 
 /** The quarter's reported figures from its 10-Q/10-K (gold, through the recap route), or why not. */
 function Figures({ token, name, q, canReadFinancials }: { token: string; name: string; q: EarningsQuarter; canReadFinancials: boolean }) {
-  const acc = q.report && canReadFinancials ? q.report.accession_no : null;
+  const foreign = foreignForm(q.report?.form) || (!q.report && foreignForm(q.release?.form));
+  const acc = q.report && canReadFinancials && !foreign ? q.report.accession_no : null;
   const load = useLoad(acc, () => recap(token, acc!));
   const data = load?.state === "ok" ? load.data : null;
   const empty = data ? recapRows(data, RELEASE_FIGURES).rows.every((r) => r.current === NO_DATA) : false;
@@ -246,6 +256,12 @@ function Figures({ token, name, q, canReadFinancials }: { token: string; name: s
       </div>
       {!canReadFinancials ? (
         <p className="empty locked">The figures need financials for {name}, which your access doesn't include.</p>
+      ) : foreign ? (
+        <p className="empty">
+          {name} files its annual report on {q.report?.form ?? "Form 20-F or 40-F"} and its results on 6-K, so its figures are by fiscal
+          year, in its own currency, on the Financials tab. For {q.report ? "the year" : "this period"}, the release's own tables are in
+          the reader.
+        </p>
       ) : !q.report ? (
         <p className="empty">
           The {q.estimated ? "10-Q or 10-K for this quarter isn't filed yet" : "quarter's 10-Q or 10-K isn't in the filing index"}, and the figures come
