@@ -59,6 +59,33 @@ def test_a_run_reads_as_the_caller_and_answers_every_case(token):
     json.dumps(body, allow_nan=False)
 
 
+def test_per_share_history_is_on_one_share_basis(token):
+    """Riley, test 10, finding 6: FY2022 read $3.85 on 2.54B shares beside FY2023's $0.17 on
+    25.07B. With per_share's inputs every year is on today's basis, the 10-K's figure kept."""
+    model = json.loads((Path(__file__).parent / "fixtures" / "model" / "nvda.json").read_text())
+    shares = json.loads(
+        (Path(__file__).parent / "fixtures" / "per_share" / "nvda.json").read_text())
+
+    class NvdaStore(Store):
+        def model_inputs(self, *args):
+            return {**json.loads(json.dumps(model)), "per_share": shares}
+
+    state = {"companyId": NVDA, "historyYears": 8, "ytd": True,
+             "assumptions": [{"growth": 20, "margin": 50}]}
+    c = TestClient(create_app(FakeAuthorizer({"bob": {NVDA: {"financials"}}}), NvdaStore(), SECRET))
+    r = c.post(f"/v1/companies/{NVDA}/model", json=state, headers=token("bob"))
+    assert r.status_code == 200, r.text
+    years = {y["fy"]: y for y in r.json()["history"]}
+    assert round(years[2022]["eps"], 4) == 0.385 and years[2023]["eps"] == 0.17
+    assert 24e9 < years[2022]["shares"] < 26e9 and 24e9 < years[2023]["shares"] < 26e9
+    assert not any(y["share_break"] for y in years.values())
+    assert years[2022]["sources"]["eps_diluted"]["filing_url"].startswith(
+        "https://www.sec.gov/Archives/edgar/data/1045810/")
+    # a recorded answer without per_share's inputs keeps the 10-Ks' own figures
+    plain = client().post(f"/v1/companies/{VRT}/model", json=STATE, headers=token("bob"))
+    assert plain.status_code == 200
+
+
 def test_permission_first_and_the_same_answer_for_any_company(token):
     c = client()
     no_tier = c.post(f"/v1/companies/{VRT}/model", json=STATE, headers=token("carol"))

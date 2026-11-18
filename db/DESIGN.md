@@ -1126,3 +1126,16 @@ zip or not). DEFINER because `query_api` has no grant on the table; one timestam
 of the primary key is one index probe. NULL before any run: the alerts job then checks a watch once a
 day (query-api `watches.FALLBACK`). CREATE FUNCTION only. Query API side: services/query-api DESIGN.md
 "Saved screens that alert".
+
+### 140_per_share_originals.sql
+
+Per-share figures as first filed, for the Statements tab's "As filed" (Riley, test 10, finding 4): gold
+holds the latest filing to state a quarter, so a quarter a later filing restated for a split read on the
+new basis beside quarters only ever filed on the old one (NVIDIA's Jul 2023 quarter $0.25, from the Aug
+2024 10-Q's comparative, beside $0.82 for Apr 2023; its own 10-Q says $2.48).
+`gold.per_share_originals(company, as_of)`: each quarter's and fiscal year's EPS and weighted shares
+(diluted, basic) from the first periodic filing (10-K, 10-Q, 20-F, 40-F; no amendments) to state it,
+filed by the day, the metric's best tag within that filing. 036's DEFINER pattern (`query_api` has no
+grant on the facts' values): `authz.readable_companies('financials')` its only rule, search_path pinned,
+EXECUTE only `query_api`. One company a call (NVIDIA: 320 rows, 4 ms on hermes). Gold is unchanged;
+query_api.per_share swaps these in only for `shares=as_filed`. CREATE FUNCTION only.

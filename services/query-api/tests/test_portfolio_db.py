@@ -78,8 +78,14 @@ class PortfolioStore(FakeStore):
 
     def alert_filings(self, user_id, ids, forms, since):
         self.calls.append(("alert_filings", tuple(ids), tuple(forms), since))
-        return [f for f in self.filings if f["company_id"] in ids and f["form"] in forms
+        return [dict(f) for f in self.filings if f["company_id"] in ids and f["form"] in forms
                 and f["filing_date"] >= since]
+
+    def company_8ks(self, user_id, company_id, since):
+        self.calls.append(("company_8ks", company_id, since))
+        return [{"accession_no": f["accession_no"], "items": None,
+                 "parsed_items": f.get("parsed_items")}
+                for f in self.filings if f["company_id"] == company_id and f["form"] == "8-K"]
 
 
 READ = {"financials", "filings"}
@@ -495,6 +501,31 @@ def test_a_new_report_makes_a_review_due_until_a_review_entry(conn, token):
     assert c.get("/v1/alerts/unread", headers=token(A)).json()["reviews_due"] == 0
 
 
+def test_results_day_makes_a_review_due(conn, token):
+    """Riley, test 10, finding 13: NVIDIA reported (8-K, item 2.02) and no review fell due until
+    the 10-Q. A results 8-K counts, from the parser's item headings before the nightly index has
+    its items; an 8-K of other items doesn't."""
+    store = PortfolioStore()
+    c = client(conn, store=store)
+    buy(c, token, A)
+    later = datetime.now(UTC) + timedelta(minutes=5)
+    eight_k = {"company_id": NVDA, "accession_no": "0001045810-26-000101", "form": "8-K",
+               "cik": NVDA, "filing_date": later.date(), "accepted_at": later,
+               "period_end": None, "items": None}
+    store.filings = [{**eight_k, "parsed_items": ["5.02"]}]
+    assert holdings(c, token, A)["reviews_due"] == 0
+    store.filings = [{**eight_k, "parsed_items": ["2.02", "9.01"]}]
+    h = holdings(c, token, A)
+    assert h["reviews_due"] == 1
+    assert h["holdings"][0]["review_due"]["form"] == "8-K"
+    assert ("company_8ks", NVDA, later.date()) in store.calls
+    # the index's items when it has them: no parsed headings asked for
+    store.calls.clear()
+    store.filings = [{**eight_k, "items": ["2.02"]}]
+    assert holdings(c, token, A)["reviews_due"] == 1
+    assert not [x for x in store.calls if x[0] == "company_8ks"]
+
+
 def test_due_reviews_rules():
     added = datetime(2026, 11, 1, 15, tzinfo=UTC)
     opened = [{"company_id": NVDA, "created_at": added}]
@@ -506,6 +537,12 @@ def test_due_reviews_rules():
     assert due_reviews(opened, [old, new], {})[NVDA]["accession_no"] == "b"
     assert due_reviews(opened, [new], {NVDA: datetime(2026, 11, 21, tzinfo=UTC)}) == {}
     assert due_reviews([], [new], {}) == {}
+    # an 8-K counts only with results (2.02)
+    vote = {"company_id": NVDA, "accession_no": "c", "form": "8-K", "items": ["5.07"],
+            "filing_date": date(2026, 11, 22), "accepted_at": None}
+    results = {**vote, "accession_no": "d", "items": ["2.02", "9.01"]}
+    assert due_reviews(opened, [new, vote], {})[NVDA]["accession_no"] == "b"
+    assert due_reviews(opened, [new, results], {})[NVDA]["accession_no"] == "d"
 
 
 def test_open_holdings_join_the_alerts_follows(conn, token):

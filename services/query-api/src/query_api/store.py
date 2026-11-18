@@ -586,6 +586,17 @@ class Store:
                 """, {"c": company_id, "span": span, "metrics": metrics, "as_of": as_of})
             return cur.fetchall()
 
+    HISTORY = ("SELECT EXISTS (SELECT 1 FROM gold.financials_known k"
+               " WHERE k.company_id = %s) AS history")
+
+    def history_kept(self, user_id: str, company_id: str) -> bool:
+        """Whether gold keeps the company's history of itself yet (086, under RLS): without it
+        no figure can say what it was first reported as (`originals`, /restatements)."""
+        with self._session(user_id) as cur:
+            cur.execute(self.HISTORY, (company_id,))
+            row = cur.fetchone()
+        return bool(row and row["history"])
+
     def restatements(self, user_id: str, company_id: str, as_of: date | None) -> dict:
         """The company's restatements by `as_of` (gold.restatements, 087, under RLS), whether its
         history is built by today's rules, and its stock-split findings (the notes' split rule
@@ -602,8 +613,7 @@ class Store:
                 ORDER BY r.metric, r.span, r.period_end, r.restated_known_from
                 """, (company_id, as_of))
             rows = cur.fetchall()
-            cur.execute("SELECT EXISTS (SELECT 1 FROM gold.financials_known k"
-                        " WHERE k.company_id = %s) AS history", (company_id,))
+            cur.execute(self.HISTORY, (company_id,))
             row = cur.fetchone()
         return {"rows": rows, "history": bool(row and row["history"])}
 
@@ -762,11 +772,22 @@ class Store:
             findings = cur.fetchall()
         return {"quarters": quarters, "annual": annual, "findings": findings}
 
+    def per_share_originals(self, user_id: str, company_id: str,
+                            as_of: date | None = None) -> list[dict]:
+        """Each period's EPS and weighted shares as the first periodic filing to state it filed
+        them, filed by the end of `as_of` (gold.per_share_originals, 140: its own read rule), for
+        per_share's `as_filed`. One company."""
+        with self._session(user_id, as_of) as cur:
+            cur.execute("SELECT * FROM gold.per_share_originals(%s, %s)"
+                        " ORDER BY metric, span, period_end", (company_id, as_of))
+            return cur.fetchall()
+
     def model_inputs(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                      recent: int, years: int, latest: list[str]) -> dict:
         """What a model run reads (query_api.model_maths), in one session under RLS: TTM rows
         (fiscal, `quarters` per metric), quarterly rows (`recent` per metric), the 10-K's
-        per-share figures (gold.annual_per_share, 036) and the latest reading of each `latest`
+        per-share figures (gold.annual_per_share, 036) with `per_share`, per_share_inputs (the
+        route puts the years on one share basis), and the latest reading of each `latest`
         metric (gold.latest_reading, 035: value, date, status, reason, unit, and period_status,
         its age alone). Rows carry filer_cik."""
         rows = """
@@ -808,7 +829,9 @@ class Store:
                 WHERE c.company_id = %s
                 """, (latest, company_id))
             readings = {r["metric"]: r for r in cur.fetchall()}
-        return {"ttm": ttm, "quarters": by_quarter, "annual": annual, "latest": readings}
+        # the per-share pipeline's inputs: the route puts the years on today's share basis
+        return {"ttm": ttm, "quarters": by_quarter, "annual": annual, "latest": readings,
+                "per_share": self.per_share_inputs(user_id, company_id)}
 
     def sheet_readings(self, user_id: str, company_id: str, pairs: list[tuple[str, str]],
                        dates: list[date], as_of: date | None = None) -> dict:

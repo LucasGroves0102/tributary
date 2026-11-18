@@ -126,6 +126,42 @@ def test_a_q4_whose_year_and_quarters_disagree_is_left_out():
     assert not [r for r in rows if r["metric"] == "eps_diluted" and r["period_end"] == "2026-01-25"]
 
 
+def with_originals(name: str = "nvda") -> dict:
+    """Production's inputs with gold.per_share_originals' answer (hermes, 2026-11-18)."""
+    return {**inputs(name), "originals": json.loads((FIXTURES / f"{name}-originals.json")
+                                                     .read_text())["originals"]}
+
+
+def test_as_filed_reads_each_quarters_own_filing_never_a_later_comparative():
+    """Riley, test 10, finding 4: Jul 2023 read $0.25, the Aug 2024 10-Q's split-recast
+    comparative, beside $0.82 for Apr 2023. Its own 10-Q (Aug 28, 2023) says $2.48."""
+    gold = at(compute(inputs("nvda"), "quarter", "as_filed")["rows"], "eps_diluted", "2023-07-30")
+    assert gold["value"] == "0.25"  # what gold holds: the latest filing to state the quarter
+    rows = compute(with_originals(), "quarter", "as_filed")["rows"]
+    q = at(rows, "eps_diluted", "2023-07-30")
+    assert (q["value"], q["citation"]["accession_no"], q["citation"]["filed"]) == (
+        "2.48", "0001045810-23-000175", "2023-08-28")
+    assert at(rows, "eps_diluted", "2023-04-30")["value"] == "0.82"
+    assert at(rows, "weighted_shares_diluted", "2023-07-30")["value"] == "2499000000"
+    # a year as its own 10-K stated it: FY2023 $1.74 (Feb 2023), not FY2025's comparative $0.17
+    years = compute(with_originals(), "annual", "as_filed")["rows"]
+    assert at(years, "eps_diluted", "2023-01-29")["value"] == "1.74"
+    # split-adjusted doesn't read them: gold's latest figure, then the splits after it
+    adjusted = compute(with_originals(), "quarter")["rows"]
+    assert at(adjusted, "eps_diluted", "2023-07-30")["value"] == at(
+        compute(inputs("nvda"), "quarter")["rows"], "eps_diluted", "2023-07-30")["value"]
+
+
+def test_as_filed_from_originals_still_adds_quarters_only_on_one_share_basis():
+    rows = compute(with_originals(), "ttm", "as_filed")["rows"]
+    ttm = {r["period_end"] for r in rows if r["metric"] == "eps_diluted"}
+    # the windows across the Jun 2024 10-for-1 (first restated Aug 28, 2024) drop out
+    assert not {"2024-07-28", "2024-10-27", "2025-01-26"} & ttm
+    # the four quarters to Apr 2024, each filed before it: $17.10 on the old basis
+    assert at(rows, "eps_diluted", "2024-04-28")["value"] == "17.0978"
+    assert "2026-07-26" in ttm
+
+
 class Store:
     def __init__(self):
         self.calls = []
@@ -133,6 +169,10 @@ class Store:
     def per_share_inputs(self, user_id, company_id, as_of=None):
         self.calls.append(company_id)
         return inputs("nvda")
+
+    def per_share_originals(self, user_id, company_id, as_of=None):
+        self.calls.append(("originals", company_id))
+        return json.loads((FIXTURES / "nvda-originals.json").read_text())["originals"]
 
 
 @pytest.fixture
@@ -161,3 +201,7 @@ def test_the_route_checks_the_tier_first_and_cites_each_figure(client, token):
     filed = c.get(f"/v1/companies/{NVDA}/per-share",
                   params={"view": "annual", "shares": "as_filed"}, headers=token("alice")).json()
     assert at(filed["rows"], "eps_diluted", "2019-01-27")["value"] == "6.63"
+    assert ("originals", NVDA) in store.calls  # as filed only: adjusted never asks for them
+    store.calls.clear()
+    c.get(f"/v1/companies/{NVDA}/per-share", headers=token("alice"))
+    assert store.calls == [NVDA]

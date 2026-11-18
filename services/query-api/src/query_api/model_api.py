@@ -17,6 +17,7 @@ from typing import Annotated, Any
 from fastapi import Body, Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 
+from query_api import per_share
 from query_api.model_maths import (
     HISTORY_QUARTERS,
     LATEST_METRICS,
@@ -40,6 +41,22 @@ def _urls(rows: list[dict]) -> list[dict]:
         if r.get("accession_no"):
             r["filing_url"] = filing_url(r.get("filer_cik"), r["accession_no"])
     return rows
+
+
+def split_adjusted_years(inputs: dict) -> list[dict]:
+    """The years' diluted EPS and weighted shares on one share basis, today's: per_share.py's
+    annual view (the company's own restated figures where it filed them, else the split's ratio;
+    Riley, test 10, finding 6: NVIDIA's FY2022 read $3.85 on 2.54B shares beside FY2023's $0.17 on
+    25.07B). Flat rows like gold.annual_per_share's, each keeping the figure as filed."""
+    out = []
+    for r in per_share.compute(inputs, "annual")["rows"]:
+        c = r["citation"]
+        out.append({"metric": r["metric"], "period_start": r["period_start"],
+                    "period_end": r["period_end"], "value": r["value"], "unit": r["unit"],
+                    "as_filed": r["as_filed"], "splits": [s["label"] for s in r["splits"]],
+                    "accession_no": c["accession_no"], "form": c["form"], "filed": c["filed"],
+                    "source_tag": c["xbrl_tag"], "filer_cik": c.get("filer_cik")})
+    return out
 
 
 def _finite(value: Any) -> Any:
@@ -87,6 +104,10 @@ def add_model_routes(app: FastAPI, *, store: Store, current_user: Callable[..., 
         require(user_id, "financials", company_id)
         inputs = store.model_inputs(user_id, company_id, LINE_METRICS, HISTORY_QUARTERS,
                                     YTD_QUARTERS, ANNUAL_YEARS, LATEST_METRICS)
+        # per-share history on today's share basis (per_share.py, the one per-share pipeline);
+        # an answer without its inputs (a recorded fixture) keeps the 10-Ks' own figures
+        if inputs.get("per_share") is not None:
+            inputs["annual"] = split_adjusted_years(inputs.pop("per_share"))
         for key in ("ttm", "quarters", "annual"):
             _urls(inputs[key])
         _urls(list(inputs["latest"].values()))

@@ -109,3 +109,4 @@ See [`../migrations/`](../migrations).
 | `gold.financials_at(date)` (gold.financials as of a day, from the history), `gold.company_financials_at(company, day, span, metrics)` (one company: the history, else replayed at read time; SECURITY DEFINER, the read rule), `gold.restatements(company, day)` (consecutive versions whose value differs) | `087_point_in_time_reads.sql` |
 | `gold.latest_period`, `gold.amount_currency_of`, `gold.latest_reading` (`p_as_of`) | `087_point_in_time_reads.sql` (before: 035's, 061's and 083's) |
 | `gold.annual_per_share(company, years, day)` (the 10-K figures filed by the day) | `087_point_in_time_reads.sql` (before: `056_ifrs_currencies.sql`) |
+| `gold.per_share_originals(company, day)` (each period's per-share figures as first filed; SECURITY DEFINER, the read rule) | `140_per_share_originals.sql` |

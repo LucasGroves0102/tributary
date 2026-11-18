@@ -59,58 +59,6 @@
    "as_filed": "24804000000",
    "splits": [],
    "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "WeightedAverageNumberOfDilutedSharesOutstanding",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "weighted_shares_diluted",
-   "period_start": "2023-01-30",
-   "period_end": "2024-01-28",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "24940000000",
-   "unit": "shares",
-   "value_source": "reported",
-   "as_filed": "24940000000",
-   "splits": [],
-   "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "WeightedAverageNumberOfDilutedSharesOutstanding",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "weighted_shares_diluted",
-   "period_start": "2022-01-31",
-   "period_end": "2023-01-29",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "25070000000",
-   "unit": "shares",
-   "value_source": "reported",
-   "as_filed": "25070000000",
-   "splits": [],
-   "citation": {
     "accession_no": "0001045810-25-000023",
     "form": "10-K",
     "filed": "2025-02-26",
@@ -127,14 +75,14 @@
   },
   {
    "metric": "weighted_shares_diluted",
-   "period_start": "2021-02-01",
-   "period_end": "2022-01-30",
+   "period_start": "2023-01-30",
+   "period_end": "2024-01-28",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2535000000",
+   "value": "2494000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "2535000000",
+   "as_filed": "2494000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-24-000029",
@@ -153,14 +101,14 @@
   },
   {
    "metric": "weighted_shares_diluted",
-   "period_start": "2020-01-27",
-   "period_end": "2021-01-31",
+   "period_start": "2022-01-31",
+   "period_end": "2023-01-29",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2510000000",
+   "value": "2507000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "2510000000",
+   "as_filed": "2507000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-23-000017",
@@ -179,14 +127,14 @@
   },
   {
    "metric": "weighted_shares_diluted",
-   "period_start": "2019-01-28",
-   "period_end": "2020-01-26",
+   "period_start": "2021-02-01",
+   "period_end": "2022-01-30",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2472000000",
+   "value": "2535000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "2472000000",
+   "as_filed": "2535000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-22-000036",
@@ -205,14 +153,14 @@
   },
   {
    "metric": "weighted_shares_diluted",
-   "period_start": "2018-01-29",
-   "period_end": "2019-01-27",
+   "period_start": "2020-01-27",
+   "period_end": "2021-01-31",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "625000000",
+   "value": "628000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "625000000",
+   "as_filed": "628000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-21-000010",
@@ -231,14 +179,14 @@
   },
   {
    "metric": "weighted_shares_diluted",
-   "period_start": "2017-01-30",
-   "period_end": "2018-01-28",
+   "period_start": "2019-01-28",
+   "period_end": "2020-01-26",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "632000000",
+   "value": "618000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "632000000",
+   "as_filed": "618000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-20-000010",
@@ -257,14 +205,14 @@
   },
   {
    "metric": "weighted_shares_diluted",
-   "period_start": "2016-02-01",
-   "period_end": "2017-01-29",
+   "period_start": "2018-01-29",
+   "period_end": "2019-01-27",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "649000000",
+   "value": "625000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "649000000",
+   "as_filed": "625000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-19-000023",
@@ -278,6 +226,58 @@
    },
    "freshness": {
     "filed": "2019-02-21",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2017-01-30",
+   "period_end": "2018-01-28",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "632000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "632000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-18-000010",
+    "form": "10-K",
+    "filed": "2018-02-28",
+    "xbrl_tag": "WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-18-000010"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581018000010/"
+   },
+   "freshness": {
+    "filed": "2018-02-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_diluted",
+   "period_start": "2016-02-01",
+   "period_end": "2017-01-29",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "649000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "649000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-17-000027",
+    "form": "10-K",
+    "filed": "2017-03-01",
+    "xbrl_tag": "WeightedAverageNumberOfDilutedSharesOutstanding",
+    "source_accessions": [
+     "0001045810-17-000027"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581017000027/"
+   },
+   "freshness": {
+    "filed": "2017-03-01",
     "ingested_at": null
    }
   },
@@ -319,58 +319,6 @@
    "as_filed": "24555000000",
    "splits": [],
    "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "WeightedAverageNumberOfSharesOutstandingBasic",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "weighted_shares_basic",
-   "period_start": "2023-01-30",
-   "period_end": "2024-01-28",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "24690000000",
-   "unit": "shares",
-   "value_source": "reported",
-   "as_filed": "24690000000",
-   "splits": [],
-   "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "WeightedAverageNumberOfSharesOutstandingBasic",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "weighted_shares_basic",
-   "period_start": "2022-01-31",
-   "period_end": "2023-01-29",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "24870000000",
-   "unit": "shares",
-   "value_source": "reported",
-   "as_filed": "24870000000",
-   "splits": [],
-   "citation": {
     "accession_no": "0001045810-25-000023",
     "form": "10-K",
     "filed": "2025-02-26",
@@ -387,14 +335,14 @@
   },
   {
    "metric": "weighted_shares_basic",
-   "period_start": "2021-02-01",
-   "period_end": "2022-01-30",
+   "period_start": "2023-01-30",
+   "period_end": "2024-01-28",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2496000000",
+   "value": "2469000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "2496000000",
+   "as_filed": "2469000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-24-000029",
@@ -413,14 +361,14 @@
   },
   {
    "metric": "weighted_shares_basic",
-   "period_start": "2020-01-27",
-   "period_end": "2021-01-31",
+   "period_start": "2022-01-31",
+   "period_end": "2023-01-29",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2467000000",
+   "value": "2487000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "2467000000",
+   "as_filed": "2487000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-23-000017",
@@ -439,14 +387,14 @@
   },
   {
    "metric": "weighted_shares_basic",
-   "period_start": "2019-01-28",
-   "period_end": "2020-01-26",
+   "period_start": "2021-02-01",
+   "period_end": "2022-01-30",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2439000000",
+   "value": "2496000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "2439000000",
+   "as_filed": "2496000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-22-000036",
@@ -465,14 +413,14 @@
   },
   {
    "metric": "weighted_shares_basic",
-   "period_start": "2018-01-29",
-   "period_end": "2019-01-27",
+   "period_start": "2020-01-27",
+   "period_end": "2021-01-31",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "608000000",
+   "value": "617000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "608000000",
+   "as_filed": "617000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-21-000010",
@@ -491,14 +439,14 @@
   },
   {
    "metric": "weighted_shares_basic",
-   "period_start": "2017-01-30",
-   "period_end": "2018-01-28",
+   "period_start": "2019-01-28",
+   "period_end": "2020-01-26",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "599000000",
+   "value": "609000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "599000000",
+   "as_filed": "609000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-20-000010",
@@ -517,14 +465,14 @@
   },
   {
    "metric": "weighted_shares_basic",
-   "period_start": "2016-02-01",
-   "period_end": "2017-01-29",
+   "period_start": "2018-01-29",
+   "period_end": "2019-01-27",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "541000000",
+   "value": "608000000",
    "unit": "shares",
    "value_source": "reported",
-   "as_filed": "541000000",
+   "as_filed": "608000000",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-19-000023",
@@ -538,6 +486,58 @@
    },
    "freshness": {
     "filed": "2019-02-21",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2017-01-30",
+   "period_end": "2018-01-28",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "599000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "599000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-18-000010",
+    "form": "10-K",
+    "filed": "2018-02-28",
+    "xbrl_tag": "WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-18-000010"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581018000010/"
+   },
+   "freshness": {
+    "filed": "2018-02-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "weighted_shares_basic",
+   "period_start": "2016-02-01",
+   "period_end": "2017-01-29",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "541000000",
+   "unit": "shares",
+   "value_source": "reported",
+   "as_filed": "541000000",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-17-000027",
+    "form": "10-K",
+    "filed": "2017-03-01",
+    "xbrl_tag": "WeightedAverageNumberOfSharesOutstandingBasic",
+    "source_accessions": [
+     "0001045810-17-000027"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581017000027/"
+   },
+   "freshness": {
+    "filed": "2017-03-01",
     "ingested_at": null
    }
   },
@@ -579,58 +579,6 @@
    "as_filed": "2.94",
    "splits": [],
    "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "EarningsPerShareDiluted",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "eps_diluted",
-   "period_start": "2023-01-30",
-   "period_end": "2024-01-28",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "1.19",
-   "unit": "USD/shares",
-   "value_source": "reported",
-   "as_filed": "1.19",
-   "splits": [],
-   "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "EarningsPerShareDiluted",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "eps_diluted",
-   "period_start": "2022-01-31",
-   "period_end": "2023-01-29",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "0.17",
-   "unit": "USD/shares",
-   "value_source": "reported",
-   "as_filed": "0.17",
-   "splits": [],
-   "citation": {
     "accession_no": "0001045810-25-000023",
     "form": "10-K",
     "filed": "2025-02-26",
@@ -647,14 +595,14 @@
   },
   {
    "metric": "eps_diluted",
-   "period_start": "2021-02-01",
-   "period_end": "2022-01-30",
+   "period_start": "2023-01-30",
+   "period_end": "2024-01-28",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "3.85",
+   "value": "11.93",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "3.85",
+   "as_filed": "11.93",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-24-000029",
@@ -673,14 +621,14 @@
   },
   {
    "metric": "eps_diluted",
-   "period_start": "2020-01-27",
-   "period_end": "2021-01-31",
+   "period_start": "2022-01-31",
+   "period_end": "2023-01-29",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "1.73",
+   "value": "1.74",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "1.73",
+   "as_filed": "1.74",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-23-000017",
@@ -699,14 +647,14 @@
   },
   {
    "metric": "eps_diluted",
-   "period_start": "2019-01-28",
-   "period_end": "2020-01-26",
+   "period_start": "2021-02-01",
+   "period_end": "2022-01-30",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "1.13",
+   "value": "3.85",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "1.13",
+   "as_filed": "3.85",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-22-000036",
@@ -725,14 +673,14 @@
   },
   {
    "metric": "eps_diluted",
-   "period_start": "2018-01-29",
-   "period_end": "2019-01-27",
+   "period_start": "2020-01-27",
+   "period_end": "2021-01-31",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "6.63",
+   "value": "6.9",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "6.63",
+   "as_filed": "6.9",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-21-000010",
@@ -751,14 +699,14 @@
   },
   {
    "metric": "eps_diluted",
-   "period_start": "2017-01-30",
-   "period_end": "2018-01-28",
+   "period_start": "2019-01-28",
+   "period_end": "2020-01-26",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "4.82",
+   "value": "4.52",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "4.82",
+   "as_filed": "4.52",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-20-000010",
@@ -777,14 +725,14 @@
   },
   {
    "metric": "eps_diluted",
-   "period_start": "2016-02-01",
-   "period_end": "2017-01-29",
+   "period_start": "2018-01-29",
+   "period_end": "2019-01-27",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "2.57",
+   "value": "6.63",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "2.57",
+   "as_filed": "6.63",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-19-000023",
@@ -798,6 +746,58 @@
    },
    "freshness": {
     "filed": "2019-02-21",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2017-01-30",
+   "period_end": "2018-01-28",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "4.82",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "4.82",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-18-000010",
+    "form": "10-K",
+    "filed": "2018-02-28",
+    "xbrl_tag": "EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-18-000010"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581018000010/"
+   },
+   "freshness": {
+    "filed": "2018-02-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_diluted",
+   "period_start": "2016-02-01",
+   "period_end": "2017-01-29",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "2.57",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "2.57",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-17-000027",
+    "form": "10-K",
+    "filed": "2017-03-01",
+    "xbrl_tag": "EarningsPerShareDiluted",
+    "source_accessions": [
+     "0001045810-17-000027"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581017000027/"
+   },
+   "freshness": {
+    "filed": "2017-03-01",
     "ingested_at": null
    }
   },
@@ -839,58 +839,6 @@
    "as_filed": "2.97",
    "splits": [],
    "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "EarningsPerShareBasic",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "eps_basic",
-   "period_start": "2023-01-30",
-   "period_end": "2024-01-28",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "1.21",
-   "unit": "USD/shares",
-   "value_source": "reported",
-   "as_filed": "1.21",
-   "splits": [],
-   "citation": {
-    "accession_no": "0001045810-26-000021",
-    "form": "10-K",
-    "filed": "2026-02-25",
-    "xbrl_tag": "EarningsPerShareBasic",
-    "source_accessions": [
-     "0001045810-26-000021"
-    ],
-    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/"
-   },
-   "freshness": {
-    "filed": "2026-02-25",
-    "ingested_at": null
-   }
-  },
-  {
-   "metric": "eps_basic",
-   "period_start": "2022-01-31",
-   "period_end": "2023-01-29",
-   "fiscal_period": null,
-   "calendar_period": null,
-   "value": "0.18",
-   "unit": "USD/shares",
-   "value_source": "reported",
-   "as_filed": "0.18",
-   "splits": [],
-   "citation": {
     "accession_no": "0001045810-25-000023",
     "form": "10-K",
     "filed": "2025-02-26",
@@ -907,14 +855,14 @@
   },
   {
    "metric": "eps_basic",
-   "period_start": "2021-02-01",
-   "period_end": "2022-01-30",
+   "period_start": "2023-01-30",
+   "period_end": "2024-01-28",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "3.91",
+   "value": "12.05",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "3.91",
+   "as_filed": "12.05",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-24-000029",
@@ -933,8 +881,8 @@
   },
   {
    "metric": "eps_basic",
-   "period_start": "2020-01-27",
-   "period_end": "2021-01-31",
+   "period_start": "2022-01-31",
+   "period_end": "2023-01-29",
    "fiscal_period": null,
    "calendar_period": null,
    "value": "1.76",
@@ -959,14 +907,14 @@
   },
   {
    "metric": "eps_basic",
-   "period_start": "2019-01-28",
-   "period_end": "2020-01-26",
+   "period_start": "2021-02-01",
+   "period_end": "2022-01-30",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "1.15",
+   "value": "3.91",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "1.15",
+   "as_filed": "3.91",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-22-000036",
@@ -985,14 +933,14 @@
   },
   {
    "metric": "eps_basic",
-   "period_start": "2018-01-29",
-   "period_end": "2019-01-27",
+   "period_start": "2020-01-27",
+   "period_end": "2021-01-31",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "6.81",
+   "value": "7.02",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "6.81",
+   "as_filed": "7.02",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-21-000010",
@@ -1011,14 +959,14 @@
   },
   {
    "metric": "eps_basic",
-   "period_start": "2017-01-30",
-   "period_end": "2018-01-28",
+   "period_start": "2019-01-28",
+   "period_end": "2020-01-26",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "5.09",
+   "value": "4.59",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "5.09",
+   "as_filed": "4.59",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-20-000010",
@@ -1037,14 +985,14 @@
   },
   {
    "metric": "eps_basic",
-   "period_start": "2016-02-01",
-   "period_end": "2017-01-29",
+   "period_start": "2018-01-29",
+   "period_end": "2019-01-27",
    "fiscal_period": null,
    "calendar_period": null,
-   "value": "3.08",
+   "value": "6.81",
    "unit": "USD/shares",
    "value_source": "reported",
-   "as_filed": "3.08",
+   "as_filed": "6.81",
    "splits": [],
    "citation": {
     "accession_no": "0001045810-19-000023",
@@ -1058,6 +1006,58 @@
    },
    "freshness": {
     "filed": "2019-02-21",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2017-01-30",
+   "period_end": "2018-01-28",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "5.09",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "5.09",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-18-000010",
+    "form": "10-K",
+    "filed": "2018-02-28",
+    "xbrl_tag": "EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-18-000010"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581018000010/"
+   },
+   "freshness": {
+    "filed": "2018-02-28",
+    "ingested_at": null
+   }
+  },
+  {
+   "metric": "eps_basic",
+   "period_start": "2016-02-01",
+   "period_end": "2017-01-29",
+   "fiscal_period": null,
+   "calendar_period": null,
+   "value": "3.08",
+   "unit": "USD/shares",
+   "value_source": "reported",
+   "as_filed": "3.08",
+   "splits": [],
+   "citation": {
+    "accession_no": "0001045810-17-000027",
+    "form": "10-K",
+    "filed": "2017-03-01",
+    "xbrl_tag": "EarningsPerShareBasic",
+    "source_accessions": [
+     "0001045810-17-000027"
+    ],
+    "filing_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581017000027/"
+   },
+   "freshness": {
+    "filed": "2017-03-01",
     "ingested_at": null
    }
   }

@@ -1,7 +1,8 @@
 """Writes the web app's per-share fixtures
 (services/web/src/company/fixtures/nvda-per-share-*.json): this service's own GET
 /v1/companies/{id}/per-share, in process, over nvda.json here (production's Store.per_share_inputs
-answer of 2026-11-15). Run from the repo root: PYTHONPATH=services/query-api/src python
+answer of 2026-11-15) and nvda-originals.json (gold.per_share_originals, 2026-11-18). Run from
+the repo root: PYTHONPATH=services/query-api/src python
 services/query-api/tests/fixtures/per_share/make_web_fixtures.py Never hand-edit the outputs."""
 
 import json
@@ -26,6 +27,9 @@ class Allow:
 class Store:
     def per_share_inputs(self, user_id, company_id, as_of=None):
         return json.loads((HERE / "nvda.json").read_text())
+
+    def per_share_originals(self, user_id, company_id, as_of=None):
+        return json.loads((HERE / "nvda-originals.json").read_text())["originals"]
 
 
 def main() -> None:

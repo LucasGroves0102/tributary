@@ -6,7 +6,8 @@ three views; gold keeps every figure as filed, and so does `/financials` (the ag
 Inputs (Store.per_share_inputs, one company, under RLS): gold's quarters of eps_diluted, eps_basic,
 weighted_shares_diluted, weighted_shares_basic and net_income (each as gold chose it: the latest
 filing to state that quarter), the 10-K's own per-share facts by fiscal year (gold.annual_per_share,
-036), and the company's restatement findings on share counts and EPS (ops.quality_findings).
+036), the company's restatement findings on share counts and EPS (ops.quality_findings), and
+`originals`: each period's per-share figures as their first filing stated them (5).
 
 1. Splits. A stock split is what query_api.notes calls one (`_split_events`): restated share counts
    at a clean ratio and EPS at its reciprocal, in the same period and filing. It takes effect for
@@ -34,8 +35,13 @@ filing to state that quarter), the 10-K's own per-share facts by fiscal year (go
 4. TTM (derived; market convention): EPS = the four quarters' EPS added (derived Q4s included);
    weighted shares = the four quarters' day-weighted average. Four quarters in a row (each starting
    within 7 days of the last one's end), 350-380 days in all.
-5. As filed (`basis=as_filed`): every figure as its filing states it; a derived Q4 or TTM only when
-   all its inputs are on one share basis (no split between their filings), else none.
+5. As filed (`basis=as_filed`): every figure as the FIRST periodic filing to state it for its
+   period states it (Store's `originals`, gold.per_share_originals, migration 140: a quarter's own
+   10-Q, a year's own 10-K), never a later filing's comparative restated for a split (Riley, test
+   10: NVIDIA's Jul 2023 quarter read $0.25 from the Aug 2024 10-Q beside $0.82 for Apr 2023; its
+   own 10-Q says $2.48). Only a period gold has is swapped, in the same unit; without originals
+   (an older caller) gold's figure stays. A derived Q4 or TTM only when all its inputs are on one
+   share basis (no split between their filings), else none.
 
 A derived figure says what it was made of (`derivation`: method, inputs with their periods); none is
 ever stored. Units are the company's (056: "EUR/shares" for a euro filer's EPS)."""
@@ -207,15 +213,36 @@ def _input(fig: _Figure, role: str) -> dict:
             "form": fig.row.get("form")}
 
 
-def _by_quarter(quarters: list[dict], events: list[dict],
-                basis: Basis) -> tuple[list[_Figure], dict[tuple[str, int, int], _Figure]]:
+def _first_filed(row: dict, span: str, originals: dict[tuple[str, str, str], dict]) -> dict:
+    """The row as the first filing to state its period filed it (module docstring, 5), when there
+    is such a figure in the same unit; else the row."""
+    o = originals.get((row["metric"], span, str(row["period_end"])[:10]))
+    if o is None or o.get("unit") != row.get("unit") or _dec(o.get("value")) is None:
+        return row
+    return {**row, "value": o["value"], "accession_no": o["accession_no"], "form": o.get("form"),
+            "filed": o.get("filed"), "source_tag": o.get("source_tag"),
+            "source_accessions": [o["accession_no"]],
+            "filer_cik": o.get("filer_cik", row.get("filer_cik")), "value_source": "reported"}
+
+
+def _originals(inputs: dict) -> dict[tuple[str, str, str], dict]:
+    return {(o["metric"], o["span"], str(o["period_end"])[:10]): o
+            for o in inputs.get("originals") or [] if o.get("metric") in METRICS}
+
+
+def _by_quarter(quarters: list[dict], events: list[dict], basis: Basis,
+                originals: dict | None = None,
+                ) -> tuple[list[_Figure], dict[tuple[str, int, int], _Figure]]:
     """Every quarter's figure, and (metric, fiscal_year, fiscal_quarter) → figure for the Q4 rule
-    (a quarter without fiscal labels is shown, never used to derive one)."""
+    (a quarter without fiscal labels is shown, never used to derive one). `originals`: as filed,
+    each period's first filing's figure (module docstring, 5)."""
     figures: list[_Figure] = []
     by: dict[tuple[str, int, int], _Figure] = {}
     for r in quarters:
         if r["metric"] not in INPUT_METRICS:
             continue
+        if originals and r["metric"] in METRICS:
+            r = _first_filed(r, "quarter", originals)
         fig = _Figure(r, events, basis)
         if fig.value is None:
             continue
@@ -225,9 +252,12 @@ def _by_quarter(quarters: list[dict], events: list[dict],
     return figures, by
 
 
-def _annual(annual: list[dict], events: list[dict], basis: Basis) -> dict[str, list[_Figure]]:
+def _annual(annual: list[dict], events: list[dict], basis: Basis,
+            originals: dict | None = None) -> dict[str, list[_Figure]]:
     out: dict[str, list[_Figure]] = {}
     for r in annual:
+        if originals:
+            r = _first_filed(r, "annual", originals)
         fig = _Figure(r, events, basis)
         if fig.value is not None:
             out.setdefault(r["metric"], []).append(fig)
@@ -375,8 +405,9 @@ def _cq(r):
 def compute(inputs: dict, view: View, basis: Basis = "adjusted") -> dict:
     """{splits, rows} for one company (module docstring). Rows are newest first per metric."""
     events = splits(inputs.get("findings") or [])
-    figures, q = _by_quarter(inputs.get("quarters") or [], events, basis)
-    annual = _annual(inputs.get("annual") or [], events, basis)
+    first = _originals(inputs) if basis == "as_filed" else None
+    figures, q = _by_quarter(inputs.get("quarters") or [], events, basis, first)
+    annual = _annual(inputs.get("annual") or [], events, basis, first)
     if view == "annual":
         rows = [_reported(f, basis) for m in METRICS for f in annual.get(m, [])]
     else:
