@@ -7,13 +7,19 @@ Inputs (Store.per_share_inputs, one company, under RLS): gold's quarters of eps_
 weighted_shares_diluted, weighted_shares_basic and net_income (each as gold chose it: the latest
 filing to state that quarter), the 10-K's own per-share facts by fiscal year (gold.annual_per_share,
 036), the company's restatement findings on share counts and EPS (ops.quality_findings), and
-`originals`: each period's per-share figures as their first filing stated them (5).
+`originals`: each period's per-share figures as their first filing stated them (1 and 5).
 
 1. Splits. A stock split is what query_api.notes calls one (`_split_events`): restated share counts
    at a clean ratio and EPS at its reciprocal, in the same period and filing. It takes effect for
    the figures filed before its FIRST restating filing; a figure filed on or after it is already on
    the new basis (a company restates every period it presents). NVIDIA: 4-for-1 (first restated in
-   the 10-Q filed 2021-08-20) and 10-for-1 (2024-08-28).
+   the 10-Q filed 2021-08-20) and 10-for-1 (2024-08-28). The findings compare quarters only, so a
+   10-K is evidence too (`_first_on_new_basis`): a year's weighted share count that a later 10-K
+   states at the splits' ratio to its first filing's (`originals`, 5) is already restated, and that
+   10-K is on the new basis, when it is earlier than the findings' first. Walmart's 3-for-1 (Feb
+   2024): the findings' first restating filing is the 10-Q of 2024-06-07, but the 10-K of 2024-03-15
+   already restated FY2022 (8,415M shares, $1.62; first filed 2,805M, $4.87), which read $0.54 on
+   25.25B shares, the split applied twice (Morgan, test 11, finding 1).
 2. Split-adjusted ("today's share basis"): a figure as filed, with every split after its own filing
    applied: shares x ratio, EPS / ratio. Where the company itself restated a period in a later
    filing, gold already holds that later figure, so only the splits after it apply ("the company's
@@ -51,7 +57,7 @@ from datetime import date
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Literal
 
-from query_api.notes import _split_events
+from query_api.notes import RATIO_TOLERANCE, _split_events
 
 EPS = ("eps_diluted", "eps_basic")
 SHARES = {"eps_diluted": "weighted_shares_diluted", "eps_basic": "weighted_shares_basic"}
@@ -65,6 +71,12 @@ SHARE_BAND = Decimal("0.25")
 CHECK_FLOOR, CHECK_SHARE = Decimal("0.03"), Decimal("0.15")
 TTM_DAYS = (350, 380)
 EPS_PLACES = Decimal("0.0001")
+# a 10-K's restated share count within this of its first filing's x the splits' factor (notes'
+# split test for share counts)
+SHARE_TOLERANCE = Decimal(str(RATIO_TOLERANCE))
+# how far before the findings' first restating filing a 10-K on the new basis can be: the next
+# quarter's 10-Q follows a 10-K within months (Walmart: 84 days; on hermes 58 of 62 within 164)
+NEW_BASIS_DAYS = 200
 
 View = Literal["quarter", "ttm", "annual"]
 Basis = Literal["adjusted", "as_filed"]
@@ -106,6 +118,42 @@ def splits(findings: list[dict]) -> list[dict]:
     for s in sorted(out, key=lambda s: s["first_filed"]):
         seen.setdefault((s["label"], s["first_filed"].year), s)
     return sorted(seen.values(), key=lambda s: s["first_filed"])
+
+
+def _first_on_new_basis(events: list[dict], annual: list[dict],
+                        originals: dict[tuple[str, str, str], dict]) -> list[dict]:
+    """The splits with each one's first filing on the new basis moved back to a 10-K found on it
+    (module docstring, 1): a year's weighted share count, as gold.annual_per_share reads it (the
+    latest 10-K to state the year), against the same year's first filed count (`originals`). When
+    the ratio between them is the product of the oldest k splits after that first filing (shares
+    only: EPS is rounded to the cent and too loose to tell), the later 10-K reflects those k
+    splits, so none of them took effect after it. Never moves a split later, never adds one."""
+    if not events or not originals:
+        return events
+    out = [dict(s) for s in events]  # oldest first (splits())
+    for r in annual:
+        if r["metric"] not in SHARES.values():
+            continue
+        o = originals.get((r["metric"], "annual", str(r["period_end"])[:10]))
+        if o is None or o.get("unit") != r.get("unit"):
+            continue
+        new, old = _dec(r["value"]), _dec(o.get("value"))
+        filed, first = _day(r.get("filed")), _day(o.get("filed"))
+        if not new or not old or new <= 0 or old <= 0 or filed is None or first is None \
+                or filed <= first:
+            continue
+        pending = [s for s in out if s["first_filed"] > first]
+        for k in range(len(pending), 0, -1):
+            if abs(new / old / _factor(pending[:k]) - 1) <= SHARE_TOLERANCE:
+                later = [s for s in pending[:k] if filed < s["first_filed"]]
+                # a 10-K long before a split's first restating filing restated another split of
+                # the same ratio, one the findings don't show (CSX's 3-for-1 of 2011 beside its
+                # 3-for-1 of 2021): no evidence about this one
+                if all((s["first_filed"] - filed).days <= NEW_BASIS_DAYS for s in later):
+                    for s in later:
+                        s["first_filed"], s["first_accession"] = filed, r.get("accession_no")
+                break
+    return sorted(out, key=lambda s: s["first_filed"])
 
 
 def _after(events: list[dict], filed: date | None) -> list[dict]:
@@ -404,8 +452,10 @@ def _cq(r):
 
 def compute(inputs: dict, view: View, basis: Basis = "adjusted") -> dict:
     """{splits, rows} for one company (module docstring). Rows are newest first per metric."""
-    events = splits(inputs.get("findings") or [])
-    first = _originals(inputs) if basis == "as_filed" else None
+    originals = _originals(inputs)
+    events = _first_on_new_basis(splits(inputs.get("findings") or []),
+                                 inputs.get("annual") or [], originals)
+    first = originals if basis == "as_filed" else None
     figures, q = _by_quarter(inputs.get("quarters") or [], events, basis, first)
     annual = _annual(inputs.get("annual") or [], events, basis, first)
     if view == "annual":

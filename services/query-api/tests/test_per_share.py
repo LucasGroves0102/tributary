@@ -162,17 +162,68 @@ def test_as_filed_from_originals_still_adds_quarters_only_on_one_share_basis():
     assert "2026-07-26" in ttm
 
 
+def test_a_10k_that_restated_a_year_for_the_split_is_on_the_new_basis():
+    """Morgan, test 11, finding 1: Walmart's 3-for-1 (Feb 2024). The findings' first restating
+    filing is the 10-Q of 2024-06-07, but the 10-K of 2024-03-15 already states FY2022 at $1.62
+    on 8,415M shares (its own 10-K: $4.87 on 2,805M); the split was applied again: $0.54 on
+    25.25B. wmt.json: production's per_share_inputs with originals (hermes, 2026-11-18)."""
+    data = inputs("wmt")
+    assert [(s["label"], s["first_filed"].isoformat()) for s in splits(data["findings"])] == [
+        ("3-for-1", "2024-06-07")]  # the findings alone
+    out = compute(data, "annual")
+    assert [(s["label"], s["first_filed"], s["first_accession"]) for s in out["splits"]] == [
+        ("3-for-1", "2024-03-15", "0000104169-24-000056")]
+    rows = out["rows"]
+    fy22 = at(rows, "eps_diluted", "2022-01-31")
+    assert (fy22["value"], fy22["as_filed"], fy22["splits"]) == ("1.62", "1.62", [])
+    assert at(rows, "weighted_shares_diluted", "2022-01-31")["value"] == "8415000000"
+    # a year only its own 10-K stated, before the split: divided by 3 (FY2021 $4.75)
+    fy21 = at(rows, "eps_diluted", "2021-01-31")
+    assert (fy21["as_filed"], fy21["value"]) == ("4.75", "1.5833")
+    assert [s["label"] for s in fy21["splits"]] == ["3-for-1"]
+    # one share basis: every year's diluted shares within 10% of the next year's
+    shares = sorted((r["period_end"], Decimal(r["value"])) for r in rows
+                    if r["metric"] == "weighted_shares_diluted")
+    assert all(abs(b / a - 1) < Decimal("0.1")
+               for (_, a), (_, b) in zip(shares, shares[1:], strict=False))
+    # the fiscal Q4 FY2022 can now be derived: the year and its quarters share one basis
+    q4 = at(compute(data, "quarter")["rows"], "eps_diluted", "2022-01-31")
+    assert q4["value_source"] == "derived"
+    # without the originals (an older caller) the findings' date stands, as before
+    no_originals = {k: v for k, v in data.items() if k != "originals"}
+    assert at(compute(no_originals, "annual")["rows"], "eps_diluted", "2022-01-31")["value"] \
+        == "0.54"
+
+
+def test_a_10k_long_before_a_split_restated_another_one():
+    """CSX split 3-for-1 in 2011 and again in 2021; only the second is in the findings. A 10-K of
+    2013 stating 2010 at 3x its first filing is the 2011 split, not evidence that the 2021 one
+    took effect then: a 10-K counts only within NEW_BASIS_DAYS of the split's first findings."""
+    data = inputs("wmt")
+    late = {"restated_filed": "2025-06-07"}  # the same split, first restated a year later
+    data["findings"] = [{**f, "detail": {**f["detail"], **late}} if f["period_end"] >= "2023"
+                        else f for f in data["findings"]]
+    out = compute(data, "annual")
+    # the 10-K of 2025-03-14 (FY2023 restated) is near enough; the one of 2024-03-15 isn't
+    assert [(s["label"], s["first_filed"]) for s in out["splits"]] == [("3-for-1", "2025-03-14")]
+    assert at(out["rows"], "eps_diluted", "2022-01-31")["value"] == "0.54"
+
+
+def test_a_10k_only_moves_a_split_it_reflects():
+    """NVIDIA's two splits keep their first restating 10-Qs: its 10-Ks restated after them."""
+    out = compute(with_originals(), "annual")
+    assert [(s["label"], s["first_filed"]) for s in out["splits"]] == [
+        ("4-for-1", "2021-08-20"), ("10-for-1", "2024-08-28")]
+    assert out["rows"] == compute(inputs("nvda"), "annual")["rows"]
+
+
 class Store:
     def __init__(self):
         self.calls = []
 
     def per_share_inputs(self, user_id, company_id, as_of=None):
         self.calls.append(company_id)
-        return inputs("nvda")
-
-    def per_share_originals(self, user_id, company_id, as_of=None):
-        self.calls.append(("originals", company_id))
-        return json.loads((FIXTURES / "nvda-originals.json").read_text())["originals"]
+        return with_originals()  # Store reads the originals in the same session (155)
 
 
 @pytest.fixture
@@ -201,7 +252,6 @@ def test_the_route_checks_the_tier_first_and_cites_each_figure(client, token):
     filed = c.get(f"/v1/companies/{NVDA}/per-share",
                   params={"view": "annual", "shares": "as_filed"}, headers=token("alice")).json()
     assert at(filed["rows"], "eps_diluted", "2019-01-27")["value"] == "6.63"
-    assert ("originals", NVDA) in store.calls  # as filed only: adjusted never asks for them
     store.calls.clear()
     c.get(f"/v1/companies/{NVDA}/per-share", headers=token("alice"))
     assert store.calls == [NVDA]

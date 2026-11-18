@@ -54,9 +54,10 @@ export const HOW: Record<ComponentsHow, string> = {
   derived: "Computed by Tributary from the lines below, by the rule in the definition.",
   ttm: "The trailing twelve months: the quarters below added up (or the year a 10-K states, where four quarters aren't on file).",
   sum: "The filing tags this line only as parts, so it is their total.",
-  computed: "The filing prints no gross profit: revenue less cost of revenue.",
+  computed: "The filing prints no gross profit: revenue (at Walmart and Costco, net sales) less cost of revenue.",
   ytd: "A quarter the filing doesn't state on its own: the year to date less the year to date a quarter earlier.",
   reported: "As the filing tags it.",
+  none: "No debt on file: the filing tags none, no filing in the year before did, and its interest expense is under 0.25% of total assets, so Tributary reads none.",
 };
 
 export const LEFT_OUT: Record<"inside_cash" | "not_reported", string> = {
@@ -89,6 +90,8 @@ export function factSource(f: ComponentFact): string {
 /** The tag a figure's own row cites, worded: a sum's parts, a computed line, else the tag. */
 export function tagText(tag: string | null): string {
   if (!tag) return "computed";
+  if (tag === "derived:no-debt") return "none on file: the filing tags no debt";
+  if (tag === "derived:net_sales-cost_of_revenue") return "computed: net sales less cost of revenue";
   if (tag.startsWith("derived:")) return "computed: revenue less cost of revenue";
   const [tax, name] = tag.includes(":") ? tag.split(/:(.*)/s) : ["", tag];
   return name!.includes("+") ? `${tax}: ${name!.split("+").join(" + ")} (added up)` : tag;

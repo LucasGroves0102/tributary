@@ -168,7 +168,8 @@ def conn():
             Decimal("2787.1"),
             {"revenue": 3e6, "revenue_year_ago": 1000},
         )
-        # a margin high and real, and growth huge and real (Moderna's)
+        # a margin high and real, and growth high and real on a base (155: over 400%, Moderna's
+        # +2,200%, reads n/m; +350% from $803M stays a figure)
         derived(conn, GENUINE, "gross_margin", LATEST, Decimal("0.95"), rev)
         derived(conn, GENUINE, "operating_margin", LATEST, Decimal("0.78"), rev)
         derived(
@@ -176,8 +177,8 @@ def conn():
             GENUINE,
             "revenue_growth",
             LATEST,
-            22,
-            {"revenue": 18.5e9, "revenue_year_ago": 803e6},
+            Decimal("3.5"),
+            {"revenue": 3.6135e9, "revenue_year_ago": 803e6},
         )
         # net debt and margin from 2020, with revenue through 2026
         derived(
@@ -600,8 +601,17 @@ def test_financials_say_where_equity_makes_a_ratio_meaningless(conn, token):
         ("net_margin", "1.36", {"revenue": 664e6}, None, None),  # TriMas, a sale
         ("net_margin", "11.6", {"revenue": 72e6}, None, "ten times revenue"),
         ("fcf_margin", "-11", {"revenue": 1e7}, None, "ten times revenue"),
-        ("revenue_growth", "22", {"revenue_year_ago": 803e6}, None, None),  # Moderna
-        ("revenue_growth", "22.3", {"revenue_year_ago": 19e6}, None, None),  # Liquidia
+        # 155 (Avery's review; Morgan 18): over 400%, a year-earlier figure under a fifth of this
+        # one, is n/m on any base: Moderna's 2021 and Liquidia's, figures before
+        ("revenue_growth", "22", {"revenue_year_ago": 803e6}, None, "a fifth"),  # Moderna
+        ("revenue_growth", "22.3", {"revenue_year_ago": 19e6}, None, "a fifth"),  # Liquidia
+        ("revenue_growth", "4", {"revenue_year_ago": 1e9}, None, None),  # 400% exactly: a figure
+        # Kennametal's TTM to Sep 30, 2026 (hermes): revenue +32.5%; net income $590.7M against
+        # $94.3M a year earlier, +526%
+        ("revenue_growth", "0.324805", {"revenue_year_ago": 1982871000}, None, None),
+        ("net_income_growth", "5.263796",
+         {"net_income": 590676000, "net_income_year_ago": 94300000}, None, "under a fifth"),
+        ("eps_growth", "4.5", {}, None, "under a fifth"),
         ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, None, "under $10M"),
         ("revenue_growth", "0.5", {"revenue_year_ago": 5e4}, None, "under $100K"),
         ("revenue_growth", "-1.4", {"revenue_year_ago": 5e8}, None, "negative"),
@@ -780,10 +790,13 @@ def test_a_us_filer_whose_figures_stopped_is_old_not_once_a_year(conn, token):
         ("operating_margin", "12", {"revenue": 5e4}, "KRW", "larger than revenue"),
         ("net_margin", "-11", {"revenue": 5e10}, "JPY", "ten times revenue"),
         ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "USD", "under $10M"),
-        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "JPY", None),
+        # 155's bound is a ratio, in every currency; the dollar bases still apply only to dollars
+        ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, "JPY", "a fifth"),
+        ("revenue_growth", "3", {"revenue_year_ago": 4.9e4}, "USD", "under $100K"),
+        ("revenue_growth", "3", {"revenue_year_ago": 4.9e4}, "JPY", None),
         ("revenue_growth", "0.5", {"revenue_year_ago": 5e4}, "EUR", None),
         ("revenue_growth", "-1.4", {"revenue_year_ago": 5e8}, "JPY", "negative"),
-        ("net_income_growth", "15", {"net_income_year_ago": 9e6}, "KRW", None),
+        ("net_income_growth", "15", {"net_income_year_ago": 9e6}, "KRW", "a fifth"),  # 155
         ("net_income_growth", "-3", {"net_income_year_ago": 5e8}, "KRW", "profit to a loss"),
         ("debt_to_equity", "563", {}, "JPY", "over 100 times"),
     ],
@@ -811,7 +824,8 @@ YEN = "9200000011"
 
 def yen_co(conn, revenue):
     """Toyota's shape after 056: every amount in yen, here a ¥50,000 revenue (a small base in
-    dollars it isn't) with a 40% margin and +2,270% growth from ¥4.9M."""
+    dollars it isn't) with a 40% margin and +300% growth from ¥49,000 (155: over 400% is n/m in
+    any currency, so the dollar bases are tested below it)."""
     conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic,"
                  " sic_description) VALUES (%s, 'Yen Co', %s, '3711', 'Motor Vehicles')",
                  (YEN, YEN))
@@ -820,7 +834,7 @@ def yen_co(conn, revenue):
                  (YEN,))
     reported(conn, YEN, "revenue", LATEST, revenue, unit="JPY")
     derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": revenue})
-    derived(conn, YEN, "revenue_growth", LATEST, Decimal("22.7"), {"revenue_year_ago": 4.9e6})
+    derived(conn, YEN, "revenue_growth", LATEST, Decimal("3"), {"revenue_year_ago": 4.9e4})
 
 
 def test_a_yen_companys_small_base_is_not_a_dollar_one(conn, token):
@@ -868,8 +882,9 @@ def test_an_annual_only_yen_filers_currency_is_yen(conn, token):
     derived(conn, YEN, "revenue", LATEST, 50_000, None, unit="JPY")
     derived(conn, YEN, "net_income", LATEST, 20_000, None, unit="JPY")
     derived(conn, YEN, "gross_margin", LATEST, Decimal("0.4"), {"revenue": 50_000})
-    derived(conn, YEN, "net_income_growth", LATEST, Decimal("22.7"),
-            {"net_income_year_ago": 4.9e6 / 5})
+    # 155: +300% (over 400% reads n/m in any currency); under $100K wouldn't be a dollar base
+    derived(conn, YEN, "net_income_growth", LATEST, Decimal("3"),
+            {"net_income_year_ago": 5_000})
     with conn.cursor() as cur:
         cur.execute("SET LOCAL ROLE query_api")
         cur.execute("SELECT set_config('app.user_id', %s, true)", (USER,))
@@ -1331,3 +1346,79 @@ def test_stale_reads_today_from_the_clock_unless_a_session_pins_it(conn):
     conn.execute("RESET tributary.today")
     want = "stale" if (date.today() - date(2026, 3, 31)).days > 270 else None
     assert conn.execute(sql, (QUARTERS_STOPPED, QUARTERS_STOPPED)).fetchone()[0] == want
+
+
+LENDER, BEHIND_20F, NO_DEBT = "9200000051", "9200000052", "9200000053"
+
+
+def test_a_figure_gold_read_or_computed_is_derived_to_every_reader(conn, token):
+    """155 (the seal rule): gold's no-debt zero is stored 'reported' (an instant) and its computed
+    gross profits 'derived', both with a `derived:` tag; every reader gets value_source 'derived'
+    (store.DERIVED_SHOWN), so the web never seals them as a figure the filing states."""
+    listed(conn, NO_DEBT, "Debt Free Co")
+    reported(conn, NO_DEBT, "cash", LATEST, 900)
+    for metric, tag, source in (("long_term_debt", "derived:no-debt", "reported"),
+                                ("gross_profit", "derived:net_sales-cost_of_revenue", "derived")):
+        reported(conn, NO_DEBT, metric, LATEST, 0 if metric == "long_term_debt" else 400)
+        conn.execute("UPDATE gold.quarterly_financials SET source_tag = %s, value_source = %s"
+                     " WHERE company_id = %s AND metric = %s", (tag, source, NO_DEBT, metric))
+    c = api(conn)
+    params = {"view": "quarter", "metrics": ["cash", "long_term_debt", "gross_profit"]}
+    rows = {r["metric"]: r for r in c.get(f"/v1/companies/{NO_DEBT}/financials",
+                                          headers=token(USER), params=params).json()["rows"]}
+    assert rows["long_term_debt"]["value_source"] == "derived"
+    assert rows["long_term_debt"]["citation"]["xbrl_tag"] == "derived:no-debt"
+    assert rows["gross_profit"]["value_source"] == "derived"
+    assert rows["cash"]["value_source"] == "reported"
+    csv = c.get(f"/v1/companies/{NO_DEBT}/financials", headers=token(USER),
+                params={**params, "format": "csv"}).text
+    assert ",derived," in next(line for line in csv.splitlines() if "derived:no-debt" in line)
+    comp = c.get(f"/v1/companies/{NO_DEBT}/components", headers=token(USER),
+                 params={"metric": "long_term_debt", "period_end": LATEST.isoformat()}).json()
+    assert (comp["figure"]["how"], comp["figure"]["value_source"]) == ("none", "derived")
+    # gold's stored value_source is untouched (point-in-time history reads it)
+    assert conn.execute("SELECT value_source FROM gold.quarterly_financials WHERE company_id = %s"
+                        " AND metric = 'long_term_debt'", (NO_DEBT,)).fetchone()[0] == "reported"
+
+
+def test_a_lenders_gross_margin_is_not_meaningful(conn, token):
+    """Morgan, test 11, finding 18: Enova (SIC 6141) tags revenue less its credit losses as gross
+    profit, 60.6% (hermes, TTM to Sep 30, 2026): not a gross margin to compare (155,
+    gold.not_meaningful_for). A software company's stays a figure; the statements say the same."""
+    listed(conn, LENDER, "Consumer Lender Co")
+    conn.execute("UPDATE silver.companies SET sic = '6141' WHERE company_id = %s", (LENDER,))
+    reported(conn, LENDER, "revenue", LATEST, 1009172000)
+    derived(conn, LENDER, "gross_margin", LATEST, Decimal("0.605941"),
+            {"revenue": 3652632000, "gross_profit": 2213278000})
+    body = screen(conn, token, columns=["gross_margin_ttm", "revenue_q"], sort="-gross_margin_ttm",
+                  limit=50)
+    lender = row_of(body, "Consumer Lender Co")["readings"]["gross_margin_ttm"]
+    assert lender["status"] == "not_meaningful" and "lender" in lender["reason"]
+    assert conn.execute("SELECT gold.not_meaningful_for('gross_margin', '7372')").fetchone()[0] \
+        is None
+    r = api(conn).get(f"/v1/companies/{LENDER}/financials", headers=token(USER),
+                      params={"view": "ttm", "metrics": ["gross_margin"], "readings": "true"})
+    assert r.status_code == 200, r.text
+    assert "lender" in r.json()["rows"][0]["not_meaningful"]
+
+
+def test_no_report_since_names_the_report_the_figures_lack(conn):
+    """Morgan, test 11, finding 8: TSMC's figures end at Dec 31, 2024 though its 20-F of Apr 16,
+    2026 is on EDGAR (ops.coverage 'figures_behind' on hermes, 2026-11-18): the low mark's reason
+    is Tributary's gap, not "no report since"."""
+    conn.execute("SET LOCAL tributary.today = '2026-11-18'")
+    listed(conn, BEHIND_20F, "Behind Twenty-F Co")
+    sql = "SELECT level, reasons FROM gold.company_confidence(%s, '3674', '2024-12-31')"
+    level, reasons = conn.execute(sql, (BEHIND_20F,)).fetchone()
+    assert level == "low" and "no report since the period ended Dec 31, 2024" in reasons
+    conn.execute(
+        "INSERT INTO ops.coverage (company_id, kind, cause, reason, detail) VALUES"
+        " (%s, 'figures_behind', 'foreign', 'fixable', %s)",
+        (BEHIND_20F, json.dumps({"form": "20-F", "filed": "2026-04-16", "figures_to": "2024-12-31",
+                                 "period_end": "2025-12-31", "in_companyfacts": False,
+                                 "accession_no": "0001628280-26-025362"})))
+    level, reasons = conn.execute(sql, (BEHIND_20F,)).fetchone()
+    assert level == "low"
+    assert not any("no report since" in r for r in reasons)
+    assert ("its figures end with the period ended Dec 31, 2024: its 20-F filed Apr 16, 2026"
+            " isn't in them yet (Tributary's gap, not the company's)") in reasons

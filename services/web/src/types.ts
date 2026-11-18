@@ -765,7 +765,8 @@ export interface ComponentFigure {
   citation: { accession_no: string; form: string; filed: string; xbrl_tag: string | null; source_accessions: string[] | null; filing_url: string | null };
 }
 
-export type ComponentsHow = "derived" | "ttm" | "sum" | "computed" | "ytd" | "reported";
+/** 155: `none` is a long-term debt of zero where the filings show none (`derived:no-debt`). */
+export type ComponentsHow = "derived" | "ttm" | "sum" | "computed" | "ytd" | "reported" | "none";
 
 /** /v1/companies/{id}/components (F5, query_api/components.py): what one figure is made of. */
 export interface Components {

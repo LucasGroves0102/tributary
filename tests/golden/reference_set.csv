@@ -282,7 +282,7 @@ LOCKHEED MARTIN CORP,LMT,0000936468,2025,2025-12-31,capex,1649000000,USD,1000000
 "CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,stockholders_equity,50285000000,USD,1000000,balance,Total equity,annual,0000858877-26-000132,table 8#2 row 38
 "CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,cash,7218000000,USD,1000000,balance,Cash and cash equivalents,annual,0000858877-26-000132,table 8#2 row 3
 "CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,long_term_debt,19372000000,USD,1000000,balance,Long-term debt,annual,0000858877-26-000132,table 8#2 row 26
-"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,long_term_debt_current,3500000000,USD,1000000,balance,Current portion of long-term debt,annual,0000858877-26-000132,table 8#54 row 24 (untitled)
+"CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,long_term_debt_current,10161000000,USD,1000000,balance,Short-term debt,annual,0000858877-26-000132,"balance sheet, Item 8 (155: debt due within a year is the balance sheet's short-term debt, DebtCurrent; was the debt note's current portion 3,500, table 8#54 row 24)"
 "CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,operating_cash_flow,14177000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000858877-26-000132,table 8#5 row 19
 "CISCO SYSTEMS, INC.",CSCO,0000858877,2026,2026-07-25,capex,1410000000,USD,1000000,cash_flow,Acquisition of property and equipment,annual,0000858877-26-000132,table 8#5 row 27
 INTEL CORP,INTC,0000050863,2025,2025-12-27,net_income,-267000000,USD,1000000,income,Net income (loss) attributable to Intel,annual,0000050863-26-000011,table 7#10 row 15 (untitled)
@@ -295,7 +295,7 @@ QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,total_liabilities,30428000000,US
 QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,stockholders_equity,30401000000,USD,1000000,balance,Total stockholders’ equity,annual,0000804328-26-000128,table 16#2 row 32
 QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,cash,4636000000,USD,1000000,balance,Cash and cash equivalents,annual,0000804328-26-000128,table 16#2 row 3
 QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,long_term_debt,12620000000,USD,1000000,balance,Long-term debt,annual,0000804328-26-000128,table 16#2 row 23
-QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,long_term_debt_current,1993000000,USD,1000000,balance,Short-term debt,annual,0000804328-26-000128,table 16#32 row 8 (untitled)
+QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,long_term_debt_current,2492000000,USD,1000000,balance,Short-term debt,annual,0000804328-26-000128,"balance sheet, Item 16 (155: debt due within a year is the balance sheet's short-term debt, DebtCurrent; was the debt note's 1,993, table 16#32 row 8)"
 QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,operating_cash_flow,11145000000,USD,1000000,cash_flow,Net cash provided by operating activities,annual,0000804328-26-000128,table 16#5 row 19
 QUALCOMM INC/DE,QCOM,0000804328,2026,2026-09-27,capex,2494000000,USD,1000000,cash_flow,Capital expenditures,annual,0000804328-26-000128,table 16#5 row 21
 "Salesforce, Inc.",CRM,0001108524,2026,2026-01-31,revenue,41525000000,USD,1000000,income,Total revenues,annual,0001108524-26-000060,table 8#3 row 5

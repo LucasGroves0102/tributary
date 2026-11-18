@@ -26,10 +26,9 @@ class Allow:
 
 class Store:
     def per_share_inputs(self, user_id, company_id, as_of=None):
-        return json.loads((HERE / "nvda.json").read_text())
-
-    def per_share_originals(self, user_id, company_id, as_of=None):
-        return json.loads((HERE / "nvda-originals.json").read_text())["originals"]
+        # Store reads the originals in the same session (per_share.py, 1 and 5)
+        return {**json.loads((HERE / "nvda.json").read_text()),
+                "originals": json.loads((HERE / "nvda-originals.json").read_text())["originals"]}
 
 
 def main() -> None:

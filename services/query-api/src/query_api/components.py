@@ -12,7 +12,9 @@ What "made of" means, by how gold built the figure (`how`):
 - `ttm`: a trailing twelve months, the four quarters it sums (or the year a 10-K states, 040).
 - `sum`: a reported line a filing tags only as parts (038's silver.metric_sums: a bank's net
   revenue, NVIDIA's marketable securities, contract liabilities current + noncurrent): the parts.
-- `computed`: gross profit where the filing prints none (039): revenue less cost of revenue.
+- `computed`: gross profit where the filing prints none (039): revenue less cost of revenue; at
+  Walmart and Costco net sales less cost of revenue (155).
+- `none`: a long-term debt of zero where the filings show none (155, `derived:no-debt`): no parts.
 - `ytd`: a quarter derived from year-to-date figures (a fiscal Q4 = the 10-K's year less nine
   months): the two facts.
 - `reported`: a figure as tagged.
@@ -31,7 +33,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
-from query_api.shapes import filing_url, period
+from query_api.shapes import filing_url, period, value_source_shown
 from query_api.store import Store
 
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
@@ -58,6 +60,11 @@ ROLES: dict[str, list[tuple[str, str]]] = {
 INVESTMENTS_RULE = frozenset({"net_debt", "cash_and_investments"})
 SAME_PERIOD_DAYS = 7  # a fact starting within a week of gold's start is the same quarter (031)
 COMPUTED = "derived:revenue-cost_of_revenue"
+# 155: gross profit on net sales (Walmart, Costco): its parts, by the computed tag
+COMPUTED_PARTS = {COMPUTED: ("revenue", "cost_of_revenue"),
+                  "derived:net_sales-cost_of_revenue": ("net_sales", "cost_of_revenue")}
+# 155: a long-term debt of zero where the filings show none (gold.usable_facts' reading)
+NO_DEBT = "derived:no-debt"
 
 
 def how_built(row: dict) -> str:
@@ -66,8 +73,10 @@ def how_built(row: dict) -> str:
         return "ttm"
     if row.get("inputs"):
         return "derived"
-    if tag == COMPUTED:
+    if tag in COMPUTED_PARTS:
         return "computed"
+    if tag == NO_DEBT:
+        return "none"
     if "+" in tag:
         return "sum"
     if row.get("value_source") == "derived":
@@ -83,7 +92,8 @@ def _figure(r: dict) -> dict:
     return {
         "metric": r["metric"], "period_start": r["period_start"], "period_end": r["period_end"],
         "fiscal_period": period("FY", r.get("fiscal_year"), r.get("fiscal_quarter")),
-        "value": _num(r["value"]), "unit": r["unit"], "value_source": r["value_source"],
+        "value": _num(r["value"]), "unit": r["unit"],
+        "value_source": value_source_shown(r["value_source"], r["source_tag"]),  # 155
         "how": how_built(r),
         "citation": {"accession_no": r["accession_no"], "form": r["form"], "filed": r["filed"],
                      "xbrl_tag": r["source_tag"], "source_accessions": r["source_accessions"],
@@ -138,7 +148,7 @@ def shape(company_id: str, metric: str, span: str, row: dict, rows: dict[str, di
     end = row["period_end"]
 
     def selection(r: dict) -> list[dict]:
-        if span != "quarter" or how_built(r) in ("derived", "ttm", "computed"):
+        if span != "quarter" or how_built(r) in ("derived", "ttm", "computed", "none"):
             return []
         before = r["period_start"] - timedelta(days=1) if r["period_start"] else end
         return fact_selection(r, facts.get((r["metric"], r["period_end"]), []),
@@ -146,8 +156,9 @@ def shape(company_id: str, metric: str, span: str, row: dict, rows: dict[str, di
 
     def parts_of(r: dict) -> list[dict]:
         if how_built(r) == "computed":
+            plus, minus = COMPUTED_PARTS[r.get("source_tag") or COMPUTED]
             return [{**_figure(rows[m]), "role": role} for m, role in
-                    (("revenue", "+"), ("cost_of_revenue", "-")) if m in rows]
+                    ((plus, "+"), (minus, "-")) if m in rows]
         if how_built(r) == "ttm":
             return [{"period_start": q.get("period_start"), "period_end": q.get("period_end"),
                      "value": _num(q.get("value")), "accession_no": q.get("accession_no"),

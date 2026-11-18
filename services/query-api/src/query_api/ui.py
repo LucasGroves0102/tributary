@@ -46,7 +46,14 @@ from query_api.screener import (
     parse_filter,
     shape,
 )
-from query_api.shapes import document_url, filing_url, newest_windows, percent_change, period
+from query_api.shapes import (
+    document_url,
+    filing_url,
+    newest_windows,
+    percent_change,
+    period,
+    value_source_shown,
+)
 from query_api.store import Store
 from query_api.watchlist import MAX_ENTRIES, UnknownUser, Watchlists
 
@@ -722,7 +729,7 @@ def _recap_value(r: dict, cik: str | None) -> dict:
             "period_end": r["period_end"],
             "fiscal_period": period("FY", r["fiscal_year"], r["fiscal_quarter"]),
             "calendar_period": period("CY", r["calendar_year"], r["calendar_quarter"]),
-            "value_source": r["value_source"],
+            "value_source": value_source_shown(r["value_source"], r.get("source_tag")),  # 155
             "citation": {"accession_no": r["accession_no"], "form": r["form"],
                          "filed": r["filed"], "xbrl_tag": r["source_tag"],
                          "source_accessions": r["source_accessions"],

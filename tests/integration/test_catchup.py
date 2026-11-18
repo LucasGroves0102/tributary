@@ -37,11 +37,12 @@ def test_versions_live_with_their_rules():
     with psycopg.connect(DSN) as c:
         # 072 bumped both company checks (the catch-up re-checks every company) and added
         # the parser-output checks, per document; 074 the statement reconciliation; 077 gold's
-        # net income rules, 080 its revenue industry tags (every company rebuilt); 095 the
-        # parser-output checks' keys for 20-F, 40-F and 6-K (every document re-checked)
+        # net income rules, 080 its revenue industry tags, 155 its debt, citations and gross
+        # profit (every company rebuilt); 095 the parser-output checks' keys for 20-F, 40-F and
+        # 6-K (every document re-checked)
         assert c.execute("SELECT gold.rules_version(), ops.check_financials_version(),"
                          " ops.check_segments_version(), ops.check_sections_version()"
-                         ).fetchone() == (80, 74, 72, 95)
+                         ).fetchone() == (155, 74, 72, 95)
         assert c.execute("SELECT kind, baseline FROM ops.catchup WHERE baseline IS NOT NULL"
                          " ORDER BY 1").fetchall() == [
             ("check_financials", 57), ("check_segments", 70), ("gold", 64),

@@ -345,6 +345,15 @@ function explainOne(n: DataNote, now: number): Explained {
     }
     case "derived_quarters": {
       const q = num(d.quarters) ?? 0;
+      if (d.computed === true && d.net_sales === true) {
+        // 155: Walmart and Costco, whose revenue includes membership fees and other income
+        return {
+          title: `${m}: net sales less cost of revenue`,
+          text:
+            `For ${q} quarter${q === 1 ? "" : "s"} between ${date(d.first_period_end)} and ${date(d.latest_period_end)} the filing prints no gross profit, so it's net sales less cost of revenue: ` +
+            "revenue includes membership fees and other income that cost of sales doesn't carry, and the company states its gross margin on net sales. Ratios' gross margin is the same figure over net sales.",
+        };
+      }
       if (d.computed === true) {
         return {
           title: `${m}: revenue less cost of revenue`,

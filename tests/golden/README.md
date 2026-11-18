@@ -120,7 +120,11 @@ A third gap, closed by migration 038. Its row was `absent` until then, written t
    `NetIncomeLossAvailableToCommonStockholdersBasic` (26 facts) to its reference fixture; 080
    `LiabilitiesAndStockholdersEquity` to every reference fixture (1,900 facts, each fixture's own
    window; total assets must still read `Assets`). 080's revenue industry tags have no facts in the
-   fixtures' years (2024-2026): test_gold_selection.py has their cases.
+   fixtures' years (2024-2026): test_gold_selection.py has their cases. 155's tags (short-term
+   borrowings, commercial paper, convertibles, debt evidence) aren't in the reference fixtures:
+   [`test_analyst_fixes.py`](test_analyst_fixes.py) has its own (`fixtures/analyst/`, trim_facts'
+   rule with 155's tags, from bronze on hermes 2026-11-18: Apple, Walmart, Palantir, Rapid7,
+   Teradyne, Alnylam, Broadcom's FY2018).
 
 ## Reference set
 
@@ -152,7 +156,10 @@ best-priority gold tag the 10-K carries (734), or, with no scale words by the ta
 heading's millions (2); 3 read by hand (StoneX's revenue, Booking's net income and EPS); the 70
 split-adjusted EPS rows are the printed EPS over the splits since. A metric with no such candidate was left out
 (statements printing no total liabilities, debt inside another line, an EPS line worded its own
-way): not every company has every metric. Nobody has hand-checked these rows yet.
+way): not every company has every metric. Nobody has hand-checked these rows yet. 155 made "debt due
+within a year" the balance sheet's short-term debt (the filer's DebtCurrent where larger than the
+current portion): Cisco's row is now its balance sheet's $10,161M and Qualcomm's $2,492M (both
+lines read in the stored 10-Ks' text), not the debt notes' current portions ($3,500M, $1,993M).
 
 ### Exceptions (owner-visible)
 
