@@ -11,20 +11,20 @@ Microsoft, Nvidia, Costco, JPMorgan) and workspace.
 latency, completeness against EDGAR's daily indexes, coverage, data-quality checks and the last
 recorded test-suite runs, live from the production database.
 
-Measured on production on 2026-11-16 unless a report is linked (the status page has the live figures):
+Measured on production on 2026-11-17 unless the row or its report says otherwise (the status page has the live figures):
 
 | | |
 |---|---|
-| **0 of 59** | permission attacks leaked data ([adversarial suite](tests/adversarial/report.md)) |
+| **0 of 59** | prompt attacks on the assistant leaked data (recorded 2026-10-18 with the catalog closed, replayed in CI; [adversarial suite](tests/adversarial/report.md)). Cross-user tests of private data are being added |
 | **128 of 128** | figures in the agent's answers traced to a filing or XBRL fact ([citation suite](tests/citations/report.md)) |
-| **< 0.2 s** | to revoke access everywhere after a grant changes (0.11–0.17 s, [report](tests/propagation/report.md)); CI fails above 3 s (BRD target: 30 s) |
-| **45 s / 1.9 min** | p50 / p95 from EDGAR acceptance to Postgres, over 19,101 filings in the last 7 days (target 2 min) |
+| **< 0.2 s** | to revoke access after a grant changes, measured in CI to OpenFGA and the RLS tables (0.11–0.17 s, [report](tests/propagation/report.md)), not yet on production; CI fails above 3 s (BRD target: 30 s) |
+| **50 s / 8.8 min** | p50 / p95 from EDGAR acceptance to Postgres for the 85.6% of 22,084 filings (last 7 days) the live feed caught; the rest came from EDGAR's daily index hours later. Target 2 min at p95: missed |
 | **53 s / 77 s** | p50 / p95 from EDGAR acceptance to a 10-K, 10-Q or 8-K's parsed sections in the reader (413 filings, measured 2026-11-09) |
-| **0 missing** | of 69,592 filings in EDGAR's daily indexes over the last 30 days, at the nightly completeness check |
-| **6,617** | companies with financials from XBRL, of 992,927 SEC filers indexed |
-| **957** | figures printed in 96 companies' 10-Ks, read from the filings and checked against the database on every push, each difference listed ([reference set](tests/golden/README.md#reference-set)) |
+| **2,820 of 77,428** | filings in EDGAR's daily indexes over the last 30 days were missing when the nightly completeness check ran (all on one day), and it republished them |
+| **6,625** | companies with financials from XBRL, of 992,927 SEC filers indexed |
+| **957** | figures printed in 96 companies' 10-Ks, checked against the database on every push, each difference listed; 808 of them machine-read and kept only where the print equals the filing's XBRL, not yet hand-checked ([reference set](tests/golden/README.md#reference-set)) |
 | **6,068** | exchange-listed companies measured nightly for every kind of data gap, each one said on the company's page: fixable, not in the SEC's data, or out of scope ([db](db/DESIGN.md#076_coveragesql)) |
-| **634,885** | 10-K, 10-Q and 8-K filings from 5,408 companies since November 2015, parsed into 3.57M sections; 433 GB of HTML kept in 28 GB |
+| **638,870** | 10-K, 10-Q and 8-K filings from 5,408 companies since November 2015, parsed into 3.59M sections; 433 GB of HTML kept in 28 GB |
 | **27M + 33M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
 | **~4,000** | tests on every push: 3,000+ Python, 1,100+ web unit, 23 browser end-to-end flows, ~70 Rust |
 
@@ -42,7 +42,9 @@ with its measurements.
   by then, each citing the filing that first stated it; restated figures marked with what they were
   first, and why they changed (a split, another line, the company's restatement). Gold keeps a
   history of itself, built by its own pipeline ([db](db/DESIGN.md#086_financials_knownsql),
-  [query-api](services/query-api/README.md#point-in-time)).
+  [query-api](services/query-api/README.md#point-in-time)). A day here is the filing date: a filing
+  accepted after the market close (up to 17:30 New York) counts as known that day, and the company
+  list and sectors are today's; both are on the list to fix before this backs a trading backtest.
 - **Bring your own data.** Upload a CSV of your own figures by company and date (checked before
   anything is stored, companies matched exactly by ticker or CIK, each row known from its
   publication date or the upload day); formulas, charts and the company page read it beside

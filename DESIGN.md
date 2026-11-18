@@ -254,9 +254,11 @@ work, prompt injection in filings); see its [README](tests/adversarial/README.md
 
 #### Golden figures
 
-149 figures printed in five 10-Ks (NVIDIA, Costco, JPMorgan, ExxonMobil, Home Depot), each
-compared with what gold serves, and 12 derived metrics recomputed from them
-([tests/golden](tests/golden/README.md)).
+957 figures: 149 printed in five 10-Ks (NVIDIA, Costco, JPMorgan, ExxonMobil, Home Depot), each
+compared with what gold serves, with 12 derived metrics recomputed from them, and the reference set's
+808 from 91 more companies' latest 10-Ks ([tests/golden](tests/golden/README.md)). The reference set
+keeps a printed line only where it equals the 10-K's own XBRL, so it catches gold picking the wrong
+fact, not a filing whose XBRL disagrees with its print; its rows haven't been checked by hand yet.
 ## Numbers on 2026-11-09
 
 The headline table as it stood before the 2026-11-16 refresh.
