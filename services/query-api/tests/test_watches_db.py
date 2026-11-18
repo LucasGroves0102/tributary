@@ -28,7 +28,9 @@ pytestmark = pytest.mark.skipif(not DSN, reason="APP_TEST_DATABASE_URL not set")
 
 A, B = "t-watch-a", "t-watch-b"
 NVDA, TSLA = "0001045810", "0001318605"
-NOW = datetime(2026, 11, 18, 11, 0, tzinfo=UTC)
+# after the rows the test writes (their updated_at is the database's clock): a fixed
+# 2026-11-18 11:00 UTC became the past that morning and every watch read as saved since its check
+NOW = (datetime.now(UTC) + timedelta(hours=2)).replace(minute=0, second=0, microsecond=0)
 HOOK = "https://hooks.example.com/tributary/" + "w" * 32
 DETAIL = {"entered": {"companies": [NVDA, TSLA], "more": 0}, "figures_at": None}
 
