@@ -68,4 +68,4 @@ spec:
       filing-facts:
         suspend: false
     image:
-      tag: main-334-97b929f6ff9e2f7849c24b9f8e86f99ba431cf76 # {"$imagepolicy": "flux-system:tributary:tag"}
+      tag: main-340-552d3beafc57ded0fc99d6a2dd3e2b471e5b6087 # {"$imagepolicy": "flux-system:tributary:tag"}
