@@ -227,6 +227,18 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      # The web image's own nginx checks deploy/*.conf as the image installs them (upstream names
+      # faked: nginx resolves them at start). A config nginx refuses keeps the web pods from
+      # starting, and Helm then rolls the whole release back.
+      - name: nginx -t on the web image's config
+        working-directory: .
+        run: |
+          docker run --rm \
+            --add-host query-api:127.0.0.1 --add-host agent-api:127.0.0.1 --add-host mcp-server:127.0.0.1 \
+            -v "$PWD/services/web/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+            -v "$PWD/services/web/deploy/headers.conf:/etc/nginx/headers.conf:ro" \
+            -v "$PWD/services/web/deploy/addin-headers.conf:/etc/nginx/addin-headers.conf:ro" \
+            nginxinc/nginx-unprivileged:1.27-alpine nginx -t
 
   e2e:
     # Playwright flows (services/web/e2e) against the built app, every API call mocked by
