@@ -1575,7 +1575,11 @@ again, and a new model then starts at zeros in the older shape; versions answer 
 companies keep only those; data notes without `coverage` (076) show no Coverage group, and a status
 answer without `gaps` no gaps table; a data-check screen the API didn't echo (`issue`) is a failure with Try
 again, never every company; `/annual-per-share`, `readings` and agent-api's `/v1/allowance` were
-already optional. F4: `/peers/check` and `/v1/sectors` answering 404 mean no check (the peer is added
+already optional. UI audit part 1 (Riley, test 10): the Overview's EPS from `/per-share` (404: the
+screener's quarter, labelled "quarter"), `/restatements`' `history` as of a day (404: no note),
+`/financials`' `history` (absent: no note), the status page's `catalog_companies` (absent: the
+quarterly count) and an own metric's `not_reported` reading (an older API sends none: a plain blank).
+F4: `/peers/check` and `/v1/sectors` answering 404 mean no check (the peer is added
 as before) and no sector filter; a bank's statement or header columns refused (422) are asked again
 without the bank lines; a save refused for a comps table's bank columns or a screen's sector filter
 (an older strict model: "Input should be ..." or "Extra inputs") is saved again without them. F5: a
