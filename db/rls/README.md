@@ -64,5 +64,9 @@ Aggregates and metadata only, no company rule needed: `ops.feed_status` (026), t
 functions `ops.public_*` (028) and `silver.co_registrants` (047, so `query_api` still reads no
 `bronze.filings`).
 
+Every SECURITY DEFINER function (and every user-keyed table, with forced RLS or a reason) is listed
+in [`tests/access/allowlist.toml`](../../tests/access/allowlist.toml): its rule, its one grantee and
+the test that shows it holds. CI fails on one that isn't listed.
+
 When reading a plan, EXPLAIN as `query_api`: an owner or BYPASSRLS login gets a plan `query_api`
 doesn't.

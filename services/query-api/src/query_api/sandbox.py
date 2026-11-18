@@ -193,7 +193,9 @@ def grant_demo_access(cur: Any, user_id: str, at: datetime, company_ids: Sequenc
     is closed, grants on `company_ids`. With the catalog public (app migration 008) every
     signed-in user already reads every company, so no grant is written. Plain app-DB rows:
     authz-sync turns subscriptions and grants into access through CDC. Shared by sandboxes and
-    GitHub sign-in (query_api.github), so both get the same."""
+    GitHub sign-in (query_api.github), so both get the same. Sets app.user_id to the new user
+    first: the watchlist and workspaces are owner-only (forced row-level security)."""
+    cur.execute("SELECT set_config('app.user_id', %s, true)", (user_id,))
     cur.execute("INSERT INTO subscriptions (user_id, plan_id, started_at)"
                 " VALUES (%s, %s, %s)", (user_id, DEMO_PLAN, at))
     cur.execute("INSERT INTO company_grants (company_id, user_id, granted_at)"

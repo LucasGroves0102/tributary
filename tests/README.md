@@ -6,6 +6,7 @@ Cross-component tests. Unit tests live next to each component (`services/*/tests
 | Folder | What | Runs in CI |
 |---|---|---|
 | [`adversarial/`](adversarial) | FR10: 59 attacks + 4 controls against the agent, 0 leaks | replays recordings |
+| [`access/`](access) | cross-user access: every owner-only and account route as every other identity (user, sandbox, read and write keys, connected app), catalog open and closed, the MCP tools, agent-api, RLS alone per table, and the schema check (`allowlist.toml`) | yes (`TEST_DATABASE_URL`, `APP_TEST_DATABASE_URL`) |
 | [`citations/`](citations) | citation-accuracy eval: 32 questions, every figure traced | replays recordings |
 | [`integration/`](integration) | app schema, ops views, gold calendar and quality checks, data notes, and the `db/backout` chain against real Postgres | yes (`TEST_DATABASE_URL`, `APP_TEST_DATABASE_URL`) |
 | [`status/`](status) | the status page's summary of the recorded suites (`recorded_results.json`) matches the recordings | yes |

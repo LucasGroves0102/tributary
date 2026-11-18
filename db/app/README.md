@@ -15,7 +15,8 @@ the `authz` tables row-level security reads (`user_access`, `user_tiers`, `publi
 | `users` (with optional `org_id`), `subscriptions` (user → plan), `plan_tiers` (plan → tier), `company_grants` (company → user or organization) | yes |
 | `public_catalogs` (migration 008: catalog → public or not; the open-access switch, below) | yes |
 | `debezium_heartbeat` (migration 002: Debezium writes it every few seconds so its replication slot advances while the app tables are idle) | yes |
-| `organizations`, `plans`, `watchlists` | no |
+| `organizations`, `plans` | no |
+| `watchlists` (companies a user follows; owner-only, forced RLS on `app.user_id` since migration 045) | no: watching grants nothing |
 | `workspaces`, `workspace_items` (saved charts, comps sets, screens; reports the agent writes, migration 005; theses and models the user writes, migration 009; own metrics (a saved formula, at most 20 per user), migration 022: state up to 128 KiB for reports and theses, 64 KiB for models since migration 015 (F2's per-year rates, adjustments and price), 16 KiB otherwise), `recent_filings` (migration 004; owner-only, forced RLS on `app.user_id`). Migration 012 adds `workspaces.project` (NULL for a plain folder; for an analysis project the company, peers, "How it makes money" notes and steps marked done, up to 16 KiB), covered by the same forced RLS | no: they grant nothing |
 | `user_views` (per-user layout of Home, the screener and the watchlist; migration 006; owner-only, forced RLS) | no: it grants nothing |
 | `thesis_checks` (migration 010: the history of "Check my thesis" results per thesis, written only by agent-api through the Query API; owner-only, forced RLS, `(item_id, user_id)` references the thesis and cascades) | no: it grants nothing |
@@ -66,7 +67,10 @@ API's login reads it.
 
 `company_id` values refer to `silver.companies` in the `tributary` database; there is no
 cross-database foreign key. Tests: `tests/integration/test_app_schema.py` (needs
-`APP_TEST_DATABASE_URL`).
+`APP_TEST_DATABASE_URL`). Every table is listed in
+[`tests/access/allowlist.toml`](../../tests/access/allowlist.toml): owner-only (forced RLS on
+`app.user_id`, checked and tried as another user) or one line saying why not; a new table fails CI
+until it is.
 
 ## Open access
 

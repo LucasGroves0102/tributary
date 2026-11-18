@@ -1,0 +1,184 @@
+# Who may own rows, and what may run with its owner's rights (tests/access/test_schema.py).
+#
+# [*.tables]: every app-database table, and in the tributary database every table in `userdata`
+# or with a user column (user_id, owner_id, created_by). "owner" means: RLS enabled AND forced,
+# a policy for ALL keyed on the session's user (user_id = current_setting('app.user_id')), no
+# other policy but a SELECT-only holder rule (a key's or a token's hash); the suite then reads,
+# changes and deletes the owner's rows as another user (RLS alone) and plants a row as hers.
+# Anything else is one line saying why it isn't an owner table.
+#
+# [*.definer]: every SECURITY DEFINER function. Each pins search_path to pg_catalog, pg_temp,
+# runs for `grant` only (never PUBLIC), and names the test that shows its rule holds. rule
+# "readable": its body applies authz.readable_companies (callers' ids only narrow it).
+# "aggregate": counts, times or public metadata, never a value, a text or a user's row.
+# "limiter": the SEC rate limiter's two functions.
+#
+# A table or function that isn't listed fails CI; so does an entry that no longer exists.
+
+[app.tables]
+workspaces = "owner"
+workspace_items = "owner"
+recent_filings = "owner"
+item_versions = "owner"
+user_views = "owner"
+thesis_checks = "owner"
+data_connections = "owner"
+market_prices = "owner"
+market_price_fetches = "owner"
+alert_settings = "owner"
+alert_checks = "owner"
+notifications = "owner"
+red_lines = "owner"
+webhooks = "owner"
+webhook_deliveries = "owner"
+api_keys = "owner"
+api_key_usage = "owner"
+portfolio_holdings = "owner"
+portfolio_lots = "owner"
+portfolio_sells = "owner"
+journal_entries = "owner"
+watches = "owner"
+screen_alerts = "owner"
+oauth_grants = "owner"
+oauth_codes = "owner"
+oauth_tokens = "owner"
+oauth_usage = "owner"
+watchlists = "owner"
+users = "identity: sign-in, Debezium and the alerts job read it before or across users; an id, an email (GitHub's no-reply or <username>@password.invalid) and an org, no content"
+subscriptions = "access data: Debezium streams it to authz-sync (the plan's tiers); no content"
+company_grants = "access data: Debezium streams it to authz-sync, the only reader of grants"
+password_accounts = "sign-in reads it before there is a user (username to scrypt hash); never in an answer"
+github_accounts = "sign-in reads it before there is a user (GitHub id to user); identity, no content"
+demo_sandboxes = "a sandbox's expiry: demo-cleanup deletes across users; no content"
+demo_agent_usage = "assistant questions a user asked per day: the quota routes read the caller's own count; no content"
+demo_agent_daily = "all sandboxes' questions per day: no user's rows"
+demo_creations = "sandbox creations per HMAC of a client address: no user's rows"
+organizations = "an organization's id and name: no user's rows"
+plans = "the plans: no user's rows"
+plan_tiers = "each plan's tiers: no user's rows"
+public_catalogs = "the open-access switch: no user's rows"
+alert_runs = "when the alerts job last ran: no user's rows"
+oauth_clients = "apps that may ask to connect (registrations, metadata documents): no user's rows"
+debezium_heartbeat = "Debezium's heartbeat: no user's rows"
+schema_migrations = "migrations applied: no user's rows"
+
+[tributary.tables]
+"userdata.datasets" = "owner"
+"userdata.uploads" = "owner"
+"userdata.rows" = "owner"
+"authz.user_access" = "access rows authz-sync writes as their owner (so not forced); query_api reads only its own (own_rows), tested in services/query-api/tests/test_rls.py"
+"authz.user_tiers" = "access rows authz-sync writes as their owner (so not forced); query_api reads only its own (own_rows), tested in services/query-api/tests/test_rls.py"
+
+[tributary.definer."gold.search_page"]
+rule = "readable"
+grant = "query_api"
+reason = "full-text search: @@ isn't leakproof, so under RLS the GIN index never runs; returns offsets and ranks, never text"
+test = "services/query-api/tests/test_rls.py::test_search_page_applies_the_read_rule"
+
+[tributary.definer."gold.annual_per_share"]
+rule = "readable"
+grant = "query_api"
+reason = "a company's own 10-K per-share facts: query_api has no grant on the facts' values"
+test = "services/query-api/tests/test_readings_db.py::test_annual_per_share_reads_the_latest_10k_never_a_proxy_and_respects_the_read_rule"
+
+[tributary.definer."gold.per_share_originals"]
+rule = "readable"
+grant = "query_api"
+reason = "each filing's own per-share figure (as filed): query_api has no grant on the facts' values"
+test = "services/query-api/tests/test_readings_db.py::test_as_filed_per_share_reads_the_first_filing_to_state_a_year_under_its_rule"
+
+[tributary.definer."gold.company_financials_at"]
+rule = "readable"
+grant = "query_api"
+reason = "one company's gold as of a day, from the history (086-087), read once per request"
+test = "services/query-api/tests/test_rls.py::test_point_in_time_reads_respect_rls"
+
+[tributary.definer."gold.figure_facts"]
+rule = "readable"
+grant = "query_api"
+reason = "the facts behind a figure (components): query_api has no grant on the facts' values"
+test = "services/query-api/tests/test_rls.py::test_components_and_figure_facts_read_only_what_the_rule_allows"
+
+[tributary.definer."gold.filing_figures"]
+rule = "readable"
+grant = "query_api"
+reason = "one filing's figures for a thesis check: query_api has no grant on the facts' values"
+test = "services/query-api/tests/test_rls.py::test_filing_figures_compute_from_one_filing_and_read_only_what_the_rule_allows"
+
+[tributary.definer."gold.disagreeing_figures"]
+rule = "readable"
+grant = "query_api"
+reason = "the two facts a tag_disagreement note names: query_api has no grant on the facts' values"
+test = "tests/access/test_schema.py::test_disagreeing_figures_apply_the_read_rule"
+
+[tributary.definer."silver.co_registrants"]
+rule = "aggregate"
+grant = "query_api"
+reason = "companies filing under one accession (public filing metadata): query_api must never read bronze.filings"
+test = "services/query-api/tests/test_rls.py::test_sectors_co_registrants_and_peer_check_run_as_query_api"
+
+[tributary.definer."ops.feed_status"]
+rule = "aggregate"
+grant = "query_api"
+reason = "two timestamps for /v1/status: query_api must never read bronze.filings"
+test = "services/query-api/tests/test_ui_db.py::test_feed_status_runs_as_query_api_without_bronze_access"
+
+[tributary.definer."ops.figures_landed_at"]
+rule = "aggregate"
+grant = "query_api"
+reason = "when the nightly figures last landed (one timestamp), for watched screens"
+test = "services/query-api/tests/test_watch_screens_db.py::test_the_figures_landing_time_is_the_nightly_coverage_run"
+
+[tributary.definer."ops.public_catalog_size"]
+rule = "aggregate"
+grant = "query_api"
+reason = "the catalog's company count for the status page"
+test = "services/query-api/tests/test_ui_db.py::test_status_data_runs_as_query_api_without_bronze_or_ops_access"
+
+[tributary.definer."ops.public_completeness"]
+rule = "aggregate"
+grant = "query_api"
+reason = "counts of filings indexed, missing and republished, for the status page"
+test = "services/query-api/tests/test_ui_db.py::test_status_data_runs_as_query_api_without_bronze_or_ops_access"
+
+[tributary.definer."ops.public_coverage"]
+rule = "aggregate"
+grant = "query_api"
+reason = "counts of companies, documents and sections, for the status page"
+test = "services/query-api/tests/test_ui_db.py::test_status_data_runs_as_query_api_without_bronze_or_ops_access"
+
+[tributary.definer."ops.public_coverage_gaps"]
+rule = "aggregate"
+grant = "query_api"
+reason = "counts of companies by coverage reason, for the status page"
+test = "services/facts-fetcher/tests/test_coverage_db.py::test_readers_ops_and_the_public_counts"
+
+[tributary.definer."ops.public_ingest"]
+rule = "aggregate"
+grant = "query_api"
+reason = "filings ingested and their latency percentiles, for the status page"
+test = "services/query-api/tests/test_ui_db.py::test_status_data_runs_as_query_api_without_bronze_or_ops_access"
+
+[tributary.definer."ops.public_parser_quality"]
+rule = "aggregate"
+grant = "query_api"
+reason = "parser check counts per severity, for the status page"
+test = "services/query-api/tests/test_ui_db.py::test_status_data_runs_as_query_api_without_bronze_or_ops_access"
+
+[tributary.definer."ops.public_quality"]
+rule = "aggregate"
+grant = "query_api"
+reason = "data check counts per severity, for the status page"
+test = "services/query-api/tests/test_ui_db.py::test_status_data_runs_as_query_api_without_bronze_or_ops_access"
+
+[tributary.definer."ops.sec_take_token"]
+rule = "limiter"
+grant = "sec_limiter"
+reason = "the shared SEC rate limit: one locked row, for the limiter login that can read no table"
+test = "libs/sec/tests/test_sec_limiter_role.py::test_login_takes_tokens_and_reports_throttles"
+
+[tributary.definer."ops.sec_report_throttle"]
+rule = "limiter"
+grant = "sec_limiter"
+reason = "the SEC limiter's cool-down after a 429, for the limiter login that can read no table"
+test = "libs/sec/tests/test_sec_limiter_role.py::test_login_takes_tokens_and_reports_throttles"

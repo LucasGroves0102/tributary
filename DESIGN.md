@@ -120,9 +120,23 @@ schedule in [deploy/helm/tributary](deploy/helm/tributary/README.md).
 
 - **Two permission layers, not one.** The Query API asks OpenFGA before every query, then runs
   the query as a restricted Postgres role with the user's id set, so row-level security filters
-  again. A bug in either layer alone can't leak data. SEC data is open to every signed-in user
-  through a public catalog, but it goes through the same two layers: one row in the app database
-  opens or closes it, and per-company grants and plan tiers still apply to anything outside it.
+  again. What "a bug in either layer alone can't leak data" covers, precisely:
+  - *SEC data* (financials, filing text, search, insiders): OpenFGA (`require()`/`readable()`)
+    and RLS (`authz.readable_companies`) are independent, both fed by authz-sync. The public
+    catalog opens both at once (one app-database row); grants and plan tiers still apply outside
+    it. The SECURITY DEFINER functions that read past RLS apply the same rule themselves.
+  - *Private data* (saved work, theses, models, reports, views, the watchlist, alerts, webhooks,
+    API keys, connected apps, portfolio and journal, watched screens, uploaded datasets):
+    OpenFGA has no type for it, and with the catalog open it says yes to every signed-in user,
+    so the two layers are the application's owner filter (every statement on the JWT's or the
+    key's own user) and forced RLS on `app.user_id`. Either alone holds, but both take the user
+    from the same request, so a bug that picks the wrong user defeats both: the
+    [access suite](tests/access/README.md) is what checks that, every owner and account route as
+    every other identity, the MCP tools, RLS alone per table, and a CI schema check.
+  - *One layer, by design*: identity and access rows read before or across users (`users`,
+    `subscriptions`, `company_grants`, the sign-in tables, demo quotas: app code only, each
+    listed with its reason in [allowlist.toml](tests/access/allowlist.toml)), and public
+    metadata (the filing index, company identity).
   Watching a company never grants access; that trap is in the adversarial suite.
 - **Permissions are data, streamed.** Grants live in the app database; Debezium streams them to
   Kafka, and `authz-sync` is the only writer of OpenFGA tuples and RLS rows. It replays the
@@ -166,9 +180,9 @@ named test users) reads every company's financials and filings, within their pla
 while it is public OpenFGA lets every user read it (`catalog:sec#reader@user:*`) and row-level
 security accepts its companies (`authz.public_access`). A request without a user reads nothing.
 Per-company grants (to a user or an organization) still work for anything outside the catalog,
-and saved work (workspaces, theses, models, reports, views, alerts and webhooks), API keys and a
-user's own market-data key and prices stay owner-only, with row-level security forced on their
-tables. A personal API key (`Authorization: Bearer trb_...`) is its owner: the user comes from the
+and saved work (workspaces, theses, models, reports, views, the watchlist, alerts and webhooks),
+API keys and a user's own market-data key and prices stay owner-only, with row-level security
+forced on their tables (checked in CI: [tests/access](tests/access/README.md)). A personal API key (`Authorization: Bearer trb_...`) is its owner: the user comes from the
 key's row, every request goes through both layers as that user, and a key reaches only the data and
 saved-work routes its scope allows (never the account itself). The MCP server for users' own AI models has no
 database login: it forwards the caller's key to the Query API, so the same holds there.

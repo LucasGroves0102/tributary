@@ -15,7 +15,7 @@ Measured on production on 2026-11-17 unless the row or its report says otherwise
 
 | | |
 |---|---|
-| **0 of 59** | prompt attacks on the assistant leaked data (recorded 2026-10-18 with the catalog closed, replayed in CI; [adversarial suite](tests/adversarial/report.md)). Cross-user tests of private data are being added |
+| **0 of 59** | prompt attacks on the assistant leaked data (recorded 2026-10-18 with the catalog closed, replayed in CI; [adversarial suite](tests/adversarial/report.md)). Cross-user, deterministic, in CI: 2,487 checks that no other user, key, connected app, sandbox or MCP tool reaches a user's private data, with the catalog open and closed ([access suite](tests/access/README.md)) |
 | **128 of 128** | figures in the agent's answers traced to a filing or XBRL fact ([citation suite](tests/citations/report.md)) |
 | **< 0.2 s** | to revoke access after a grant changes, measured in CI to OpenFGA and the RLS tables (0.11–0.17 s, [report](tests/propagation/report.md)), not yet on production; CI fails above 3 s (BRD target: 30 s) |
 | **50 s / 8.8 min** | p50 / p95 from EDGAR acceptance to Postgres for the 85.6% of 22,084 filings (last 7 days) the live feed caught; the rest came from EDGAR's daily index hours later. Target 2 min at p95: missed |
@@ -249,7 +249,8 @@ make consume           # watch filings arrive (or open the Kafka UI at http://lo
 
 Every request names its user (a JWT or an API key) and is checked twice; a request without a user
 reads nothing. One app-database row opens the public catalog; per-company grants and plan tiers
-still apply; saved work, keys and alerts stay owner-only. The agent (`services/agent`) is a Claude
+still apply; saved work, keys and alerts stay owner-only (every such route is tried as every
+other identity in CI: [tests/access](tests/access/README.md)). The agent (`services/agent`) is a Claude
 tool loop over the Query API with no user parameter. Its suites run live with `make citations` and
 `make adversarial` and are replayed in CI: 0 leaks in 59 attacks, 128 of 128 figures traced, and
 957 figures from 96 companies' 10-Ks match or are listed as a known difference
