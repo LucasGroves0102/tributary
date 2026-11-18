@@ -67,7 +67,10 @@ API's login reads it.
 
 `company_id` values refer to `silver.companies` in the `tributary` database; there is no
 cross-database foreign key. Tests: `tests/integration/test_app_schema.py` (needs
-`APP_TEST_DATABASE_URL`).
+`APP_TEST_DATABASE_URL`). Every table is listed in
+[`tests/access/allowlist.toml`](../../tests/access/allowlist.toml): owner-only (forced RLS on
+`app.user_id`, checked and tried as another user) or one line saying why not; a new table fails CI
+until it is.
 
 ## Open access
 
