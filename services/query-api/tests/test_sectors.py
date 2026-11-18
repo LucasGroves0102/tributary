@@ -1,17 +1,19 @@
-"""The sector mapping (db/migrations/046_sectors.sql, revised by 082): ranges never overlap, every
-SIC code the SEC had assigned to a company (fixtures/sic_codes.csv, 2026-11-09) falls in exactly
-one, and the header's counts are true."""
+"""The sector mapping (db/migrations/046_sectors.sql, revised by 082 and 160): ranges never
+overlap, every SIC code the SEC had assigned to a company (fixtures/sic_codes.csv, 2026-11-09)
+falls in exactly one, and the header's counts are true."""
 
 import csv
 import re
 from pathlib import Path
+
+from query_api.screener import Screen, compile_screen
 
 ROOT = Path(__file__).resolve().parents[3]
 MIGRATION = (ROOT / "db" / "migrations" / "046_sectors.sql").read_text()
 TUPLE = r"\('(\d{4})', '(\d{4})', '([^']+)', '([^']+)'\)"
 # later migrations replace a range by its sic_from (DELETE, then the new ranges) or add one
 REVISIONS = [(ROOT / "db" / "migrations" / f).read_text()
-             for f in ("082_sector_hvac_controls.sql",)]
+             for f in ("082_sector_hvac_controls.sql", "160_business_relations.sql")]
 
 
 def _rows() -> list[tuple[str, str, str, str]]:
@@ -76,3 +78,15 @@ def test_industries_belong_to_one_sector():
     for _, _, s, i in ROWS:
         owner.setdefault(i, set()).add(s)
     assert {i: s for i, s in owner.items() if len(s) > 1} == {}
+
+
+def test_integrated_oil_is_not_only_refining():
+    """160 (Morgan 12): Exxon, Chevron and ConocoPhillips file under 2911 with the refiners; the
+    industry said "Refining & marketing". Same ranges; a saved screen's old name still filters."""
+    assert sector_of("2911") == sector_of("5171") == [
+        ("Energy", "Integrated oil, refining & marketing")]
+    assert all(i != "Refining & marketing" for _, _, _, i in ROWS)
+    compiled = compile_screen(Screen(sector_industries=["Refining & marketing", "Beverages"]),
+                              None)
+    assert compiled.params["sector_industries"] == [
+        "Integrated oil, refining & marketing", "Beverages"]

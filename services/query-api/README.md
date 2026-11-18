@@ -322,10 +322,11 @@ recap. Details: [DESIGN.md](DESIGN.md#filing-recap).
 ## Peers
 
 `GET /v1/companies/{id}/peers` (`peers.py`, its docstring is the spec): `require(financials)`
-first, then peers by business (10-K Item 1 similarity and competitors named, built weekly by
-parser-peers, [services/parser](../parser/README.md#peers-by-business)) when the company has a
-profile, else by SIC and size. Each peer says why (`match`); `basis_reason` says why there was no
-business text; a bank gets bank columns. `/peers/check/{candidate}` says whether a company can join
+first, then peers by business (the similarity of a 10-K's Item 1 or a 20-F's Item 4 and
+competitors named, built weekly by parser-peers,
+[services/parser](../parser/README.md#peers-by-business)) when the company has a profile, else by
+SIC and size. A customer, supplier, partner or owner either text names is left out (160). Each peer
+says why (`match`); `basis_reason` says why there was no business text; a bank gets bank columns. `/peers/check/{candidate}` says whether a company can join
 the comps. Scoring, the fallback and what was measured: [DESIGN.md](DESIGN.md#peers).
 
 ## Workspaces (saved work)
@@ -549,9 +550,13 @@ What a user holds, valued only on their own prices, and the decision journal (`p
 migration 021, owner-only, forced RLS, not streamed). Cost is a running average cost; realised gain
 is worked out on each sale; a sale of more than was held that day is refused. A price is the user's
 own: their Connect-your-data close (only with `DATA_CONNECTIONS_KEY`) or one they typed or imported,
-the newer winning, always with its source and day; over 7 days old it is `stale`. Tributary
+the newer winning, always with its source and day; over 7 days old it is `stale`. A sale's price
+is the user's own price of its day (typed), unless they hold a newer one (`price_recorded`). Tributary
 fetches no price for anyone. Funds and ETFs (a symbol that resolves to no company the caller reads
-financials for) are kept by symbol and cost, without a price.
+financials for) are kept by symbol and cost, without a price. Weights are rounded to a tenth of a
+percent by largest remainder, so they add up to 100%; `totals.total_value` is the open holdings on
+the user's prices with an unpriced one at its cost (`unpriced_cost`). The journal lists the newest
+decided first.
 
 Fidelity's export is read by header names; Account Number is dropped as it is read, an account
 label that looks like a number is refused (and the database refuses it too); cash, money-market,
@@ -687,8 +692,10 @@ citations into both filings. A section re-parsed since its diff is `stale: true`
 ### Read for materiality
 
 With `view=reading|ranked` (or `q`, `numbers=new`) a second pass runs at query time (`changes.py`,
-its docstring is the spec): page furniture, split paragraphs, calendar rollovers and figure-only
-rows are hidden and counted; each change gets a period, figures, a score and why. Without them the
+its docstring is the spec): page furniture, split paragraphs, calendar rollovers, figure-only
+rows and a 10-Q's prior-year comparatives (`comparative`: the passage the earlier 10-Q already
+wrote about that period, or one about a year no longer presented) are hidden and counted; each
+change gets a period, figures, a score and why. Without them the
 answer is exactly the stored one. Details and measurements:
 [DESIGN.md](DESIGN.md#read-for-materiality).
 

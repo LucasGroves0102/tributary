@@ -24,7 +24,8 @@ def conn(monkeypatch):
     monkeypatch.setattr(b, "COMMON_SHARE", 0.9)
     with psycopg.connect(DSN) as c, c.transaction(force_rollback=True):
         c.execute("TRUNCATE silver.filing_sections, bronze.filing_documents, gold.business_peers,"
-                  " gold.business_mentions, gold.business_profiles, gold.quarterly_financials,"
+                  " gold.business_mentions, gold.business_relations, gold.business_profiles,"
+                  " gold.quarterly_financials,"
                   " silver.company_aliases, silver.company_ciks, silver.companies CASCADE")
         for key, v in INDEX.items():
             cid = v["company_id"]
@@ -43,16 +44,18 @@ def conn(monkeypatch):
         yield c
 
 
-def store(c, key, v, form="10-K", filed=None):
-    text = (FIX / f"{key}.txt").read_text()
+def store(c, key, v, form="10-K", filed=None, text=None):
+    text = text if text is not None else (FIX / f"{key}.txt").read_text()
     title = "Financial Statements" if key == "mchp" else "Business"
+    section = b.SECTIONS[form]
     c.execute("INSERT INTO bronze.filing_documents (accession_no, cik, form, filed, document_name,"
               " url, content_gzip, content_sha256, size_bytes) VALUES (%s, %s, %s, %s, 'd.htm',"
               " 'u', '\\x00', 'x', 1)", (v["accession_no"], v["company_id"], form,
                                           filed or "2026-02-20"))
     c.execute("INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
-              " parser_version, item, title, text, char_start, char_end) VALUES (%s, '1', 'rust',"
-              " 'x', '1', %s, %s, 1000, %s)", (v["accession_no"], title, text, 1000 + len(text)))
+              " parser_version, item, title, text, char_start, char_end) VALUES (%s, %s, 'rust',"
+              " 'x', %s, %s, %s, 1000, %s)", (v["accession_no"], section, section, title, text,
+                                             1000 + len(text)))
 
 
 def rows(c, sql, *args):
@@ -111,3 +114,44 @@ def test_query_api_reads_them_under_rls(conn):
         assert rows(conn, f"SELECT count(*) FROM gold.{table}")[0][0] == 0, table
     conn.execute("SELECT set_config('app.user_id', '', true)")
     assert rows(conn, "SELECT count(*) FROM gold.business_peers")[0][0] == 0
+
+
+def test_a_20f_filer_is_profiled_from_item_4_and_relations_are_stored(conn):
+    """business-2: a 20-F's Item 4 makes a profile (section '4'); a sentence naming another
+    company outside competition is a relation (Imperial's owner, the real sentence)."""
+    v = {"company_id": "0001046179", "accession_no": "0001046179-26-000001",
+         "name": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD"}
+    conn.execute("INSERT INTO silver.companies (company_id, name, current_cik, sic)"
+                 " VALUES (%s, %s, %s, '3674')", (v["company_id"], v["name"], v["company_id"]))
+    conn.execute("INSERT INTO silver.company_ciks VALUES (%s, %s)", (v["company_id"],) * 2)
+    conn.execute("INSERT INTO gold.quarterly_financials (company_id, metric, period_start,"
+                 " period_end, value, unit, value_source, source_tag, accession_no, filed,"
+                 " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-01-01',"
+                 " '2026-03-31', 1, 'TWD', 'reported', 'x', 'x', '2026-05-01', '{x}', now())",
+                 (v["company_id"],))
+    owner = json.loads((FIX / "relations.json").read_text())["imo"]["text"]
+    text = (FIX / "nvt.txt").read_text() + "\n" + owner.replace(
+        "Exxon Mobil Corporation", "Vertiv Holdings Co")
+    store(conn, "nvt", v, form="20-F", text=text)
+    counts = b.run(conn)
+    assert counts["profiles"] == 9
+    (key,), = rows(conn, "SELECT section_key FROM gold.business_profiles WHERE company_id = %s",
+                   v["company_id"])
+    assert key == "4"
+    vrt = INDEX["vrt"]["company_id"]
+    (section, owns, start, end), = rows(
+        conn, "SELECT section_key, ownership, char_start, char_end FROM gold.business_relations"
+              " WHERE company_id = %s AND named_id = %s", v["company_id"], vrt)
+    assert section == "4" and owns is True
+    assert "owns approximately 69.6 percent" in text[start - 1000:end - 1000]
+    assert counts["relations"] == rows(conn, "SELECT count(*) FROM gold.business_relations")[0][0]
+    # under RLS like the mentions: the text's company at `filings`
+    conn.execute("INSERT INTO authz.user_access (user_id, company_id, tier) VALUES"
+                 " ('u-f', %s, 'filings'), ('u-v', %s, 'filings')", (v["company_id"], vrt))
+    conn.execute("SET LOCAL ROLE query_api")
+    conn.execute("SELECT set_config('app.user_id', 'u-f', true)")
+    assert rows(conn, "SELECT count(*) FROM gold.business_relations WHERE named_id = %s",
+                vrt)[0][0] >= 1
+    conn.execute("SELECT set_config('app.user_id', 'u-v', true)")
+    assert rows(conn, "SELECT count(*) FROM gold.business_relations WHERE named_id = %s",
+                vrt)[0][0] == 0

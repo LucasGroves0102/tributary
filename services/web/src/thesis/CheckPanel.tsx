@@ -277,7 +277,7 @@ function Assumptions({ model, label }: { model: CheckModel; label: (c: string) =
         {s && (
           <span className="muted">
             {" "}· {s.cagr !== null ? `${s.cagr_years}-yr revenue CAGR ${pct(s.cagr)}` : "no growth history"}
-            {s.avg_margin !== null ? ` · ${s.margin_years}-yr avg margin ${pct(s.avg_margin)}` : ""}
+            {s.avg_margin !== null ? ` · ${s.margin_years}-yr typical margin ${pct(s.avg_margin)}` : ""}
             {model.margin_min != null && model.margin_max != null ? ` (range ${pct(model.margin_min)} to ${pct(model.margin_max)})` : ""}
           </span>
         )}

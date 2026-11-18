@@ -281,14 +281,22 @@ def test_cost_value_and_gains_come_from_the_users_own_rows_and_price(conn, token
     hid = buy(c, token, A, shares="10", cost="1000", day="2026-01-05")
     assert c.post(f"/v1/portfolio/holdings/{hid}/lots", headers=token(A), json={
         "shares": "10", "cost_per_share": "200", "bought_on": "2026-03-02"}).status_code == 200
-    assert c.post(f"/v1/portfolio/holdings/{hid}/sells", headers=token(A), json={
-        "shares": "5", "price": "300", "sold_on": "2026-06-01"}).status_code == 200
+    h = holdings(c, token, A)
+    assert h["holdings"][0]["price"] is None and h["weight_basis"] == "cost"
+    assert h["totals"]["value"] is None and h["totals"]["total_value"] == "3000.00"
+    assert h["totals"]["unpriced_cost"] == "3000.00"
+    r = c.post(f"/v1/portfolio/holdings/{hid}/sells", headers=token(A), json={
+        "shares": "5", "price": "300", "sold_on": "2026-06-01"})
+    assert r.status_code == 200 and r.json()["price_recorded"] is True
     h = holdings(c, token, A)
     (n,) = h["holdings"]
     assert (n["shares"], n["cost_basis"], n["average_cost"], n["realised"]) == (
         "15", "2250.00", "150", "750.00")
-    assert n["price"] is None and n["value"] is None and n["weight"] == "1.0000"
-    assert h["weight_basis"] == "cost" and h["totals"]["value"] is None
+    # Morgan 31: the sale's price is the user's own price of that day
+    assert n["price"] == {"value": "300", "on": "2026-06-01", "source": "typed",
+                          "provider": None, "stale": True}
+    assert n["value"] == "4500.00" and n["weight"] == "1.0000"
+    assert h["weight_basis"] == "value" and h["totals"]["total_value"] == "4500.00"
     assert n["next_report"] == {"form": "10-Q", "period_end": "2027-01-25",
                                 "expected_date": "2027-02-25"}
 
@@ -301,11 +309,31 @@ def test_cost_value_and_gains_come_from_the_users_own_rows_and_price(conn, token
     assert (n["value"], n["unrealised"], n["unrealised_pct"]) == ("2400.00", "150.00", "0.0667")
     assert h["weight_basis"] == "value" and h["totals"]["value"] == "2400.00"
 
+    # an earlier sale never replaces a newer price
+    r = c.post(f"/v1/portfolio/holdings/{hid}/sells", headers=token(A), json={
+        "shares": "1", "price": "250", "sold_on": "2026-07-01"})
+    assert r.json()["price_recorded"] is False
+    assert holdings(c, token, A)["holdings"][0]["price"]["value"] == "160"
     c.put(f"/v1/portfolio/holdings/{hid}/price", headers=token(A),
           json={"price": "160", "on": "2026-11-01"})
     assert holdings(c, token, A)["holdings"][0]["price"]["stale"] is True
     assert c.put(f"/v1/portfolio/holdings/{hid}/price", headers=token(A),
                  json={"price": "160", "on": "2026-12-25"}).status_code == 422
+
+
+def test_the_journal_reads_newest_decided_first(conn, token):
+    """Morgan 31: entries written Mar, Sep, then today's note listed Nov 18 2026, Sep 15 2025,
+    Mar 16 2026 (newest written first): by the day each shows, newest first."""
+    c = client(conn)
+    for kind, day in (("bought", "2026-03-16"), ("bought", "2025-09-15"), ("note", "2026-11-12"),
+                      ("note", "2026-03-16")):
+        assert c.post("/v1/portfolio/journal", headers=token(A), json={
+            "company_id": NVDA, "kind": kind, "why": f"{kind} {day}",
+            "decided_on": day}).status_code == 200
+    entries = c.get("/v1/portfolio/journal", headers=token(A)).json()["entries"]
+    assert [(e["decided_on"], e["why"]) for e in entries] == [
+        ("2026-11-12", "note 2026-11-12"), ("2026-03-16", "note 2026-03-16"),
+        ("2026-03-16", "bought 2026-03-16"), ("2025-09-15", "bought 2025-09-15")]
 
 
 def test_a_sale_of_more_than_was_held_is_refused_and_nothing_is_saved(conn, token):

@@ -24,11 +24,11 @@ import { TableScroll } from "../components/TableScroll";
 import { toast } from "../components/Toasts";
 import { day, pct } from "../format";
 import { go, href } from "../route";
-import type { Holding, JournalKind, Portfolio } from "../types";
+import type { Holding, JournalPrompt, Portfolio } from "../types";
 import { ConfirmDelete } from "../workspaces/Actions";
 import { JournalView } from "./JournalView";
 import { NOT_ADVICE } from "./PortfolioPage";
-import { amountOf, cash, gainWords, holdingName, perShare, priceWords, reviewWords, shares, signedPct, today } from "./portfolio";
+import { amountOf, cash, gainWords, holdingName, perShare, priceWords, reviewWords, shares, signedPct, today, weightTitle } from "./portfolio";
 
 export function HoldingView({ token, holding: h, portfolio, onChanged }: {
   token: string;
@@ -38,7 +38,17 @@ export function HoldingView({ token, holding: h, portfolio, onChanged }: {
 }) {
   const directory = useDirectory(token);
   const name = holdingName(h, (id) => directory.label(id));
-  const [prompt, setPrompt] = useState<JournalKind | null>(null);
+  const [prompt, setPrompt] = useState<JournalPrompt | null>(null);
+  // Morgan 31: a sale asks why (the journal's form opens as sold, or trimmed while shares remain, on its day)
+  // and its price becomes the holding's own price of that day (the API's price_recorded)
+  const sold = (s: { shares: string; price: string; on: string; closes: boolean; priced: boolean }) => {
+    setPrompt({
+      kind: s.closes ? "sold" : "trimmed", on: s.on,
+      lead: `You recorded a sale of ${shares(s.shares)} ${Number(s.shares) === 1 ? "share" : "shares"} at ${perShare(s.price, cur)} on ${day(s.on, true)}. Why did you sell? Say it here while it's fresh.`,
+    });
+    if (s.priced) toast({ text: `${perShare(s.price, cur)} on ${day(s.on, true)} is now your price for ${name}.` });
+    onChanged();
+  };
   const [confirm, setConfirm] = useState(false);
   const cur = portfolio.currency;
   const remove = async () => {
@@ -58,7 +68,7 @@ export function HoldingView({ token, holding: h, portfolio, onChanged }: {
         <h1 className="grow">
           {h.company_id ? <a className="plain" href={href({ view: "company", companyId: h.company_id })}>{name}</a> : name}
         </h1>
-        {h.review_due && <button className="btn primary" onClick={() => setPrompt("review")}>Write the review</button>}
+        {h.review_due && <button className="btn primary" onClick={() => setPrompt({ kind: "review" })}>Write the review</button>}
         <MenuButton label="More" items={[
           { label: "Back to the portfolio", onSelect: () => go({ view: "portfolio" }) },
           ...(h.company_id ? [{ label: "Open the company", onSelect: () => go({ view: "company", companyId: h.company_id! }) }] : []),
@@ -86,7 +96,9 @@ export function HoldingView({ token, holding: h, portfolio, onChanged }: {
               v={h.price ? perShare(h.price.value, cur) : "—"} />
             <Row k="Value" v={h.value !== null ? cash(h.value, cur) : "—"} />
             <Row k="Gain" v={h.unrealised !== null ? cash(h.unrealised, cur) : "—"} title={signedPct(h.unrealised_pct) ?? undefined} />
-            <Row k="Weight" v={h.weight !== null ? pct(Number(h.weight)) : "—"} />
+            {/* Morgan 31: by cost wherever it is by cost, as the portfolio's column says */}
+            <Row k={portfolio.weight_basis === "cost" ? "Weight (cost)" : "Weight"} v={h.weight !== null ? pct(Number(h.weight)) : "—"}
+              title={weightTitle(portfolio.weight_basis)} />
           </dl>
         </div>
         {h.unrealised !== null && <p className="small">On your price that's {gainWords(h.unrealised, h.unrealised_pct, cur)}.</p>}
@@ -112,7 +124,7 @@ export function HoldingView({ token, holding: h, portfolio, onChanged }: {
       </Folio>
 
       <Folio name="Sales" line={h.sells.length ? `${h.sells.length} ${h.sells.length === 1 ? "sale" : "sales"}` : "None yet"}>
-        <Sells token={token} h={h} cur={cur} onChanged={onChanged} />
+        <Sells token={token} h={h} cur={cur} onChanged={onChanged} onSold={sold} />
       </Folio>
 
       <Folio name="Journal" line="Why you hold it" aside="Entries are kept as written after 24 hours">
@@ -288,7 +300,10 @@ function Lots({ token, h, cur, onChanged }: { token: string; h: Holding; cur: st
   );
 }
 
-function Sells({ token, h, cur, onChanged }: { token: string; h: Holding; cur: string; onChanged: () => void }) {
+function Sells({ token, h, cur, onChanged, onSold }: {
+  token: string; h: Holding; cur: string; onChanged: () => void;
+  onSold: (s: { shares: string; price: string; on: string; closes: boolean; priced: boolean }) => void;
+}) {
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const remove = async (id: string) => {
@@ -324,16 +339,22 @@ function Sells({ token, h, cur, onChanged }: { token: string; h: Holding; cur: s
       )}
       {error && <p className="err small" role="alert">{error}</p>}
       {h.open && (adding ? (
-        <TradeForm kind="sell" token={token} h={h} onDone={() => {
+        <TradeForm kind="sell" token={token} h={h} onDone={(s) => {
           setAdding(false);
-          onChanged();
+          if (s) onSold(s);
+          else onChanged();
         }} onCancel={() => setAdding(false)} />
       ) : <button className="btn" onClick={() => setAdding(true)}>Record a sale</button>)}
     </>
   );
 }
 
-function TradeForm({ kind, token, h, onDone, onCancel }: { kind: "buy" | "sell"; token: string; h: Holding; onDone: () => void; onCancel: () => void }) {
+function TradeForm({ kind, token, h, onDone, onCancel }: {
+  kind: "buy" | "sell"; token: string; h: Holding;
+  /** a sale says what it was (the journal's prompt); a buy nothing */
+  onDone: (sale?: { shares: string; price: string; on: string; closes: boolean; priced: boolean }) => void;
+  onCancel: () => void;
+}) {
   const [count, setCount] = useState("");
   const [price, setPrice] = useState("");
   const [on, setOn] = useState(today());
@@ -352,7 +373,10 @@ function TradeForm({ kind, token, h, onDone, onCancel }: { kind: "buy" | "sell";
       if (kind === "buy") {
         await addLot(token, h.id, { shares: n, cost_per_share: p, bought_on: on, ...(label.trim() ? { account_label: label.trim() } : {}) });
       } else {
-        await addSell(token, h.id, { shares: n, price: p, sold_on: on });
+        const r = await addSell(token, h.id, { shares: n, price: p, sold_on: on });
+        // only which journal kind to offer: the position itself is the API's
+        onDone({ shares: n, price: p, on, closes: Number(n) >= Number(h.shares), priced: r?.price_recorded === true });
+        return;
       }
       onDone();
     } catch (err) {

@@ -485,6 +485,9 @@ it("as of a past day with no history kept yet: the Overview says so instead of '
   expect($(".asof-today")?.textContent).toBe("Today's, not as it stood on Jun 30, 2025.");
   expect($(".asof-today-k")?.textContent).toBe("Today:");
   expect(paths().some((u) => u.pathname.endsWith("/per-share"))).toBe(false);
+  // Morgan 10: today's revenue chart, but its way to the statements keeps the day
+  const toStatements = [...container.querySelectorAll("a")].find((a) => a.textContent === "The statements");
+  expect(toStatements?.getAttribute("href")).toBe(`#/company/${NVDA}/statements?asof=2025-06-30`);
 });
 
 it("as of a past day, a tab of today's data says so (Peers, Riley, test 10, finding 19)", async () => {
@@ -754,11 +757,11 @@ it("peers: by SIC and size, the Why column says there is no business text and wh
   await render("peers");
   const body = [...container.querySelectorAll("tbody tr:not(.agg)")];
   const why = body[1]!.querySelector("td.why .why-basis")!;
-  expect(why.textContent).toBe("by SIC and size (Nvidia's 10-K Business section is a cross-reference)");
+  expect(why.textContent).toBe("by SIC and size (Nvidia's Business section is a cross-reference)");
   expect(why.getAttribute("title")).toContain("only as a cross-reference to pages elsewhere in the report");
   expect(body[1]!.querySelector("td.why")!.textContent).toContain("same 3-digit SIC group");
   expect(body[0]!.querySelector("td.why")!.textContent).toBe("this company");
-  expect($(".peers-basis")?.textContent).toBe("Nvidia's latest 10-K gives its Business section (Item 1) only as a cross-reference to " +
+  expect($(".peers-basis")?.textContent).toBe("Nvidia's latest annual report gives its Business section only as a cross-reference to " +
     "pages elsewhere in the report, so there is no business text to compare. These peers are by SIC code and size instead.");
   // never one company's quoted line (Intel's "Pages 3-5") under another's name
   expect($(".peers-basis")?.textContent).not.toContain("Pages 3-5");

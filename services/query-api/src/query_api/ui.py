@@ -526,8 +526,14 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         business = store.business_peers(user_id, company_id)
         profile = business["profile"]
         matches: dict[str, dict] = {}
+        # business relations either way (peers.py docstring, Relations): which pairs, and whether
+        # one holds a majority of the other
+        related: dict[str, bool] = {}
         if profile is not None:
             mentions = business["mentions"]
+            for r in business.get("relations") or []:
+                other = r["named_id"] if r["company_id"] == company_id else r["company_id"]
+                related[other] = related.get(other, False) or bool(r["ownership"])
             ids = sorted({p["peer_id"] for p in business["peers"]}
                          | {m["named_id"] for m in mentions if m["company_id"] == company_id}
                          | {m["company_id"] for m in mentions if m["named_id"] == company_id})
@@ -548,9 +554,12 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                                         for m in mentions),
                     names_target=any(m["company_id"] == cid for m in mentions),
                     revenue=f["revenue"] if can_read else None, readable=can_read,
-                    size_unknown=can_read and bool(f.get("revenue_size_unknown"))))
+                    size_unknown=can_read and bool(f.get("revenue_size_unknown")),
+                    related=cid in related, owned=related.get(cid, False),
+                    filer_category=f.get("filer_category")))
             target_sic = target[0]["sic"]
-            ranked_business = rank_peers(target_sic, revenue, candidates)[:limit]
+            ranked_business = rank_peers(target_sic, revenue, candidates,
+                                         target[0].get("filer_category"))[:limit]
             for c in ranked_business:
                 f = facts[c.company_id]
                 matches[c.company_id] = {
@@ -578,7 +587,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             if matches and floor is not None and target_sic:
                 big = [p for p in store.size_peers(user_id, company_id, target_sic, granted,
                                                    revenue, floor, SIZE_PEER_MAX + len(matches))
-                       if p["company_id"] not in matches][:SIZE_PEER_MAX]
+                       if p["company_id"] not in matches
+                       and not related.get(p["company_id"], False)][:SIZE_PEER_MAX]
                 more = store.peer_facts(user_id, [p["company_id"] for p in big], granted) \
                     if big else {}
                 for p in big:
@@ -600,6 +610,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             ranked = store.peers(user_id, company_id, granted, revenue, limit,
                                  granted_only=only_readable)
             for p in ranked:
+                if related.get(p["company_id"]):
+                    continue  # its parent or majority-owned subsidiary (peers.py, Relations)
                 matches[p["company_id"]] = {
                     "sic_level": p["sic_level"], "same_filer_category": p["same_filer_category"],
                     "revenue_band": band_label(p["revenue_band"]),
@@ -611,9 +623,11 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         by_id = {r["company_id"]: r for r in rows}
         reason = None
         if basis == "business":
-            method = ("By business: how alike the two 10-Ks' Business sections (Item 1) are, "
-                      "competitors either one names there, then SIC division and TTM revenue size "
-                      "(companies you can read) as weak signals."
+            method = ("By business: how alike the two annual reports' Business sections are (a "
+                      "10-K's Item 1, a 20-F's Item 4), competitors either one names there, then "
+                      "SIC division and TTM revenue size (companies you can read) as weak signals; "
+                      "a company either one names as a customer, supplier, partner or owner is "
+                      "left out."
                       + (" Then large companies of the same SIC code, with at least a quarter of "
                          "its revenue, that have no Business section to compare."
                          if any(m.get("size_peer") for m in matches.values()) else ""))
@@ -700,7 +714,8 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
 
 
 def _cite(m: dict | None) -> dict | None:
-    """A competitor mention as a citation: the sentence's place in the 10-K's Item 1."""
+    """A competitor mention as a citation: the sentence's place in the annual report's business
+    section (a 10-K's Item 1, a 20-F's Item 4)."""
     if m is None:
         return None
     return {"accession_no": m["accession_no"], "section_key": m["section_key"],

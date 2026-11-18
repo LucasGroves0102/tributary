@@ -17,19 +17,24 @@ Rules (README "Portfolio"; test_portfolio_maths.py):
   fetched for itself or another user's. A price older than STALE_AFTER_DAYS is `stale`.
 - Weights: shares of the open holdings' total market value when every open holding has a price,
   else of their total cost basis (`weight_basis` says which). A not-covered position (an ETF or a
-  fund) has no price, so a portfolio holding one is weighted by cost.
+  fund) has no price, so a portfolio holding one is weighted by cost. Each weight is rounded to
+  WEIGHT_STEP (a tenth of a percent, what the app shows) by largest remainder, so they add up to
+  exactly 100% (Morgan 32: 52.55% and 47.45% read 52.5% and 47.4%).
+- A sale's price is the user's own price of its day (query_api/portfolio.py records it as typed
+  unless a newer one is held): it is what they said a share fetched.
 - Money is rounded to cents only on output (ROUND_HALF_EVEN); shares and prices are kept as given.
 """
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
-from decimal import ROUND_HALF_EVEN, Decimal
+from decimal import ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from typing import Any
 
 STALE_AFTER_DAYS = 7
 METHOD = "average_cost"
 CENT = Decimal("0.01")
+WEIGHT_STEP = Decimal("0.001")  # a weight's precision: a tenth of a percent
 ZERO = Decimal(0)
 # a fraction of a share left after a sale (a broker's rounding) still reads as closed
 DUST = Decimal("0.000001")
@@ -125,8 +130,20 @@ def weights(values: Iterable[tuple[str, Decimal, Decimal | None]]
     total = sum(((v if by_value else c) or ZERO for _, c, v in rows), ZERO)
     if total <= 0:
         return ("value" if by_value else "cost"), {k: None for k, _, _ in rows}
-    return ("value" if by_value else "cost"), {
-        k: ((v if by_value else c) or ZERO) / total for k, c, v in rows}
+    raw = {k: ((v if by_value else c) or ZERO) / total for k, c, v in rows}
+    return ("value" if by_value else "cost"), largest_remainder(raw)
+
+
+def largest_remainder(shares: dict[str, Decimal]) -> dict[str, Decimal]:
+    """Shares that add up to 1, each rounded to WEIGHT_STEP: every one rounded down, then a step
+    more to the largest remainders (ties: the larger share, then the key) until they do."""
+    down = {k: (s / WEIGHT_STEP).to_integral_value(rounding=ROUND_FLOOR) * WEIGHT_STEP
+            for k, s in shares.items()}
+    left = int(((1 - sum(down.values(), ZERO)) / WEIGHT_STEP).to_integral_value())
+    order = sorted(shares, key=lambda k: (-(shares[k] - down[k]), -shares[k], k))
+    for k in order[:max(0, left)]:
+        down[k] += WEIGHT_STEP
+    return down
 
 
 def ratio(d: Decimal | None) -> str | None:

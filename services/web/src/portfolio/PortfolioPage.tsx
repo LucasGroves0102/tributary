@@ -100,6 +100,17 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
           <Folio name="Holdings" lead
             line={`In ${data.currency === "USD" ? "US dollars" : data.currency}, on your own prices`}
             aside={`Cost is the average cost of your buys`}>
+            {t.total_value != null && (
+              // Morgan 33: the whole portfolio at the top, on the user's own prices, an unpriced holding at its cost
+              <p className="portfolio-total">
+                <span className="portfolio-total-label">Portfolio value</span> <b className="portfolio-total-figure">{cash(t.total_value)}</b>{" "}
+                <span className="faint small">
+                  {Number(t.unpriced_cost ?? 0) > 0
+                    ? `on your own prices, with ${open.length - t.priced === 1 ? "the holding" : `the ${open.length - t.priced} holdings`} you gave no price at what ${open.length - t.priced === 1 ? "it" : "they"} cost (${cash(t.unpriced_cost!)})`
+                    : "on your own prices"}
+                </span>
+              </p>
+            )}
             <p className="story portfolio-story">
               You hold{" "}
               {companies > 0 && <b>{companies} {companies === 1 ? "company" : "companies"}</b>}
@@ -108,7 +119,7 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
               {open.length === 0 && <b>nothing open</b>}, bought for <b>{cash(t.cost_basis)}</b>.
               {t.value !== null && (
                 <>
-                  {" "}On your own prices {t.priced < open.length ? `${t.priced} of them are` : "they're"} worth <b>{cash(t.value)}</b>
+                  {" "}On your own prices {t.priced < open.length ? `${t.priced} of them ${t.priced === 1 ? "is" : "are"}` : "they're"} worth <b>{cash(t.value)}</b>
                   {t.unrealised !== null && <>, {gainWords(t.unrealised)}{t.priced < open.length ? " on those" : ""}</>}.
                 </>
               )}

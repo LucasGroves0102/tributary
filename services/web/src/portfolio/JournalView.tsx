@@ -12,7 +12,7 @@ import { Choices } from "../components/Choices";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day, localTime } from "../format";
 import { href } from "../route";
-import type { Holding, JournalEntry, JournalKind, RedLine } from "../types";
+import type { Holding, JournalEntry, JournalKind, JournalPrompt, RedLine } from "../types";
 import { ConfirmDelete } from "../workspaces/Actions";
 import { CONFIDENCE_WORDS, editWords, KIND_WORDS, today, withCorrections } from "./portfolio";
 
@@ -43,17 +43,17 @@ export function JournalView({ token, subject, reviewDue, prompt, onWritten, moni
   subject: Subject;
   /** a review is due: the form offers to write it */
   reviewDue: boolean;
-  /** open the form now, as this kind (the holding page's "Write the review") */
-  prompt?: JournalKind | null;
+  /** open the form now, as this kind (the holding page's "Write the review", a sale just recorded) */
+  prompt?: JournalPrompt | null;
   onWritten: () => void;
   /** where this company's red lines are set: its analysis's Monitor step, or New analysis */
   monitor?: string;
 }) {
   const [attempt, setAttempt] = useState(0);
   const load = useJournal(token, subject, 100, attempt);
-  const [form, setForm] = useState<{ kind: JournalKind; corrects?: JournalEntry; edit?: JournalEntry } | null>(null);
+  const [form, setForm] = useState<{ kind: JournalKind; corrects?: JournalEntry; edit?: JournalEntry; on?: string; lead?: string } | null>(null);
   useEffect(() => {
-    if (prompt) setForm({ kind: prompt });
+    if (prompt) setForm({ kind: prompt.kind, on: prompt.on, lead: prompt.lead });
   }, [prompt]);
   const reload = () => {
     setAttempt((n) => n + 1);
@@ -168,13 +168,13 @@ function EntryForm({ token, subject, start, onCancel, onSaved, monitor }: {
   token: string;
   subject: Subject;
   monitor?: string;
-  start: { kind: JournalKind; corrects?: JournalEntry; edit?: JournalEntry };
+  start: { kind: JournalKind; corrects?: JournalEntry; edit?: JournalEntry; on?: string; lead?: string };
   onCancel: () => void;
   onSaved: () => void;
 }) {
   const base = start.edit ?? start.corrects;
   const [kind, setKind] = useState<JournalKind>(start.kind);
-  const [decided, setDecided] = useState(start.edit?.decided_on ?? today());
+  const [decided, setDecided] = useState(start.edit?.decided_on ?? start.on ?? today());
   const [why, setWhy] = useState(base?.why ?? "");
   const [sell, setSell] = useState(base?.sell_rules ?? "");
   const [confidence, setConfidence] = useState<string>(base?.confidence ? String(base.confidence) : "");
@@ -222,6 +222,7 @@ function EntryForm({ token, subject, start, onCancel, onSaved, monitor }: {
   return (
     <form className="pf-form entry-form" onSubmit={(e) => void submit(e)} aria-label={title}>
       <h3>{title}</h3>
+      {start.lead && <p className="small entry-lead" role="status">{start.lead}</p>}
       {start.corrects && <p className="faint small">The entry stays as written; this one goes beside it.</p>}
       <div className="pf-fields">
         <label className="pf-field">
@@ -241,7 +242,7 @@ function EntryForm({ token, subject, start, onCancel, onSaved, monitor }: {
         </div>
         <label className="pf-field full">
           <span>Why</span>
-          <textarea className="field" rows={4} maxLength={4000} value={why} onChange={(e) => setWhy(e.target.value)}
+          <textarea className="field" rows={4} maxLength={4000} value={why} onChange={(e) => setWhy(e.target.value)} autoFocus={!!start.lead}
             placeholder={kind === "review" ? "What the report said, and whether the reasons still hold" : "Your reasons, in your words"} />
         </label>
         <label className="pf-field full">

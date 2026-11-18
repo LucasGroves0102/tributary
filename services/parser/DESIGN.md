@@ -149,9 +149,10 @@ GIN index grows to ~0.5-0.7x under incremental inserts, so REINDEX it after a bu
 ## Peers by business
 
 `parser-peers`, a weekly batch job in the same image (`filing_parser/business.py`, its docstring is
-the spec; `ALGORITHM` stored with each profile; migration 047), compares what companies say they
-do. For every company with financials it
-reads Item 1 (Business) of its latest 10-K from the last three years that has a usable one (at
+the spec; `ALGORITHM` stored with each profile; migrations 047, 160), compares what companies say
+they do. For every company with financials it
+reads Item 1 (Business) of its latest 10-K, or Item 4 of its latest 20-F (business-2), from the last
+three years that has a usable one (at
 least 3,000 characters and not mis-parsed: Intel's, GE's and McDonald's are cross-references, so no profile),
 turns the first 80,000 characters into words and two-word phrases (stop words, places and
 human-capital words removed, simple singulars), and weights them TF-IDF: terms in 20 to 25% of the
@@ -176,6 +177,33 @@ How the settings were chosen: precision at 10 against hand-written peer lists fo
 A minimum document frequency of 20 scored 47 of 90, 10 scored 45, 5 scored 44; 250 vs 400 terms and
 40,000 vs 80,000 characters moved it by at most one. XOM scores 1: Exxon's Item 1 is 6,600
 characters, mostly pointers to the rest of its 10-K.
+
+**business-2** (Morgan, test 11, findings 11-14: customers, suppliers and subsidiaries as peers;
+no 20-F filer ever a peer). Measured on hermes' texts of 2026-11-18 (4,900 10-K Item 1s and 1,015
+20-F Item 4s, dumped once, read-only) run locally through the Query API's ranking, 45 targets;
+hits at 10 against hand-written competitor sets for 18 of them: 82 of 180 before, 106 after.
+- 20-F Item 4 (stopping at its regulation part): TSMC, Trip.com, Eni, YPF, MakeMyTrip, AB InBev
+  join lists; without the cut Trip.com's peers were Chinese issuers sharing PRC regulation words.
+- Competitor lists and runs (bullets, ";", page breaks, abbreviations): mentions 4,431 -> 6,260.
+  NVIDIA named none before (its competitors are all in bullets); now AMD, Intel, Broadcom, Qualcomm,
+  Marvell, Arista, Cisco, HPE and more. Capitalised names: "natural gas services" no longer names
+  Natural Gas Services Group.
+- Relations (32,456): in the 45 top 10s they drop 17 candidates, each a relation the filings state:
+  Super Micro (NVIDIA), Imperial Oil (69.6% Exxon's) and Sasol (an ExxonMobil joint venture's buyer),
+  Southwest (Booking: sells through "Expedia, Priceline"), Coca-Cola FEMSA, Andina and Monster (Coca-
+  Cola's bottlers and distribution partner), Micron and GlobalFoundries (Qualcomm's suppliers),
+  Gilead (J&J's partner), DaVita (sold a unit to UnitedHealth), RTX and Hexcel (Boeing's
+  suppliers), Titan (Deere's), Comcast (Disney's distributor), PVH (Nike's licensee). The precision
+  rules came from reading the first pass's 33 drops: executive biographies, deals (acquisitions,
+  mergers, proxies, repurchases), bare names in tables and the competitor runs above were false.
+- Cost: 142 s, peak 382 MB (79 s, 406 MB before), 5,915 profiles, 354,900 peer rows.
+Lists before and after (top 10, then the size fallback; * named by the target, ~ names it):
+NVDA AMD~ QCOM SMCI AVGO MU MRVL HPE~ ANET~ CRWV MSFT -> AMD* QCOM* MRVL* HPE* AVGO* ANET* CSCO*
+MU IBM INTC*. XOM IMO CVX MPC PBF APD PARR~ CVI SUNC ENB LIN +BP PSX VLO EQNR -> CVX YPF MPC E APD
+PBF CVI LIN SLB OKE +BP PSX VLO. BKNG LUV MAR ALK TRIP JBLU ABNB LIND SABR NAVN H +EXPE -> MMYT MAR~
+TCOM TOUR YTRA ALK TRVG~ SABR TRIP VIK +EXPE. KO KDP* PEP~ COKE~ MNST FIZZ~ PRMB CELH~ BALL SAM TAP
++DEO -> PEP* KDP* COKE~ FMX~ BUD* ABEV~ FIZZ~ CCU PRMB CELH~ +DEO. JPM unchanged: PNC BAC MS USB COF
+HBAN WFC TFC KEY CFG +C. TSM (no profile before) -> UMC TSEM ATOM ASX GSIT NXPI AMKR QUIK AMBQ STM.
 
 ## Catch-up (migration 071)
 

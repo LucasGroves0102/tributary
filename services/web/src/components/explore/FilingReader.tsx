@@ -555,7 +555,7 @@ function SideBySide({ diff, companyId, basis, form, onBasis }: {
 }) {
   const c = diff.compared_to;
   const m = diff.material;
-  const hidden = m ? m.hidden.calendar + m.hidden.resplit + m.hidden.figures_only + m.hidden.minor : 0;
+  const hidden = m ? m.hidden.calendar + m.hidden.resplit + m.hidden.figures_only + m.hidden.minor + (m.hidden.comparative ?? 0) : 0;
   return (
     <div className="sbs-wrap">
       <div className="row wrap">

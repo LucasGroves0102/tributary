@@ -1330,6 +1330,21 @@ def test_business_peers_need_filings_on_both_companies(client, token):
     assert free["basis"] == "sic" and free["business"] is None
 
 
+def test_business_relations_read_like_the_text_they_come_from(client, token):
+    """160: a relation counts only when the caller reads the text that states it. B's text says
+    A holds a majority of it, but t-pro can't read B's filings: B stays. A's own text says so:
+    B is no peer, by business or by SIC."""
+    business_rows(client.app_conn)
+    owns = ("INSERT INTO gold.business_relations (company_id, named_id, accession_no,"
+            " section_key, char_start, char_end, ownership) VALUES (%s, %s, %s, '1', 20, 90, true)")
+    client.app_conn.execute(owns, (B, A, f"{B}-26-000002"))
+    body = client.get(f"/v1/companies/{A}/peers", headers=token("t-pro")).json()
+    assert [p["company_id"] for p in body["peers"]] == [B]
+    client.app_conn.execute(owns, (A, B, f"{A}-26-000002"))
+    body = client.get(f"/v1/companies/{A}/peers", headers=token("t-pro")).json()
+    assert B not in [p["company_id"] for p in body["peers"]]
+
+
 def test_sectors_co_registrants_and_peer_check_run_as_query_api(client, token):
     """046's view and 047's function are public metadata the query_api role can read."""
     r = client.get("/v1/sectors", headers=token("t-nobody"))

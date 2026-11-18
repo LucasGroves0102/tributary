@@ -297,7 +297,8 @@ describe("each default explained in one line", () => {
     expect([quartersLabel(1), quartersLabel(2), quartersLabel(3)]).toEqual(["Q1", "H1", "Q1–Q3"]);
     expect([remainderLabel(1), remainderLabel(2), remainderLabel(3)]).toEqual(["Q2–Q4", "H2", "Q4"]);
     expect(statLabel(0.081, 5, "CAGR")).toBe("5-yr CAGR 8.1%");
-    expect(statLabel(null, 0, "avg")).toBe("no margin history");
+    expect(statLabel(null, 0, "median")).toBe("no margin history");
+    expect(statLabel(0.299, 5, "median")).toBe("5-yr median 29.9%");
     expect(parsePercent(" 12.5% ", [-100, 1000])).toBe(12.5);
   });
 });

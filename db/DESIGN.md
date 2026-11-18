@@ -368,7 +368,11 @@ Item 1 text: `gold.business_profiles`, `gold.business_peers` (cosine similarity,
 `gold.business_mentions` (competitors named, with the sentence's offsets), all under RLS at
 `filings` (a peer row needs both companies readable), and `silver.co_registrants()` (SECURITY
 DEFINER: query_api still reads no `bronze.filings`), companies filing one combined 10-K (PG&E Corp
-and Pacific Gas & Electric).
+and Pacific Gas & Electric). `160_business_relations.sql` (Morgan 11-14): `gold.business_relations`,
+the companies a business section names outside competition (customers, suppliers, partners,
+owners, with `ownership` when one holds a majority of the other), RLS like the mentions, which
+query_api/peers.py keeps out of the peers; and Exxon's industry, 2900-2999 and 5170-5179, reads
+"Integrated oil, refining & marketing" (the screener maps a saved screen's old name).
 
 ### 048_bank_metrics.sql
 

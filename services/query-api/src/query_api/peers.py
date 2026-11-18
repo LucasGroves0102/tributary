@@ -1,14 +1,32 @@
 """Peers by business: how /v1/companies/{id}/peers ranks candidates (the spec; README "Peers").
 
 Candidates come from what parser-peers stores (services/parser filing_parser/business.py,
-migration 047), read under RLS (`filings` on both companies, since they derive from Item 1 text):
+migrations 047 and 160), read under RLS (`filings` on both companies, since they derive from the
+filings' text). A profile reads an annual report's business section: a 10-K's Item 1 (Business) or,
+since business-2, a 20-F's Item 4 (Information on the Company), so foreign filers (TSMC, Trip.com)
+are peers too.
 
-* `similarity`: cosine similarity of the two companies' latest 10-K Item 1 (Business) term vectors,
-  0 to 1, with the shared terms that add the most (`terms`);
-* `named_by_target`: the company's own Item 1 names this candidate in a sentence about
-  competition; `names_target`: the candidate's Item 1 names the company.
+* `similarity`: cosine similarity of the two companies' business-section term vectors, 0 to 1,
+  with the shared terms that add the most (`terms`);
+* `named_by_target`: the company's own business section names this candidate in a sentence about
+  competition (or the list such a sentence introduces); `names_target`: the candidate's names the
+  company.
 
 Score = similarity x division x size + NAMED (named by the target) + NAMES (names the target).
+NAMED was 0.05 until business-2: 0.08 puts a named competitor the text can't compare (Intel, whose
+Item 1 is a cross-reference) beside the similar ones (measured below, Relations).
+
+Relations (business-2, Morgan 11-14): a company either text names outside competition is a
+customer, supplier, partner, distributor or owner, not a peer (Super Micro builds on NVIDIA's
+platforms, Southwest sells through "Expedia, Priceline", Coca-Cola's bottlers, Boeing's suppliers;
+business.py spec 6 says which sentences count). `not_a_peer` drops it unless either names the
+other as a competitor or they share a 4-digit SIC (TSMC and Micron supply NVIDIA and are
+semiconductor companies too), and always when the sentence says one holds a majority of the other
+(Imperial Oil, 69.6% Exxon's). The size fallback drops the latter too. Measured on hermes' texts
+of 2026-11-18 run locally, 45 targets: the rule drops 17 top-10 candidates, each a relation the
+filings state (above, plus Monster, Titan for Deere, Hexcel and RTX for Boeing, Micron and
+GlobalFoundries for Qualcomm); against hand-written competitor sets for 18 of them (README
+"Peers") the top 10 holds 106 of 180 (82 before business-2).
 
 * division (SIC as a weak signal): the SEC's SIC division (manufacturing, retail, finance,
   services...) is the one level of SIC that separates a maker from its customers reliably (Vertiv's
@@ -23,6 +41,12 @@ Score = similarity x division x size + NAMED (named by the target) + NAMES (name
   revenue is in another currency (056) has an unknown size, not a small one: x1, as when the
   target's own revenue isn't in dollars (057; Tributary converts no currency), and so does one
   whose revenue reads not meaningful (083: a trading venue's gross sales of the assets it trades).
+  Since business-2 such a size (or an unreadable candidate's) is read from the SEC filer
+  categories, public float bands in dollars whatever a company reports in (`unknown_size`): the
+  same category as the target's x SIZE_UNKNOWN (0.83, the median size factor of the top 10s whose
+  size counts, 45 targets), each category apart as a 10x gap (x0.77, x0.63). At x1 every 20-F
+  filer reporting in its own currency outranked same-sized dollar peers (Tuniu and Yatra, both
+  non-accelerated, topped Booking's list). x1 still when the target's own size is unknown.
 
 Size floor (Riley, test 6, #27): a candidate whose size counts needs TTM revenue of at least
 SIZE_MIN_SHARE (2%) of the target's, the readable candidate with no current revenue counting as the
@@ -47,21 +71,23 @@ and STMicro; Lilly AstraZeneca; Coca-Cola Diageo; Duke Con Edison; American Towe
 Equinix and Weyerhaeuser); NVIDIA and every target under $5B none. Goldman Sachs files under
 6211, not JPMorgan's 6021, and has a profile: it isn't one (14th by business).
 
-No text on file for the company (no 10-K Item 1 in the last three years, or the caller can't read
-its filings): SIC and size, as before F4 (`basis` "sic"). Blank-check shells (SIC 6770) are never
-suggested for an operating company. The answer says what made each one similar (`why`), in words
-the web app shows as they are.
+No text on file for the company (no 10-K Item 1 or 20-F Item 4 in the last three years, or the
+caller can't read its filings): SIC and size, as before F4 (`basis` "sic"). Blank-check shells
+(SIC 6770) are never suggested for an operating company. The answer says what made each one
+similar (`why`), in words the web app shows as they are.
 
-Why SIC and size (`basis_reason`, `fallback_reason`), from the company's latest 10-K stored in the
-last TEXT_MAX_AGE_DAYS and its Item 1 as parsed (parser-peers' own test, business.py's spec):
+Why SIC and size (`basis_reason`, `fallback_reason`), from the company's latest annual report (10-K
+or 20-F) stored in the last TEXT_MAX_AGE_DAYS and its business section as parsed (parser-peers' own
+test, business.py's spec):
 * `filings_access`: the caller's plan doesn't include this company's filings text;
-* `no_annual_report`: no 10-K stored from the last three years (a 20-F filer, or none yet);
-* `no_business_section`: the 10-K is stored but has no Item 1, or one titled as financial
-  statements (a mis-parse): Citigroup's 10-K follows its annual report's own layout, with the
-  form's items only in a cross-reference index, so the parser finds no Item heading at all;
-* `cross_reference`: Item 1 is shorter than TEXT_MIN_CHARS: a pointer to pages elsewhere in the
-  report ("Item 1. Business: Pages 3-5": Intel, General Electric, McDonald's), not text to compare;
-* `not_profiled`: a usable Item 1 the weekly parser-peers job hasn't read yet;
+* `no_annual_report`: no 10-K or 20-F stored from the last three years (a 40-F filer, or none yet);
+* `no_business_section`: the report is stored but has no business section, or one titled as
+  financial statements (a mis-parse): Citigroup's 10-K follows its annual report's own layout,
+  with the form's items only in a cross-reference index, so the parser finds no Item heading;
+* `cross_reference`: the section is shorter than TEXT_MIN_CHARS: a pointer to pages elsewhere in
+  the report ("Item 1. Business: Pages 3-5": Intel, General Electric, McDonald's; TotalEnergies'
+  Item 4), not text to compare;
+* `not_profiled`: a usable section the weekly parser-peers job hasn't read yet;
 * `no_close_peers`: a profile, but no stored neighbour or named competitor is a company here.
 """
 
@@ -71,10 +97,13 @@ import math
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-NAMED = 0.05
+NAMED = 0.08  # 0.05 before business-2 (README "Peers": measured on 45 targets)
 NAMES = 0.03
 SIZE_SLOPE = 0.3
 SIZE_FLOOR = Decimal(10_000_000)
+# a candidate whose size doesn't count, beside a target whose does (module docstring)
+SIZE_UNKNOWN = 0.83
+FILER_RANK = {"non_accelerated": 0, "accelerated": 1, "large_accelerated": 2}
 SIZE_MIN_SHARE = Decimal("0.02")  # a peer's revenue against the target's (docstring, Size floor)
 # the size fallback (docstring)
 SIZE_PEER_SHARE = Decimal("0.25")
@@ -83,8 +112,8 @@ SIZE_PEER_MAX = 5
 DIVISION = {4: 1.15, 3: 1.10, 2: 1.10, 1: 1.0, 0: 0.80}
 NO_SIC = 0.90
 SHELL = "6770"
-# parser-peers' document rule (services/parser filing_parser/business.py MAX_AGE_DAYS, MIN_CHARS;
-# test_peers keeps them equal)
+# parser-peers' document rule (services/parser filing_parser/business.py MAX_AGE_DAYS, MIN_CHARS,
+# SECTIONS; test_peers keeps them equal)
 TEXT_MAX_AGE_DAYS = 1100
 TEXT_MIN_CHARS = 3_000
 FALLBACK_REASONS = ("filings_access", "no_annual_report", "no_business_section",
@@ -93,16 +122,16 @@ FALLBACK_REASONS = ("filings_access", "no_annual_report", "no_business_section",
 FALLBACK_METHOD = {
     "filings_access": "business descriptions are part of filings text, which your plan doesn't "
                       "include for this company.",
-    "no_annual_report": "this company has no 10-K on file from the last three years, so there is "
-                        "no Business section to compare.",
-    "no_business_section": "this company's latest 10-K has no Business section (Item 1) to "
-                           "compare: the report follows its own layout, with the form's items "
-                           "only in a cross-reference index.",
-    "cross_reference": "this company's latest 10-K gives its Business section (Item 1) as a "
+    "no_annual_report": "this company has no 10-K or 20-F on file from the last three years, so "
+                        "there is no Business section to compare.",
+    "no_business_section": "this company's latest annual report has no Business section (a 10-K's "
+                           "Item 1, a 20-F's Item 4) to compare: the report follows its own "
+                           "layout, with the form's items only in a cross-reference index.",
+    "cross_reference": "this company's latest annual report gives its Business section as a "
                        "cross-reference to pages elsewhere in the report, so there is no business "
                        "text to compare.",
-    "not_profiled": "this company's latest 10-K Business section hasn't been read for peers yet "
-                    "(new 10-Ks are read weekly).",
+    "not_profiled": "this company's latest Business section hasn't been read for peers yet "
+                    "(new annual reports are read weekly).",
     "no_close_peers": "no other company's Business section reads close to this one's, and none "
                       "is named as a competitor.",
 }
@@ -133,9 +162,24 @@ def sic_match(a: str | None, b: str | None) -> int | None:
     return 1 if division(a) == division(b) else 0
 
 
-def size_factor(target: Decimal | None, peer: Decimal | None, readable: bool) -> float:
-    if target is None or not readable:
+def unknown_size(target_filer: str | None, filer: str | None) -> float:
+    """The size factor of a candidate whose revenue doesn't count (module docstring): by the gap
+    between the two SEC filer categories (public float bands, in dollars whatever currency a
+    company reports in) as if each step were 10x; SIZE_UNKNOWN in the same one or unknown."""
+    a, b = FILER_RANK.get(target_filer or ""), FILER_RANK.get(filer or "")
+    if a is None or b is None or a == b:
+        return SIZE_UNKNOWN
+    return 1 / (1 + SIZE_SLOPE * abs(a - b))
+
+
+def size_factor(target: Decimal | None, peer: Decimal | None, readable: bool,
+                unknown: float = SIZE_UNKNOWN) -> float:
+    """1 when the target's own size is unknown (every candidate alike); `unknown` (unknown_size)
+    when only the candidate's is (module docstring)."""
+    if target is None:
         return 1.0
+    if not readable:
+        return unknown
     ratio = max(peer or SIZE_FLOOR, SIZE_FLOOR) / max(target, SIZE_FLOOR)
     return 1 / (1 + SIZE_SLOPE * abs(math.log10(ratio)))
 
@@ -168,13 +212,18 @@ class Candidate:
     # its revenue is in another currency (057) or not meaningful (083): its size is unknown, not
     # the $10M floor
     size_unknown: bool = False
+    # either text names the other outside competition (a customer, supplier, partner: business.py
+    # spec 6), and whether that sentence says one holds a majority of the other
+    related: bool = False
+    owned: bool = False
+    filer_category: str | None = None  # the SEC's (gold.filer_category): public metadata
     score: float = 0.0
 
 
 def rank(target_sic: str | None, target_revenue: Decimal | None,
-         candidates: list[Candidate]) -> list[Candidate]:
+         candidates: list[Candidate], target_filer: str | None = None) -> list[Candidate]:
     """Scored, best first (ties by company id). Shells are dropped for a company that isn't one,
-    and candidates under the size floor."""
+    and candidates under the size floor or that are business relations (not_a_peer)."""
     out = []
     for c in candidates:
         if c.sic == SHELL and target_sic != SHELL:
@@ -183,11 +232,24 @@ def rank(target_sic: str | None, target_revenue: Decimal | None,
         if too_small(target_revenue, c.revenue, sized):
             continue
         match = sic_match(target_sic, c.sic)
+        if not_a_peer(c, match):
+            continue
         div = NO_SIC if match is None else DIVISION[match]
-        c.score = (c.similarity * div * size_factor(target_revenue, c.revenue, sized)
+        size = size_factor(target_revenue, c.revenue, sized,
+                           unknown_size(target_filer, c.filer_category))
+        c.score = (c.similarity * div * size
                    + (NAMED if c.named_by_target else 0.0) + (NAMES if c.names_target else 0.0))
         out.append(c)
     return sorted(out, key=lambda c: (-c.score, c.company_id))
+
+
+def not_a_peer(c: Candidate, match: int | None) -> bool:
+    """A business relation, not a competitor (module docstring, Relations): one holds a majority
+    of the other, or one names the other outside competition while neither names the other as a
+    competitor and they don't share a 4-digit SIC."""
+    if c.owned:
+        return True
+    return c.related and not (c.named_by_target or c.names_target) and match != 4
 
 
 def fallback_reason(profile: bool, can_read_filings: bool, text: dict | None) -> str:

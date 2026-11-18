@@ -5,7 +5,8 @@ import { DEFAULT_PIN_SECTION, THESIS_SECTIONS, type PinTarget } from "./project"
 /** What a project offers its steps: pin a block (built when the user picks where, e.g. after
  * saving a chart) into the project's thesis, and the thesis's pillars to choose from. */
 export interface Pinning {
-  pin: (target: PinTarget, make: () => Promise<string>, what: string) => Promise<void>;
+  /** where it went, in words ("Core thesis"), once pinned; null when it couldn't be (the toast says why) */
+  pin: (target: PinTarget, make: () => Promise<string>, what: string) => Promise<string | null>;
   /** the thesis's pillars now (its Pillars sub-headings), read when the menu opens */
   pillars: () => string[];
 }
@@ -42,6 +43,15 @@ function PinIcon() {
   );
 }
 
+/** A tick: this button's evidence is in the thesis. */
+function PinnedIcon() {
+  return (
+    <svg className="pin-icon" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+      <path fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M3 8.5l3.2 3.2L13 4.8" />
+    </svg>
+  );
+}
+
 /** "📌 Add to thesis": a small menu of where in the thesis (each pillar and a new one first: the default),
  * then the project pins the evidence there. Keyboard: Enter opens with Pillars focused,
  * arrows move, Escape closes. Hidden outside a project. */
@@ -58,6 +68,8 @@ export function PinButton({ make, what, label = "Add to thesis", compact = false
   const id = useId();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // where this button last pinned its evidence (Morgan 30: picking "Core thesis" left the button as it was)
+  const [pinned, setPinned] = useState<string | null>(null);
   const menu = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
 
@@ -76,7 +88,8 @@ export function PinButton({ make, what, label = "Add to thesis", compact = false
     setOpen(false);
     setBusy(true);
     try {
-      await ctx.pin(target, make, what);
+      const where = await ctx.pin(target, make, what);
+      if (where) setPinned(where);
     } finally {
       setBusy(false);
       button.current?.focus();
@@ -96,14 +109,15 @@ export function PinButton({ make, what, label = "Add to thesis", compact = false
   };
   const items = open ? pinMenu(ctx.pillars()) : [];
   return (
-    <span className={compact ? "pin compact" : "pin"}>
-      <button ref={button} type="button" className={compact ? "btn sm ghost pin-btn" : "btn sm pin-btn"} disabled={busy}
+    <span className={`${compact ? "pin compact" : "pin"}${pinned ? " is-pinned" : ""}`}>
+      <button ref={button} type="button" className={`${compact ? "btn sm ghost pin-btn" : "btn sm pin-btn"}${pinned ? " pinned" : ""}`} disabled={busy}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined}
-        aria-label={compact ? `${label}: this ${what}` : undefined}
-        title={`Pin this ${what} into a section of the project's thesis`} onClick={() => setOpen((o) => !o)}>
+        aria-label={compact ? (pinned ? `Pinned under ${pinned}: pin this ${what} again` : `${label}: this ${what}`) : undefined}
+        title={pinned ? `Pinned under ${pinned} in the thesis; pin it again to add it to another section`
+          : `Pin this ${what} into a section of the project's thesis`} onClick={() => setOpen((o) => !o)}>
         {/* a compact pin says "Pin" (CSS, so a paragraph's text stays its own) when its paragraph is hovered
             or it has focus, always on a touch screen (Riley 83: an unlabelled grey glyph) */}
-        <PinIcon />{compact ? "" : ` ${busy ? "Pinning…" : label}`}
+        {pinned ? <PinnedIcon /> : <PinIcon />}{compact ? "" : ` ${busy ? "Pinning…" : pinned ? `Pinned: ${pinned}` : label}`}
       </button>
       {open && (
         <span ref={menu} id={`${id}-menu`} className="pin-menu" role="menu" aria-label={`Add this ${what} to the thesis section`} onKeyDown={onMenuKey}>

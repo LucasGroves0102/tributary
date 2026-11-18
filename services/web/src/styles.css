@@ -5405,6 +5405,11 @@ mark.claim-mark {
   color: var(--series-4);
 }
 
+/* the filed figures' own row above the cases (Morgan 29): quiet, like a source */
+.model-table td.case.reported {
+  color: var(--text-3);
+}
+
 /* the price and why past years have no multiple, beside "Valuation at your price" */
 .model-table .group-row .group-sub {
   margin-left: var(--sp-2);
@@ -6023,6 +6028,19 @@ button.chip.on {
   .pin.compact .pin-btn::after {
     content: "Pin";
   }
+}
+
+/* pinned (Morgan 30): a paragraph's pin stays in view and says so */
+.pinnable .pin.compact.is-pinned,
+.diff p .pin.compact.is-pinned {
+  opacity: 1;
+}
+
+.pin.compact .pin-btn.pinned::after,
+.pinnable:hover .pin.compact .pin-btn.pinned::after,
+.diff p:hover .pin.compact .pin-btn.pinned::after,
+.pin.compact .pin-btn.pinned:focus-visible::after {
+  content: "Pinned";
 }
 
 .pin-menu {
@@ -7655,6 +7673,23 @@ table.t.release-grid {
 /* --- portfolio and journal (portfolio/*) -------------------------------------------------------
    The user's own records: money to the cent (portfolio.ts `cash`), no seal (nothing here is a filed
    figure), umber (--warn) for what asks for the user's own writing (a review due, a correction). */
+/* the portfolio's value, first (Morgan 33) */
+.portfolio-total {
+  margin: 0 0 var(--sp-2);
+}
+
+.portfolio-total-label {
+  color: var(--text-2);
+}
+
+.portfolio-total-figure {
+  font-size: var(--fs-xl);
+}
+
+.entry-lead {
+  margin: 0 0 var(--sp-2);
+}
+
 .portfolio-story {
   margin-bottom: var(--sp-3);
 }

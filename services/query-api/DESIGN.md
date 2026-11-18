@@ -447,7 +447,7 @@ explains a plan without `filings`).
 ## Peers
 
 `GET /v1/companies/{id}/peers` (F4, H6): `require(financials)` on the company first, like every
-company route, then by business when its 10-K has a Business section on file (`basis: "business"`),
+company route, then by business when its 10-K or 20-F has a Business section on file (`basis: "business"`),
 else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/peers.py`'s docstring:
 
 - **Candidates**: the 60 companies whose latest 10-K Item 1 is most similar to this one's (cosine of
@@ -459,8 +459,15 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
 - **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
   another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
   when the caller reads both revenues; no current revenue counts as $10M; a revenue in another
-  currency or not meaningful (083: gross sales) is an unknown size, x1, 057) + 0.05 if this company's
-  10-K names it + 0.03 if it names this company. Blank checks (SIC 6770) are never suggested for an operating company.
+  currency or not meaningful (083: gross sales), or one the caller can't read, is an unknown size,
+  read since business-2 from the SEC filer categories: the same as the target's x0.83, a typical
+  ranked peer's; each category apart as a 10x gap) + 0.08 (0.05 before business-2) if this company's
+  annual report names it as a competitor + 0.03 if it names this company. Blank checks (SIC 6770)
+  are never suggested for an operating company.
+- **Relations** (business-2, Morgan 11-14; `gold.business_relations`, 160, RLS like the mentions): a
+  company either text names outside competition (a customer, supplier, partner, distributor or
+  owner) is no peer unless one names the other as a competitor or they share a 4-digit SIC; one
+  that holds a majority of the other never is, by business, size or SIC.
 - **Size floor** (Riley 27): where both sizes count, a candidate needs revenue of at least 2% of the
   target's (no current revenue counts as $10M), else it is no peer. On 38 targets from hermes'
   profiles (2026-11-17): 13 top tens change, all over $40B; NVIDIA loses GSI Technology ($25M) and
@@ -484,7 +491,7 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
   Ally) without `columns` gets bank columns: revenue, net interest income, efficiency ratio, provision
   for credit losses, loans, deposits, ROE, net margin (migration 048).
 - **`basis_reason`** (pre-ship; null by business) says why there was no business text to rank by,
-  from the company's latest 10-K stored in the last three years and its Item 1 as parsed
+  from the company's latest 10-K or 20-F stored in the last three years and its Item 1 or 4 as parsed
   (`Store.business_text`: silver.filings by its CIKs, a primary-key probe of the document, the
   section under RLS at `filings`; 2.4 ms for Intel on hermes): `filings_access` (your plan),
   `no_annual_report`, `no_business_section` (Citigroup: its 10-K follows the annual report's own
@@ -505,6 +512,21 @@ Gaps: a 10-K whose Item 1 is a cross-reference (Intel, General Electric, McDonal
 (Citigroup) has no profile, so it is never suggested by business (NVIDIA's list loses Intel, TI and
 ADI; JPMorgan's loses Citigroup), and its own peers are by SIC and size, with `basis_reason` saying
 which (owner's decision, 2026-11-09: no parser change for them).
+
+Business-2 (Morgan 11-14; 20-F Item 4, competitor lists, relations, NAMED 0.08, unknown size x0.83),
+hermes' texts of 2026-11-18 run locally through this ranking, 45 targets (lists in
+[services/parser DESIGN.md](../parser/DESIGN.md#peers-by-business)): against hand-written competitor
+sets for 18 of them the top 10 holds 106 of 180 (82 before). NVIDIA: AMD, Qualcomm, Marvell, HPE,
+Broadcom, Arista, Cisco, Micron, IBM, Intel (Super Micro, a customer, and CoreWeave gone). Exxon:
+Chevron, YPF, Marathon, Eni, Air Products, PBF, CVR, Linde, SLB, ONEOK, then BP, Phillips 66,
+Valero (Imperial Oil, 69.6% Exxon's, gone). Booking: MakeMyTrip, Marriott, Trip.com, Tuniu, Yatra,
+Alaska Air, trivago, Sabre, TripAdvisor, Viking, then Expedia (Southwest, which sells through
+Priceline, gone; Airbnb 15th). Coca-Cola: PepsiCo, Keurig Dr Pepper, Coca-Cola Consolidated,
+FEMSA, AB InBev, Ambev, National Beverage, CCU, Primo Brands, Celsius (Ball gone; Monster and
+the bottlers that don't name Coca-Cola as a competitor, partners, gone). JPMorgan unchanged
+(Goldman still outside the 10). Still missing: ConocoPhillips ("Items 1 and 2" isn't parsed as
+Item 1), Shell and TotalEnergies (their 20-F Item 4 is a cross-reference or unparsed), Expedia
+(its stored Item 1 is the table of contents): the parser batch.
 
 `GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
 public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has
@@ -644,7 +666,8 @@ by more than half in a year is a split or a merger, not buybacks, so that year h
 or EPS growth and the years before it are on another share basis: Deckers' 6-for-1, NVIDIA's 4- and
 10-for-1, Vertiv's SPAC merger), `ttm` (the latest TTM when it
 isn't a fiscal year end), `current` (the current fiscal year's reported quarters and the same
-quarters a year earlier), `stats` and `run_rate` (B2 and B7's, unchanged), and per case (`bear`,
+quarters a year earlier), `stats` and `run_rate` (B2 and B7's; since Morgan 16 the long run is
+the 5-year median margin and FCF margin, and the CAGR never starts in a trough, below), and per case (`bear`,
 `base`, `bull`; bear and bull `preview`ed from the base case until the user adds them) the
 `defaults` (what Reset sets, per year; a bear or bull year's FCF margin follows the case's own
 operating margin, below) and the projected `years` (revenue, growth, organic growth,
@@ -669,6 +692,19 @@ price's currency (`market_cap_currency`), but EV and every multiple are left out
 they agree, net debt in that currency (its reading says `other_currency`: not a dollar figure) is
 read by its age alone, as a dollar company's is, so a euro price gives a euro company's EV and EV
 multiples in euros.
+
+The long run (Morgan 16, test 11): Booking's base case faded its 32.8% margin toward a 5-year mean
+with FY2021 in it, and the thesis check compared 6% growth with a 31.7% "5-yr CAGR" from the FY2020
+trough. Now the margins' long run is the 5-year median, and a CAGR whose start year is more than 20%
+below the best of the two years before it starts at that year (6 or 7 years; `cagr_years` says).
+Measured on hermes' TTM rows of 45 companies (2026-11-18): the CAGR moves for 20, every one a 2020
+trough, pandemic or oil price (Booking 31.7% to 10.2% from FY2019, Delta 30.0% to 5.1%, Hilton 22.8%
+to 4.1%, Exxon 12.9% to 2.2%, Boeing 9.0% to -1.7%), the other 25 unchanged (NVIDIA 66.9%); the margin's
+long run moves where one year is an outlier: Carnival's base case faded to -67.8% by year 5 (a
+-371% FY2021 in the mean) and now to 9.5%, Norwegian -71.1% to 11.1%, Royal Caribbean -33.6% to
+21.1%, NVIDIA 47.2% to 54.8% (FY2023's write-down year), Booking 29.2% to 30.0%; Apple, Costco,
+Walmart, PepsiCo within 0.3 points. Year 1 (the run rate) never moves. `user_set` still compares
+with today's default and the pre-B7 flat one (on B2's mean and window, `_flat`), no third.
 
 Measured on the real inputs in `tests/fixtures/model` (production answers of 2026-11-09):
 Vertiv's FY2026 is Q1-Q3 reported ($10.24B, 39.3% over the same nine months) plus a Q4 whose
@@ -1830,8 +1866,15 @@ no stored row changes and nothing is rebuilt.
   joined; then hidden and counted per section in `material.hidden`: `resplit` (only split or
   rejoined, or only furniture differed), `calendar` (equal once month names, "second/third
   quarter" and the quarter's three months vs the year to date's six or nine months are masked),
-  `figures_only` (a table row whose words didn't change) and `minor` (similarity >= 0.9, the
-  stored diff's threshold). Pairs are re-made over what's left: never a quarter's passage with a
+  `figures_only` (a table row whose words didn't change), `minor` (similarity >= 0.9, the
+  stored diff's threshold) and `comparative` (Morgan 17, a 10-Q with both filings' periods: a
+  passage on the same period a year earlier that repeats what the earlier 10-Q said of it, with
+  no new figure, or the earlier 10-Q's passage on a year this one no longer presents). Booking's
+  Q3 2026 10-Q paired its 2025 operating-cash-flow paragraph with the Q3 2025 10-Q's 2024 one and
+  read "$4.8 → $4.0 billion" under an unchanged-looking "nine months ended September 30, 2025";
+  now 2026's is the rewrite of 2025's. On 24 large companies' latest year-ago MD&A diffs it hides
+  7 of 1,767 passages, each a comparative two years back (Coca-Cola's six were paired 2026 with
+  2024 before); the prior-10-Q basis never moves. Pairs are re-made over what's left: never a quarter's passage with a
   year-to-date one, a split-and-edited paragraph takes in its neighbours, and two passages with
   the same run-in heading ("Gross Profit.") and period pair even when rewritten past
   recognition.

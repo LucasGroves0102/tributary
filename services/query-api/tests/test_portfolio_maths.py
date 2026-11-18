@@ -107,6 +107,17 @@ def test_weights_by_value_when_every_holding_has_one_else_by_cost():
     assert weights([("a", D(0), None)]) == ("cost", {"a": None})
 
 
+def test_weights_add_up_to_exactly_one_at_a_tenth_of_a_percent():
+    """Morgan 32: Costco's $9,100 of $17,316 is 52.55%; shown at one decimal beside Booking's
+    47.45% the two read 99.9%. Largest remainder: 52.6% and 47.4%."""
+    _, w = weights([("cost", D(9100), None), ("bkng", D(8216), None)])
+    assert w == {"cost": D("0.526"), "bkng": D("0.474")}
+    _, w = weights([(k, D(1), None) for k in "abc"])
+    assert sum(w.values()) == 1 and sorted(w.values()) == [D("0.333"), D("0.333"), D("0.334")]
+    _, w = weights([("a", D(1), D("1")), ("b", D(1), D("999"))])
+    assert w == {"a": D("0.001"), "b": D("0.999")} and sum(w.values()) == 1
+
+
 def test_money_is_cents_and_numbers_keep_what_was_given():
     assert money(D("1.005")) == "1.00" and money(D("1.015")) == "1.02"  # half to even
     assert money(None) is None and number(None) is None

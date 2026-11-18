@@ -29,7 +29,7 @@ company. A new policy should use the same `IN (SELECT r FROM authz.readable_comp
 | | `ops.quality_findings`, `ops.quality_companies` (data notes; query_api gets USAGE on `ops`) | 023 |
 | `filings` | `silver.filing_sections` (behind `gold.filing_sections`) | 007 |
 | | `gold.section_search`, `gold.section_diffs`, `gold.section_changes` | 021 |
-| | `gold.business_profiles`, `gold.business_mentions`, `gold.business_peers` (a peer row needs both companies readable) | 047 |
+| | `gold.business_profiles`, `gold.business_mentions`, `gold.business_relations` (160), `gold.business_peers` (a peer row needs both companies readable) | 047, 160 |
 | | `silver.insider_filings`, `silver.insider_transactions` | 054 |
 
 `authz.user_access` and `authz.user_tiers` show a user only their own rows (`own_rows`);

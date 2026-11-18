@@ -27,6 +27,8 @@
   ago. Both section texts from production's sections route (2026-11-09) and `stored`, the rows
   `gold.section_changes` holds for them (the parser's diff-1 over those texts; their counts equal
   production's). gzip because the texts are 26-42 KB each; `test_changes.py` reads them.
+  `bkng-2026-11-03-mdna-year-ago`: Booking's Q3 2026 10-Q MD&A against Q3 2025's, the same way
+  from hermes on 2026-11-18, with both periods of report (Morgan 17's comparatives).
 - `model/`: the model route's inputs and the cases it is held to. `{nvda,deck,vrt}.json`:
   NVIDIA's, Deckers' and Vertiv's Query API answers and `gold.latest_reading` rows from
   production on 2026-11-09, in `Store.model_inputs`' shape. `b2-b7-cases.json`: the history

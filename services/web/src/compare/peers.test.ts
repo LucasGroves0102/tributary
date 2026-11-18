@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { entry } from "../fixtures";
 import type { PeerCheck, PeerMatch, Peers, ScreenerRow } from "../types";
-import { coRegistrantNote, fallbackPart, fallbackSentence, peerRefusal, sectorLine, similarityWord, whyParts, whyText } from "./peers";
+import { coRegistrantNote, fallbackPart, fallbackSentence, peerRefusal, reportForm, sectorLine, similarityWord, whyParts, whyText } from "./peers";
 
 const VRT = { companyId: "0001674101", name: "Vertiv" };
 const ETN: ScreenerRow = { ...entry({ company_id: "0001551182", name: "Eaton" }), filer_categories: null, state_of_incorporation: null, sector: "Industrials", sector_industry: "Machinery & tools" };
@@ -37,6 +37,14 @@ describe("why a peer was suggested", () => {
     expect(reasons[0]!.cite!.companyId).toBe(ETN.company_id);
   });
 
+  it("a 20-F filer's sentence is in its 20-F (Item 4)", () => {
+    const match: PeerMatch = { sic_level: 4, same_filer_category: false, revenue_band: null, same_revenue_band: false,
+      similarity: 0.2, terms: [], names_target: { ...cite, section_key: "4" } };
+    expect(whyParts(match, ETN, VRT)[0]!.text).toBe("its 20-F names Vertiv as a competitor");
+    expect(reportForm("4")).toBe("20-F");
+    expect(reportForm("1")).toBe("10-K");
+  });
+
   it("an older API's SIC and size match reads as before", () => {
     const match: PeerMatch = { sic_level: 3, same_filer_category: true, revenue_band: "$1B-$10B", same_revenue_band: true };
     expect(whyText(whyParts(match, ETN, VRT))).toBe("same 3-digit SIC group; same filer category; similar size ($1B-$10B)");
@@ -53,9 +61,9 @@ describe("peers by SIC and size say why there is no business text", () => {
   const sic = (basis_reason?: Peers["basis_reason"]) => ({ basis: "sic" as const, basis_reason, method: "By SIC and size: the API's words." });
 
   it.each([
-    ["cross_reference", "Intel", "by SIC and size (Intel's 10-K Business section is a cross-reference)", "only as a cross-reference to pages elsewhere"],
-    ["no_business_section", "Citigroup", "by SIC and size (no Business section found in Citigroup's 10-K)", "follows its own layout"],
-    ["no_annual_report", "Birkenstock", "by SIC and size (Birkenstock has no 10-K from the last three years)", "no 10-K on file"],
+    ["cross_reference", "Intel", "by SIC and size (Intel's Business section is a cross-reference)", "only as a cross-reference to pages elsewhere"],
+    ["no_business_section", "Citigroup", "by SIC and size (no Business section found in Citigroup's annual report)", "follows its own layout"],
+    ["no_annual_report", "Birkenstock", "by SIC and size (Birkenstock has no 10-K or 20-F from the last three years)", "no 10-K or 20-F on file"],
     ["filings_access", "Nvidia", "by SIC and size (Nvidia's filings text isn't in your plan)", "your plan doesn't include for Nvidia"],
     ["not_profiled", "NewCo", "by SIC and size (NewCo's newest Business section isn't compared yet)", "read weekly"],
     ["no_close_peers", "Odd Co", "by SIC and size (no close business match)", "none names it as a competitor"],

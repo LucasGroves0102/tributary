@@ -246,14 +246,16 @@ Cost and index size: [DESIGN.md](DESIGN.md#section-diffs-and-search-index-cost).
 ## Peers by business
 
 `parser-peers`, a weekly batch job in the same image (`filing_parser/business.py`, its docstring is
-the spec; `ALGORITHM` stored with each profile; migration 047), compares what companies say they
-do: TF-IDF term vectors of each company's latest usable 10-K Item 1 (standard library only, no
-paid embeddings, no external calls). It writes `gold.business_profiles` (the filing and section
-each profile came from, its most distinctive terms), `gold.business_peers` (each company's 60
-most similar companies and the shared terms, so the [Query API](../query-api/README.md#peers) can
-say why) and `gold.business_mentions` (companies its Item 1 names in a sentence about
-competition, with offsets to cite), replaced in one transaction per run; one run at a time
-(advisory lock). A cross-reference Item 1 (Intel, GE, McDonald's) gives no profile. Method, cost
+the spec; `ALGORITHM` stored with each profile, now business-2; migrations 047, 160), compares
+what companies say they do: TF-IDF term vectors of each company's latest usable 10-K Item 1 or
+20-F Item 4 (standard library only, no paid embeddings, no external calls). It writes
+`gold.business_profiles` (the filing and section each profile came from, its most distinctive
+terms), `gold.business_peers` (each company's 60 most similar companies and the shared terms, so
+the [Query API](../query-api/README.md#peers) can say why), `gold.business_mentions` (companies
+its text names as competitors, with offsets to cite) and `gold.business_relations` (companies it
+names anywhere else: customers, suppliers, partners, owners), replaced in one transaction per run;
+one run at a time (advisory lock). A cross-reference Item 1 (Intel, GE, McDonald's) gives no
+profile. Method, cost
 and how the settings were chosen: [DESIGN.md](DESIGN.md#peers-by-business).
 
 ```bash

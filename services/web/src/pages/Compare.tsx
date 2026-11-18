@@ -270,7 +270,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
               ))}
               {suggested?.state === "ok" && (
                 <span className="faint small" title={suggested.data.method}>
-                  {suggested.data.basis === "business" ? "by what they do (10-K Business sections)" : "same SIC, then size"}
+                  {suggested.data.basis === "business" ? "by what they do (annual reports' Business sections)" : "same SIC, then size"}
                 </span>
               )}
             </div>

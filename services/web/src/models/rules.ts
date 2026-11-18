@@ -30,7 +30,9 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
   // a history outside the long run's bounds says which bound it met, not "held between 0% and 5%" beside 66.9% (Riley, test 10, 65)
   const bound = st.cagr === null ? "" : st.cagr * 100 > LONG_RUN_GROWTH_CAP ? `, capped at ${LONG_RUN_GROWTH_CAP}% for the long run`
     : st.cagr < 0 ? ", floored at 0% for the long run" : "";
-  const longRun = `${run.long_run.growth.toFixed(1)}% growth (the ${statLabel(st.cagr, st.cagr_years, "CAGR")}${bound}) and the ${statLabel(st.avg_margin, st.margin_years, "avg")} margin`;
+  // a CAGR over more than 5 years starts before a trough (model_maths, Statistics: Booking's from FY2019, not FY2020)
+  const trough = st.cagr !== null && st.cagr_years > 5 ? ", from the year before a trough" : "";
+  const longRun = `${run.long_run.growth.toFixed(1)}% growth (the ${statLabel(st.cagr, st.cagr_years, "CAGR")}${trough}${bound}) and the ${statLabel(st.avg_margin, st.margin_years, "median")} margin`;
   if (fromQuarters && cur?.actual && cur.prior && cur.remainder_prior) {
     const a = cur.actual;
     const r = cur.remainder_prior;
@@ -65,7 +67,7 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
     : /Q\d$/.test(rr.share_source ?? "") ? `${signed(rr.share_change)} a year, diluted shares in ${rr.share_source} against the same quarter a year earlier`
     : `${signed(rr.share_change)} a year, the last two 10-Ks' diluted shares`;
   out.push({ key: "shareChange", text: `Share change (buybacks less issuance): ${shares}.` });
-  const fcfLong = run.long_run.fcf_margin === null ? "" : `, closing half the gap each year to the ${statLabel(st.avg_fcf_margin, st.fcf_years, "avg")}`;
+  const fcfLong = run.long_run.fcf_margin === null ? "" : `, closing half the gap each year to the ${statLabel(st.avg_fcf_margin, st.fcf_years, "median")}`;
   const fcfYtd = fromQuarters && cur?.remainder_prior?.fcf_margin != null
     ? `; FY${cur.fy}E's ${remainderLabel(cur.quarters)} at ${remainderLabel(cur.quarters)} FY${cur.fy - 1}'s ${pct(cur.remainder_prior.fcf_margin)}`
     : "";

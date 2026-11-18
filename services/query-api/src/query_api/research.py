@@ -127,7 +127,8 @@ def shape_material(d: dict, rows: list[dict], view: str, terms: list[str],
     out = shape_section(d, [])
     stale = out["stale"]
     reading = (material.read_section(d["section_key"], d["form"], d["text"], d["prior_text"],
-                                     rows)
+                                     rows, d.get("period_of_report"),
+                                     d.get("prior_period_of_report"))
                if not stale else material.Reading([], dict.fromkeys(material.HIDDEN, 0)))
     this = {"accession_no": d["accession_no"], "form": d["form"], "filed": d["filed"],
             "period_of_report": d["period_of_report"], "section_key": d["section_key"],

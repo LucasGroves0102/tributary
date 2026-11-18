@@ -298,7 +298,14 @@ class AppPortfolio:
                         (holding_id, user_id, sell["shares"], sell["price"], sell["sold_on"]))
             row = cur.fetchone()
             self._check(cur, user_id, holding_id)
-            return row
+            # the sale's price is the user's own price of its day (portfolio_maths), unless they
+            # hold a newer one; a not-covered position keeps none (Morgan 31)
+            cur.execute("UPDATE portfolio_holdings SET price = %s, price_on = %s,"
+                        " price_source = 'typed', updated_at = statement_timestamp()"
+                        " WHERE user_id = %s AND holding_id = %s AND company_id IS NOT NULL"
+                        "   AND (price_on IS NULL OR price_on <= %s)",
+                        (sell["price"], sell["sold_on"], user_id, holding_id, sell["sold_on"]))
+            return {**row, "priced": cur.rowcount == 1}
 
     def delete_sell(self, user_id: str, sell_id: str) -> bool:
         with self._tx(user_id) as cur:
@@ -388,7 +395,7 @@ class AppPortfolio:
                         " WHERE user_id = %(u)s"
                         "   AND (%(c)s::text IS NULL OR company_id = %(c)s)"
                         "   AND (%(s)s::text IS NULL OR (company_id IS NULL AND symbol = %(s)s))"
-                        " ORDER BY created_at DESC, entry_id LIMIT %(n)s",
+                        " ORDER BY decided_on DESC, created_at DESC, entry_id LIMIT %(n)s",
                         {"u": user_id, "c": company_id, "s": symbol, "n": limit})
             return cur.fetchall()
 
@@ -794,7 +801,7 @@ def add_portfolio_routes(app: FastAPI, *, portfolio: AppPortfolio | None, store:
                 "_p": p, "_v": v["value"]})
         basis, w = weights((h["id"], h["_p"].cost, h["_v"]) for h in holdings if h["_p"].open)
         totals = {"cost_basis": Decimal(0), "value": Decimal(0), "unrealised": Decimal(0),
-                  "realised": Decimal(0)}
+                  "realised": Decimal(0), "unpriced_cost": Decimal(0)}
         priced = 0
         for h in holdings:
             p = h.pop("_p")
@@ -807,6 +814,8 @@ def add_portfolio_routes(app: FastAPI, *, portfolio: AppPortfolio | None, store:
                 priced += 1
                 totals["value"] += value
                 totals["unrealised"] += value - p.cost
+            elif p.open:
+                totals["unpriced_cost"] += p.cost
         open_n = sum(1 for h in holdings if h["open"])
         return {"holdings": holdings, "currency": CURRENCY, "method": METHOD,
                 "weight_basis": basis, "stale_after_days": STALE_AFTER_DAYS, "today": today(),
@@ -814,7 +823,12 @@ def add_portfolio_routes(app: FastAPI, *, portfolio: AppPortfolio | None, store:
                            "cost_basis": money(totals["cost_basis"]),
                            "value": money(totals["value"]) if priced else None,
                            "unrealised": money(totals["unrealised"]) if priced else None,
-                           "realised": money(totals["realised"])},
+                           "realised": money(totals["realised"]),
+                           # Morgan 33: the whole portfolio on the user's prices, an open holding
+                           # without one at its cost (`unpriced_cost` says how much)
+                           "total_value": money(totals["value"] + totals["unpriced_cost"])
+                           if open_n else None,
+                           "unpriced_cost": money(totals["unpriced_cost"])},
                 "reviews_due": len(due),
                 "prices_connected": own_prices is not None,
                 "refresh": refresh_prices is not None}
@@ -876,7 +890,8 @@ def add_portfolio_routes(app: FastAPI, *, portfolio: AppPortfolio | None, store:
         row = write(lambda: db().add_sell(user_id, holding_id, body.model_dump()))
         if row is None:
             raise HTTPException(404, NOT_FOUND)
-        return {"sell": sell_out(row)}
+        # `price_recorded`: the sale's price is now the holding's own price of that day
+        return {"sell": sell_out(row), "price_recorded": bool(row.get("priced"))}
 
     @app.delete("/v1/portfolio/sells/{sell_id}", response_model=dict)
     def delete_sell(user_id: User, sell_id: Id) -> dict:

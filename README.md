@@ -58,8 +58,9 @@ with its measurements.
   ([query-api](services/query-api/README.md#earnings-and-events)).
 - **What changed.** A 10-Q against a year earlier, read for materiality: noise hidden and counted,
   the most material change first ([query-api](services/query-api/README.md#what-changed)).
-- **Peers by business, sectors and banks.** Peers from what each 10-K's Business section says and
-  the competitors it names; an open sector grouping over SIC; banks on their own lines
+- **Peers by business, sectors and banks.** Peers from what each 10-K's or 20-F's Business section
+  says and the competitors it names, never its customers, suppliers or owners; an open sector
+  grouping over SIC; banks on their own lines
   ([query-api](services/query-api/README.md#peers), [parser](services/parser/README.md#peers-by-business)).
 - **Backlog and orders from the text**, read by fixed rules and checked against their sentence
   ([query-api](services/query-api/README.md#backlog-and-orders-from-the-text)).

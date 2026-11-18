@@ -252,7 +252,12 @@ schema's limit; the Query API itself takes 120 for the web app).
   the model's is unverifiable with a note naming them. A dollar figure the tools didn't return but
   the model run did (to at least three significant digits: "$3.0B" is within rounding of too many
   of ~150 amounts) is a `model` figure, not "not in the data". TTM free cash flow is in the
-  prefetch now (`model_stats.HISTORY_METRICS`), so the model page's $3.15B verifies.
+  prefetch now (`model_stats.HISTORY_METRICS`), so the model page's $3.15B verifies. So are the
+  model's per-share figures on today's share basis (`read_per_share`: `/per-share` annual and TTM,
+  diluted EPS and shares, the rows the model run's history and the Statements tab read; Morgan 19:
+  Booking's FY2025 EPS $6.62 was "not found in the data" and the check, reading `/financials` as
+  filed, called its 2024 share counts pre-split). check_data says the basis (`share_basis`, the
+  splits) and the TTM EPS; without the route (an older Query API) it reads as before.
 - **Every claim cited, every figure verified.** Each citation is checked against the filings the
   tools returned (form, date, EDGAR URL, section, the newest `as_of` of the results that held
   it); one the tools never returned is kept but flagged and listed. Every explanation,

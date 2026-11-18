@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { entry, NVDA } from "../fixtures";
 import type { Holding, JournalEntry, Portfolio } from "../types";
+import { ToastNotes } from "../components/Toasts";
 import { HoldingLine } from "./HoldingLine";
 import { PortfolioPage } from "./PortfolioPage";
 
@@ -180,6 +181,44 @@ it("a holding's journal: a kept entry is corrected beside itself, a fresh one ca
   await settle();
   const post = writes.find((w) => w.path === "/v1/portfolio/journal")!;
   expect(post.body).toMatchObject({ company_id: NVDA, kind: "bought", corrects: "e1", why: "Supply caught up; demand still outruns it.", red_line_ids: ["r1"] });
+});
+
+it("the portfolio's value comes first, one holding is one of them that is worth, and a holding's weight says its basis (Morgan 31-33, 38)", async () => {
+  holdings = [NV, FUND];
+  const base = PORTFOLIO(holdings);
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => new URL(url, "http://x").pathname.endsWith("/v1/portfolio")
+    ? Response.json({ ...base, totals: { ...base.totals, total_value: "350.96", unpriced_cost: "25.00" } }) : respond(url, init)));
+  await show(<PortfolioPage token="t" />);
+  expect(container.querySelector(".portfolio-total")?.textContent).toBe(
+    "Portfolio value $350.96 on your own prices, with the holding you gave no price at what it cost ($25.00)");
+  expect(container.querySelector(".portfolio-story")!.textContent).toContain("On your own prices 1 of them is worth $325.96");
+  act(() => root.unmount());
+  await show(<PortfolioPage token="t" holdingId={HID} />);
+  const weight = [...container.querySelectorAll(".holding-ledger dt")].find((d) => d.textContent?.startsWith("Weight"));
+  expect(weight?.textContent).toBe("Weight (cost)");
+});
+
+it("a sale asks why, as sold or trimmed on its day, and says its price is now yours (Morgan 31)", async () => {
+  holdings = [NV];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => new URL(url, "http://x").pathname.endsWith(`/holdings/${HID}/sells`)
+    ? Response.json({ sell: {}, price_recorded: true }) : respond(url, init)));
+  await show(<><PortfolioPage token="t" holdingId={HID} /><ToastNotes /></>);
+  await act(async () => button("Record a sale")!.click());
+  const sale = container.querySelector<HTMLFormElement>('form[aria-label="Record a sale"]')!;
+  const [count, price, on] = [...sale.querySelectorAll<HTMLInputElement>("input")];
+  await act(async () => {
+    type(count!, "0.75");
+    type(price!, "985");
+    type(on!, "2026-11-12");
+  });
+  await act(async () => sale.requestSubmit());
+  await settle();
+  const form = container.querySelector<HTMLFormElement>("form.entry-form")!;
+  expect(form.querySelector<HTMLSelectElement>("select")!.value).toBe("trimmed"); // 1 of 1.75 shares left
+  expect(form.querySelector<HTMLInputElement>('input[type="date"]')!.value).toBe("2026-11-12");
+  expect(form.querySelector(".entry-lead")?.textContent).toBe(
+    "You recorded a sale of 0.75 shares at $985.00 on Nov 12, 2026. Why did you sell? Say it here while it's fresh.");
+  expect(container.querySelector(".undo-note")?.textContent).toContain("$985.00 on Nov 12, 2026 is now your price for");
 });
 
 it("the review button writes a review entry", async () => {

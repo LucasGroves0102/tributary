@@ -1,13 +1,19 @@
-"""parser-peers: peers by business, from what each company's 10-K says it does (migration 047).
+"""parser-peers: peers by business, from what each company's annual report says it does
+(migrations 047, 160).
 
 Spec (the Query API's peer ranking reads what this writes; query_api/peers.py has the rest):
 
-1. Documents. For every company with gold financials, Item 1 (Business) of its latest 10-K filed
-   in the last MAX_AGE_DAYS that has a usable one, the first TEXT_CHARS characters (the overview,
-   products, markets and competition come first; the long tail is regulation and human capital).
-   Usable: at least MIN_CHARS long (Intel's, GE's and McDonald's Item 1 is a cross-reference,
-   "Item 1. Business: Pages 3-5") and not titled financial statements (a mis-parse: Microchip's
-   held its balance sheet). 74 of 4,983 latest 10-Ks failed this on 2026-11-09.
+1. Documents. For every company with gold financials, the business section of its latest annual
+   report filed in the last MAX_AGE_DAYS that has a usable one: a 10-K's Item 1 (Business) or,
+   since business-2, a 20-F's Item 4 (Information on the Company), the first TEXT_CHARS
+   characters (the overview, products, markets and competition come first; the long tail is
+   regulation and human capital). A 20-F's Item 4 stops at its first regulation heading after
+   MIN_CHARS (`business_part`: a Chinese issuer's runs to tens of thousands of characters of PRC
+   rules that every such issuer shares; 762 of 1,015 have one). Usable: at least MIN_CHARS long
+   (Intel's, GE's and McDonald's Item 1 is a cross-reference, "Item 1. Business: Pages 3-5"; so is
+   TotalEnergies' Item 4) and not titled financial statements (a mis-parse: Microchip's held its
+   balance sheet). 74 of 4,983 latest 10-Ks failed this on 2026-11-09; 1,015 20-Fs passed on
+   2026-11-18.
 2. Terms. Lowercased letters-only words of 3+ letters, cut into runs at anything else (digits,
    punctuation, line breaks), each word made a simple singular (`normal`). Stop words (English,
    filing furniture, places: being based in Ohio says nothing about what a company does) end a
@@ -21,17 +27,35 @@ Spec (the Query API's peer ranking reads what this writes; query_api/peers.py ha
 4. Similarity. Cosine of two vectors (a dot product: both have length 1). Each company keeps its
    NEIGHBOURS most similar companies, with the WHY_TERMS shared terms that add the most
    (weight here x weight there), so the API can say what made them similar.
-5. Competitors named. Sentences of Item 1 that mention competition (`compet`) are searched for
+5. Competitors named. Sentences of the text that mention competition (`compet`) are searched for
    other companies' names (`Names`: SEC names and former names, normalised like
-   silver.normalize_name; short or common single words never count). Each hit is stored with the
-   sentence's offsets in the document's text (like silver.filing_sections' char_start), to cite.
+   silver.normalize_name, foreign legal forms optional; a one-word name needs 4+ letters and not to
+   be an ordinary word, a longer one a word that isn't a stop word; every word but connectors
+   written with a capital: "natural gas services" is not Natural Gas Services Group). A sentence
+   never ends after an abbreviation ("Express U.S. Domestic", "Inc. (“Lightmatter”)"), and a
+   sentence about competition runs on after a ";" on its line ("include: AWS LLC; Arista
+   Networks, Inc.; Broadcom Inc.") and past a page break when it stops mid-sentence ("online
+   travel / 8 / Table of Contents / services platforms, such as Expedia.com"). So is the list
+   such a sentence introduces: a line about competition that ends with ":" ("Our current
+   competitors include:"), then each line that is a list item (it opens with a bullet, or the item
+   before it ended with ";" or ","; page furniture skipped) until the first that isn't (NVIDIA
+   names AMD, Intel and Broadcom only in its bullets). Each hit is stored with the sentence's
+   offsets in the document's text (like silver.filing_sections' char_start), to cite.
+6. Relations (business-2). A company the text names in any other sentence is a business
+   relation: a customer, supplier, partner, distributor or owner (Southwest sells through
+   "Expedia, Priceline"; NVIDIA buys wafers from TSMC; Super Micro builds on NVIDIA's platforms).
+   Not a relation (`relation`): a deal (acquisition, merger, spin-off, proxy, repurchase: corporate
+   history, often between competitors), a career (executive biographies: "held positions at Home
+   Depot"), a bare name under RELATION_MIN_WORDS words (a table cell). Stored like a mention, with
+   `ownership` when the sentence says one holds a majority of the other (a share over 50 percent
+   beside own/hold, majority-owned, majority stock ownership, majority or controlling
+   shareholder: Imperial Oil's "Exxon Mobil Corporation owns approximately 69.6 percent").
+   query_api/peers.py decides what a relation does to a ranking.
 
 Everything is replaced in one transaction per run, so readers see the old or the new answer.
-Cost, measured on hermes' Item 1 texts of 2026-11-09 loaded into a local Postgres (the read alone
-took 6 s on hermes): 4,888 usable documents, 79 s wall (pass 1 20 s, pass 2 31 s, similarities
-26 s, writing 2 s), peak 406 MB (pass 1's document frequencies, released before pass 2); it
-writes 4,888 profiles, 293,280 peer rows and 4,166 mentions, 60 MB with indexes. See
-services/parser/README.md "Peers by business".
+Cost, measured on hermes' texts of 2026-11-18 run locally (business-2): 5,915 usable documents
+(4,900 10-Ks, 1,015 20-Fs), 142 s wall, peak 382 MB; 5,915 profiles, 354,900 peer rows, 6,260
+mentions and 32,456 relations. See services/parser/README.md "Peers by business".
 """
 
 from __future__ import annotations
@@ -47,7 +71,8 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 
-ALGORITHM = "business-1"  # bump when the spec above changes; stored with each profile
+ALGORITHM = "business-2"  # bump when the spec above changes; stored with each profile
+# business-2: 20-F Item 4, competitor lists, capitalised names, relations (spec 1, 5, 6)
 MAX_AGE_DAYS = 1100
 MIN_CHARS = 3_000
 TEXT_CHARS = 80_000
@@ -97,6 +122,9 @@ philippines israel israeli germany german france french italy italian spain span
 netherlands dutch belgium switzerland swiss austria sweden norway denmark finland ireland irish
 kingdom britain british england london scotland poland russia russian ukraine turkey
 saudi arabia emirates uae dubai qatar egypt nigeria
+prc beijing shanghai shenzhen hangzhou guangzhou macau tokyo seoul mumbai bangalore delhi paris
+toronto calgary alberta ontario quebec cayman bermuda luxembourg cyprus greece greek monaco
+chilean peruvian colombian argentine
 chicago houston dallas atlanta boston angeles francisco seattle denver miami phoenix detroit
 philadelphia pittsburgh minneapolis cleveland charlotte nashville austin diego jose
 """
@@ -138,6 +166,23 @@ def normal(word: str) -> str | None:
         if word.endswith("s") and not word.endswith(("ss", "us", "is", "ous")):
             return word[:-1]
     return word
+
+
+# spec 1: a line that heads a 20-F's regulation part ("Regulations", "PRC Regulations",
+# "Government Regulation"): short, about regulation, not a sentence
+_REGULATION_HEADING = re.compile(r"^[^\n]{0,40}\bregulat[^\n]{0,48}$", re.I | re.M)
+
+
+def business_part(text: str, section_key: str) -> str:
+    """The text a profile reads (spec 1): a 20-F's Item 4 up to its first regulation heading after
+    MIN_CHARS (a Chinese issuer's runs to tens of thousands of characters of PRC rules that every
+    such issuer shares, so they read alike whatever they do); a 10-K's Item 1 whole."""
+    if section_key != "4":
+        return text
+    for m in _REGULATION_HEADING.finditer(text, MIN_CHARS):
+        if not m.group().rstrip().endswith((".", ":", ";", ",")):
+            return text[:m.start()]
+    return text
 
 
 def terms(text: str) -> Counter:
@@ -275,10 +320,15 @@ _SUFFIX = re.compile(r"\b(INC|INCORPORATED|CORP|CORPORATION|CO|COMPANY|LTD|LIMIT
 # words a company's name may drop when others write it ("Johnson Controls", not "Johnson
 # Controls International")
 _OPTIONAL = ("INTERNATIONAL", "GROUP", "HOLDING", "GLOBAL", "WORLDWIDE", "ENTERPRISES", "USA",
-             "US", "NV", "SA", "AG", "SE")
+             "US", "NV", "SA", "AG", "SE",
+             # foreign legal forms: "Coca-Cola FEMSA" for COCA COLA FEMSA SAB DE CV (business-2)
+             "SAB", "DE", "CV", "SPA", "ASA", "AB", "OYJ", "BV", "PTY", "KGAA", "SAA")
 # a sentence ends at . ! ? or ; followed by space and a capital or an opening bracket/quote, and
-# at every line break; "e.g., Delta Electronics, Inc., Stulz GmbH" stays one sentence
+# at every line break; "e.g., Delta Electronics, Inc., Stulz GmbH" stays one sentence, and so does
+# "Inc. (“Lightmatter”), MACOM" and "Express U.S. Domestic" (_ABBREVIATION, business-2)
 _SENTENCE_END = re.compile(r"(?<=[.!?;])[ \t]+(?=[A-Z\"(“])|\n")
+_ABBREVIATION = re.compile(r"(?:\b[A-Z]|\bInc|\bCorp|\bCo|\bCos|\bLtd|\bNo|\bSt|\bMr|\bMs|\bDr|"
+                           r"\bJr|\bSr|\bvs|\be\.g|\bi\.e)\.$")
 _COMPETE = re.compile(r"compet", re.I)
 COMMON_SHARE = 0.02  # a one-word name that is a word in over 2% of documents is an ordinary word
 # Ordinary words that are also one-word company names, whatever their share
@@ -290,14 +340,57 @@ key fidelity principal charter evergreen catalyst
 
 
 def sentences(text: str) -> Iterator[tuple[int, int]]:
-    """(start, end) of each sentence of a text, by _SENTENCE_END."""
+    """(start, end) of each sentence of a text, by _SENTENCE_END (never after an abbreviation)."""
     start = 0
     for m in _SENTENCE_END.finditer(text):
+        if m.group() != "\n" and _ABBREVIATION.search(text, max(start, m.start() - 6),
+                                                       m.start()):
+            continue
         if m.start() > start:
             yield start, m.start()
         start = m.end()
     if start < len(text):
         yield start, len(text)
+
+
+# a list item opens with a bullet (html_to_text keeps the glyph: "•suppliers of ..."); a bare
+# glyph on its own line bullets the next one
+_BULLET = re.compile(r"[•●◦▪■□‣⁃∙○◆◇➢➤►▸✓\-–—*]")
+# an item that ends like this continues an unbulleted list ("AMD;", "Intel; and")
+_ITEM_GOES_ON = re.compile(r"[;,]\s*(?:and|or)?$")
+
+
+# a line that is only page furniture between a sentence and its continuation ("8", "Table of
+# Contents"): a sentence about competition runs on past it
+_PAGE_BREAK = re.compile(r"(?:\d{1,3}|[ivxlc]{1,6}|table of contents)", re.I)
+_SENTENCE_DONE = re.compile(r"[.!?:;\"”)]\s*$")
+
+
+def contexts(text: str) -> Iterator[tuple[int, int, bool]]:
+    """(start, end, about competition) of each sentence (spec 5): a sentence that mentions
+    competition, the sentences it runs on into (after a ";" on its line, or past a page break
+    when it stops mid-sentence), and any sentence of a line in the list such a line introduces."""
+    listing = more = carry = False
+    for line in re.finditer(r"[^\n]+", text):
+        s = line.group().strip()
+        if (carry or listing) and _PAGE_BREAK.fullmatch(s):
+            continue  # page furniture inside a sentence or a list: the next line goes on with it
+        spans = list(sentences(line.group()))
+        if listing and (_BULLET.match(s) or more):
+            for a, z in spans:
+                yield line.start() + a, line.start() + z, True
+            more = bool(_BULLET.fullmatch(s) or _ITEM_GOES_ON.search(s))
+            carry = False
+            continue
+        for a, z in spans:
+            sentence = line.group()[a:z]
+            compete = bool(_COMPETE.search(sentence)) or carry
+            yield line.start() + a, line.start() + z, compete
+            # a ";" ends a sentence but not a list ("include: AWS LLC; Arista Networks, Inc.; ...")
+            carry = compete and sentence.rstrip().endswith(";")
+        carry = carry or bool(spans) and compete and not _SENTENCE_DONE.search(s)
+        # a line about competition ending in ":" introduces a list; its first line counts
+        listing = more = bool(_COMPETE.search(s)) and s.endswith(":")
 
 
 def normalize_name(name: str) -> str:
@@ -311,10 +404,23 @@ def normalize_name(name: str) -> str:
     return s.strip()
 
 
+# words of a name written lowercase in running text ("Bank of America")
+_CONNECTORS = frozenset("AND OF THE FOR DE DEL DU LA LE Y A AN IN ON AT TO".split())
+
+
+def _capitalised(key: str, sentence: str) -> bool:
+    """Every word of a name (but connectors and numbers) is written with a capital in the
+    sentence: "Eaton", "EATON", "ExxonMobil", "Natural Gas Services"; never "natural gas
+    services" or "target"."""
+    return all(re.search(rf"(?<![A-Za-z0-9]){w[0]}(?i:{re.escape(w[1:])})(?![A-Za-z0-9])",
+                         sentence)
+               for w in key.split(" ") if w not in _CONNECTORS and w[0].isalpha())
+
+
 class Names:
     """Company names to look for in a sentence. `common`: lowercase words too ordinary to be a
-    name on their own (a single-word name counts only if it isn't one, is 4+ letters and is
-    written capitalised: "Eaton" yes, "Target" never)."""
+    name on their own (a single-word name counts only if it isn't one and is 4+ letters); every
+    name must be written capitalised (`_capitalised`: "Eaton" yes, "Target" never)."""
 
     MAX_WORDS = 6
 
@@ -339,21 +445,29 @@ class Names:
             if len(words) == 1 and (len(f) < 4 or f.isdigit() or f.lower() in STOP
                                     or f.lower() in common or normal(f.lower()) in common):
                 continue
-            if words[-1].lower() in STOP or words[0].lower() in STOP:
-                continue
+            if all(w.lower() in STOP or w in _CONNECTORS for w in words):
+                continue  # "North America", "First Of"... (a place word alone: written so)
             self.by_name[f] = next(iter(owners))
+        # first word -> the most words a name starting with it has (only those tokens are tried)
+        self.longest: dict[str, int] = {}
+        for f in self.by_name:
+            w = f.split(" ")
+            self.longest[w[0]] = max(self.longest.get(w[0], 0), len(w))
 
     def find(self, sentence: str) -> set[str]:
-        """Company ids named in a sentence (whole words; one-word names written capitalised)."""
+        """Company ids named in a sentence (whole words, written capitalised)."""
         tokens = normalize_name(sentence).split(" ")
         found: set[str] = set()
-        for i in range(len(tokens)):
-            for n in range(min(self.MAX_WORDS, len(tokens) - i), 0, -1):
+        for i, first in enumerate(tokens):
+            most = self.longest.get(first)
+            if most is None:
+                continue
+            for n in range(min(most, self.MAX_WORDS, len(tokens) - i), 0, -1):
                 key = " ".join(tokens[i:i + n])
                 hit = self.by_name.get(key)
                 if hit is None:
                     continue
-                if n == 1 and not re.search(rf"\b{key[0]}{key[1:].lower()}\b|\b{key}\b", sentence):
+                if not _capitalised(key, sentence):
                     continue
                 found.add(hit)
                 break
@@ -368,19 +482,78 @@ class Mention:
     char_end: int
 
 
+@dataclass(frozen=True)
+class Relation:
+    company_id: str
+    named_id: str
+    char_start: int
+    char_end: int
+    ownership: bool
+
+
+# spec 6: one holds a majority of the other
+_HOLDS = re.compile(r"\b(?:owns?|owned|ownership|holds?|held)\b", re.I)
+_SHARE = re.compile(r"(\d{1,3}(?:\.\d+)?)\s*(?:%|percent\b|per cent\b)", re.I)
+_MAJORITY = re.compile(r"\bmajority[- ]owned\b|\bmajority (?:stock |share |equity )?ownership\b|"
+                       r"\b(?:majority|controlling) (?:share|stock)holder\b", re.I)
+# not a relation: a deal (an acquisition, merger, spin-off: corporate history, often between
+# competitors), a career (executive biographies: "held positions at Home Depot"), or a bare name
+# (a table cell or a list item out of its context)
+_DEAL = re.compile(r"\b(?:acquir\w*|acquisitions?|merg(?:e|ed|er|ers|ing)|divest\w*|spin-?offs?|"
+                   r"spun[- ]off|split-?off|termination fee|tender offer|proxy|investee|"
+                   r"repurchase\w*|(?:stock|share)holders?)\b", re.I)
+_CAREER = re.compile(r"\b(?:President|Officer|Director|Chairman|Chairwoman|Treasurer|Controller|"
+                     r"Counsel|Secretary|served|joined|career|positions?)\b")
+RELATION_MIN_WORDS = 8
+
+
+def ownership(sentence: str) -> bool:
+    """The sentence says one company holds a majority of another (spec 6)."""
+    if _MAJORITY.search(sentence):
+        return True
+    return bool(_HOLDS.search(sentence)) and any(
+        50 < float(m.group(1)) <= 100 for m in _SHARE.finditer(sentence))
+
+
+def relation(sentence: str) -> bool | None:
+    """Spec 6: None when a sentence naming another company outside competition is no evidence of
+    a business relation (a deal, a career, a bare name), else whether it says one holds a majority
+    of the other."""
+    owns = ownership(sentence)
+    if owns:
+        return True
+    if (len(sentence.split()) < RELATION_MIN_WORDS or _DEAL.search(sentence)
+            or _CAREER.search(sentence)):
+        return None
+    return False
+
+
 def mentions(company_id: str, text: str, names: Names, own: Iterable[str] = (),
              base: int = 0) -> list[Mention]:
-    """Spec 5: other companies named in a sentence about competition, with its offsets (+ base:
+    """Spec 5: other companies named about competition, with the sentence's offsets (+ base:
     where the text starts in the document)."""
+    return named(company_id, text, names, own, base)[0]
+
+
+def named(company_id: str, text: str, names: Names, own: Iterable[str] = (),
+          base: int = 0) -> tuple[list[Mention], list[Relation]]:
+    """Spec 5 and 6: every other company the text names, as a competitor (a sentence about
+    competition) or a relation (any other sentence), with the sentence's offsets."""
     skip = set(own) | {company_id}
-    out: list[Mention] = []
-    for start, end in sentences(text):
+    found: list[Mention] = []
+    related: list[Relation] = []
+    for start, end, compete in contexts(text):
         s = text[start:end]
-        if not _COMPETE.search(s):
+        hits = sorted(names.find(s) - skip)
+        if not hits:
             continue
-        for named in sorted(names.find(s) - skip):
-            out.append(Mention(company_id, named, base + start, base + end))
-    return out
+        if compete:
+            found.extend(Mention(company_id, n, base + start, base + end) for n in hits)
+            continue
+        owns = relation(s)
+        if owns is not None:
+            related.extend(Relation(company_id, n, base + start, base + end, owns) for n in hits)
+    return found, related
 
 
 # The job -----------------------------------------------------------------------------------
@@ -392,26 +565,31 @@ class Doc:
     filed: object
     parser: str
     parsed_at: object
+    section_key: str = "1"  # a 10-K's Item 1, a 20-F's Item 4
 
 
+# spec 1: the business section of each annual report form
+SECTIONS = {"10-K": "1", "20-F": "4"}
+_SECTION = "CASE d.form WHEN '10-K' THEN '1' ELSE '4' END"
 DOCS_SQL = f"""
 WITH latest AS (
-  SELECT DISTINCT ON (k.company_id) k.company_id, d.accession_no, d.filed
+  SELECT DISTINCT ON (k.company_id) k.company_id, d.accession_no, d.filed,
+         {_SECTION} AS section_key
   FROM bronze.filing_documents d
   JOIN silver.company_ciks k ON k.cik = d.cik
-  WHERE d.form = '10-K' AND d.filed > current_date - {MAX_AGE_DAYS}
+  WHERE d.form IN ('10-K', '20-F') AND d.filed > current_date - {MAX_AGE_DAYS}
     AND EXISTS (SELECT 1 FROM silver.filing_sections s
-                WHERE s.accession_no = d.accession_no AND s.section_key = '1'
+                WHERE s.accession_no = d.accession_no AND s.section_key = {_SECTION}
                   AND s.char_end - s.char_start >= {MIN_CHARS}
                   AND s.title !~* 'financial statements')
     AND EXISTS (SELECT 1 FROM gold.financials_coverage v WHERE v.company_id = k.company_id)
   ORDER BY k.company_id, d.filed DESC, d.accession_no DESC
 )
-SELECT l.company_id, l.accession_no, l.filed, s.parser, s.parsed_at
+SELECT l.company_id, l.accession_no, l.filed, s.parser, s.parsed_at, l.section_key
 FROM latest l
 CROSS JOIN LATERAL (
   SELECT parser, parsed_at FROM silver.filing_sections s
-  WHERE s.accession_no = l.accession_no AND s.section_key = '1'
+  WHERE s.accession_no = l.accession_no AND s.section_key = l.section_key
     AND s.char_end - s.char_start >= {MIN_CHARS} AND s.title !~* 'financial statements'
   ORDER BY parser = 'rust' DESC, parsed_at DESC LIMIT 1) s
 ORDER BY l.company_id
@@ -433,15 +611,16 @@ SELECT company_id, alias FROM silver.company_aliases WHERE alias_type = 'ticker'
 
 def texts(conn, docs: Sequence[Doc],
           batch: int = FETCH_BATCH) -> Iterator[tuple[Doc, str, int]]:
-    """Each document's Item 1 (first TEXT_CHARS characters) and where the section starts in the
-    document's text, fetched by primary key in batches."""
+    """Each document's business section (first TEXT_CHARS characters) and where the section
+    starts in the document's text, fetched by primary key in batches."""
     for i in range(0, len(docs), batch):
         part = docs[i:i + batch]
         rows = conn.execute(
             "SELECT accession_no, parser, char_start, left(text, %s) FROM silver.filing_sections"
-            " WHERE (accession_no, parser) IN (SELECT * FROM unnest(%s::text[], %s::text[]))"
-            "   AND section_key = '1'",
-            (TEXT_CHARS, [d.accession_no for d in part], [d.parser for d in part])).fetchall()
+            " WHERE (accession_no, parser, section_key) IN"
+            "       (SELECT * FROM unnest(%s::text[], %s::text[], %s::text[]))",
+            (TEXT_CHARS, [d.accession_no for d in part], [d.parser for d in part],
+             [d.section_key for d in part])).fetchall()
         by_key = {(a, p): (t, base) for a, p, base, t in rows}
         for d in part:
             found = by_key.get((d.accession_no, d.parser))
@@ -456,6 +635,7 @@ class Result:
     vocab: Vocabulary
     similar: dict[str, list[Neighbour]]
     found: list[Mention]
+    related: list[Relation] = field(default_factory=list)
 
 
 @dataclass
@@ -471,8 +651,8 @@ def compute(read: Callable[[Sequence[Doc]], Iterable[tuple]], inputs: Inputs) ->
     offsets, like a section's own char_start, so the reader opens at them)."""
     vocab = Vocabulary()
     t0 = time.monotonic()
-    for _, text, *_ in read(inputs.docs):
-        vocab.add(terms(text))
+    for d, text, *_ in read(inputs.docs):
+        vocab.add(terms(business_part(text, d.section_key)))
     vocab.close()
     log.info("pass 1: %d documents, %d usable terms, %.0f s", vocab.docs, len(vocab.names),
              time.monotonic() - t0)
@@ -482,31 +662,37 @@ def compute(read: Callable[[Sequence[Doc]], Iterable[tuple]], inputs: Inputs) ->
         by_company.setdefault(c, []).append(n)
     vectors: dict[str, dict[int, float]] = {}
     found: list[Mention] = []
+    related: list[Relation] = []
     kept: list[Doc] = []
     for d, text, *base in read(inputs.docs):
+        text = business_part(text, d.section_key)
         own = own_words(by_company.get(d.company_id, []), inputs.tickers.get(d.company_id, []))
         vectors[d.company_id] = vector(terms(text), vocab, own)
-        found.extend(mentions(d.company_id, text, names, base=base[0] if base else 0))
+        competitors, relations = named(d.company_id, text, names, base=base[0] if base else 0)
+        found.extend(competitors)
+        related.extend(relations)
         kept.append(d)
-    log.info("pass 2: %d vectors, %d competitor mentions, %.0f s", len(vectors), len(found),
-             time.monotonic() - t0)
+    log.info("pass 2: %d vectors, %d competitor mentions, %d relations, %.0f s", len(vectors),
+             len(found), len(related), time.monotonic() - t0)
     similar = neighbours(vectors, vocab)
     log.info("similarities: %.0f s", time.monotonic() - t0)
-    return Result(kept, vectors, vocab, similar, found)
+    return Result(kept, vectors, vocab, similar, found, related)
 
 
 def write(conn, result: Result) -> dict[str, int]:
-    """Replace the three tables in one transaction (readers see old or new, never a mix)."""
+    """Replace the four tables in one transaction (readers see old or new, never a mix)."""
     with conn.transaction():
         conn.execute("SET LOCAL lock_timeout = '30s'")
         conn.execute("DELETE FROM gold.business_peers")
         conn.execute("DELETE FROM gold.business_mentions")
+        conn.execute("DELETE FROM gold.business_relations")
         conn.execute("DELETE FROM gold.business_profiles")
         with conn.cursor().copy(
                 "COPY gold.business_profiles (company_id, accession_no, section_key, filed, parser,"
                 " parsed_at, terms, algorithm) FROM STDIN") as cp:
             for d in result.docs:
-                cp.write_row((d.company_id, d.accession_no, "1", d.filed, d.parser, d.parsed_at,
+                cp.write_row((d.company_id, d.accession_no, d.section_key, d.filed, d.parser,
+                              d.parsed_at,
                               profile_terms(result.vectors[d.company_id], result.vocab),
                               ALGORITHM))
         peers = 0
@@ -522,9 +708,18 @@ def write(conn, result: Result) -> dict[str, int]:
                 "COPY gold.business_mentions (company_id, named_id, accession_no, section_key,"
                 " char_start, char_end) FROM STDIN") as cp:
             for m in result.found:
-                cp.write_row((m.company_id, m.named_id, by_doc[m.company_id].accession_no, "1",
+                d = by_doc[m.company_id]
+                cp.write_row((m.company_id, m.named_id, d.accession_no, d.section_key,
                               m.char_start, m.char_end))
-    return {"profiles": len(result.docs), "peers": peers, "mentions": len(result.found)}
+        with conn.cursor().copy(
+                "COPY gold.business_relations (company_id, named_id, accession_no, section_key,"
+                " char_start, char_end, ownership) FROM STDIN") as cp:
+            for r in result.related:
+                d = by_doc[r.company_id]
+                cp.write_row((r.company_id, r.named_id, d.accession_no, d.section_key,
+                              r.char_start, r.char_end, r.ownership))
+    return {"profiles": len(result.docs), "peers": peers, "mentions": len(result.found),
+            "relations": len(result.related)}
 
 
 def load_inputs(conn) -> Inputs:

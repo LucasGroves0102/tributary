@@ -362,6 +362,11 @@ it("pins a chart from Numbers into the chosen section of the thesis, saving it",
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeGreaterThan(risks);
   expect(md.indexOf(`[[embed:${chartId}]]`)).toBeLessThan(md.indexOf("## What would prove me wrong"));
   expect(document.querySelector(".undo-stack .undo-note")?.textContent).toContain("Pinned the chart under Risks and mitigants in your thesis.");
+  // the button says so too (Morgan 30: it looked unchanged)
+  const pinBtn = fcf.querySelector<HTMLButtonElement>(".pin-btn")!;
+  expect(pinBtn.className).toContain("pinned");
+  expect(pinBtn.textContent).toBe(" Pinned: Risks and mitigants");
+  expect(pinBtn.title).toMatch(/^Pinned under Risks and mitigants in the thesis; pin it again/);
   // a chart saved in the project is work in the Numbers step, not a tick (#71)
   expect(container.querySelector('.step-rail a[href$="/numbers"]')?.className).toBe("");
   await goTo(`#/analysis/${PID}/numbers`, ".step-pane:not([hidden]) .step-work");
@@ -404,7 +409,7 @@ it("adds bear and bull cases to the project's model, switches between them and s
   expect(page.querySelector(".scenario-preview-note")?.textContent).toContain("Previewing the bear case: nothing is added yet.");
   // #156: before it's added, the bear tab's table shows the case it would start as, labelled so,
   // beside the base case
-  const cases = () => [...new Set([...page.querySelectorAll(".model-table td.case")].map((t) => t.textContent))];
+  const cases = () => [...new Set([...page.querySelectorAll(".model-table td.case:not(.reported)")].map((t) => t.textContent))];
   const selected = () => [...new Set([...page.querySelectorAll(".model-table tr.selected td.case")].map((t) => t.textContent))];
   expect(cases()).toEqual(["Bear (preview)", "Base"]);
   await click(button("Add bear and bull cases", page));

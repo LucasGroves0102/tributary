@@ -1099,8 +1099,9 @@ on the folder changed last. Never just the first workspace.
   adjusted with one-offs, interest and other, tax rate, net income, diluted EPS and its growth,
   diluted shares and their change, FCF and its margin, buybacks, and with a price the multiples)
   and bear, base and bull side by side: history years, the TTM (when it isn't a fiscal year end)
-  and the current year's reported quarters once per line, then a row per case for the forecast
-  years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
+  and the current year's reported quarters once per line, in its own "Reported" row (Morgan 29:
+  spanning the cases' rows from the first, the history read as the bear case's), then a row per case
+  for the forecast years, the case being edited marked. A split or merger year (the API's `share_break`) shows no
   share change or EPS growth, and per-share figures before it are marked * with why. Two charts side
   by side, revenue and operating income, each on its own scale (a 4% margin's operating income read as
   zero on a revenue axis, Riley 36), history solid as "Reported", each case dashed (bear and bull lighter,
@@ -1283,8 +1284,9 @@ with Companies' address (`location.replace`). Nothing here decides a reading or 
 ## Portfolio
 
 `src/portfolio/` (Query API README "Portfolio" decides every figure; `portfolio.ts` only words
-them). `#/portfolio`: a sentence first (what you hold, what it cost, what it's worth on your own
-prices and how far up or down), "Not investment advice", a review-due note, then the holdings table
+them). `#/portfolio`: the portfolio's value first (on your own prices, a holding without one at
+what it cost, said so: Morgan 33), a sentence (what you hold, what it cost, what it's worth on your
+own prices and how far up or down), "Not investment advice", a review-due note, then the holdings table
 (shares, cost, your price with its day and source in the hover, value, gain, weight by value or by
 cost as the API says, next report, the linked analysis or thesis), closed holdings, the latest
 journal entries; empty, it explains itself. `#/portfolio/<id>`: the position as a ledger, your
@@ -1295,6 +1297,9 @@ name) and what was left out; Add saves; the export's last prices are kept only i
 company page's head says "You hold N shares, since <day>" for an open holding. A review falls due after
 a 10-K, a 10-Q or results in an 8-K ("Review due: results released <day> (8-K)"); with no red lines the
 journal's form links the analysis's Monitor step, where they're set (Riley, test 10, findings 12-13).
+Recording a sale opens the journal's form as sold (trimmed while shares remain) on the sale's day,
+asking why, and says when its price became yours; a holding's weight reads "Weight (cost)" when the
+portfolio is weighted by cost (Morgan 31).
 
 Rules: your money is shown to the cent (`cash`, parentheses for a negative), never with a seal
 (nothing here is a filed figure); umber (`--warn`) marks what asks for your writing (a review due,
