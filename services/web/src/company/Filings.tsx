@@ -13,7 +13,7 @@ export type { Change, ChangedSection } from "./changes";
 /** "📌 Add to thesis" beside each changed paragraph (the Analysis tab's What changed step) */
 export type PinChange = (change: Change, section: ChangedSection) => ReactNode;
 import { FormMark } from "../components/FormMark";
-import { eightKItems, filingHeadings, FORM_FILTERS, formsOf, parsedNote, type FormFilter } from "./data";
+import { eightKItems, filingHeadings, filterChips, formsOf, NOT_KEPT_TITLE, parsedNote, type FormFilter } from "./data";
 import { Gate } from "./Tables";
 import { useLoad } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
@@ -32,7 +32,7 @@ export function edgarLink(f: Pick<IndexedFiling, "document_url" | "filing_url">)
  * filtered and paged by the Query API, reports first and headed by fiscal year so history is easy
  * to scan. Read opens the reader where the user can read the parsed text; What changed shows the
  * Risk Factors and MD&A paragraphs changed since the prior filing; everything else links to EDGAR. */
-export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYearEnd = null }: {
+export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYearEnd = null, foreign = null }: {
   token: string;
   companyId: string;
   name: string;
@@ -41,7 +41,10 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
   initialDiff?: string;
   /** MMDD, for the fiscal-year headings; without it they go by the year filed */
   fiscalYearEnd?: string | null;
+  /** a foreign private issuer's annual report form (data.ts foreignReport): its own filter chips */
+  foreign?: string | null;
 }) {
+  const chips = filterChips(foreign);
   const [filter, setFilter] = useState<FormFilter>("reports");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -91,7 +94,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
           </span>
           <span className="grow" />
           <span className="seg" role="group" aria-label="Form">
-            {FORM_FILTERS.map(([f, label]) => (
+            {chips.map(([f, label]) => (
               <button key={f} className={f === filter ? "on" : undefined} aria-pressed={f === filter}
                 onClick={() => refilter(() => setFilter(f))}>
                 {label}
@@ -125,7 +128,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
           {() =>
             rows.length === 0 ? (
               <p className="empty">
-                No {filter === "all" ? "" : `${FORM_FILTERS.find(([f]) => f === filter)![1].toLowerCase()} `}filings{from || to ? " in these dates" : ""}.{" "}
+                No {filter === "all" ? "" : filter === "reports" || filter === "proxy" || filter === "insider" ? `${chips.find(([f]) => f === filter)?.[1].toLowerCase() ?? ""} ` : `${chips.find(([f]) => f === filter)?.[1] ?? filter} `}filings{from || to ? " in these dates" : ""}.{" "}
                 {filter !== "all" && (
                   <button className="btn sm" onClick={() => refilter(() => setFilter("all"))}>Show all filings</button>
                 )}
@@ -173,7 +176,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                                 ? <span className="faint">details not read yet</span>
                               : f.sections
                                 ? note
-                                : note && <span className="faint">{note}</span>}
+                                : note && <span className="faint" title={note === "text not kept here" ? NOT_KEPT_TITLE : undefined}>{note}</span>}
                           </td>
                           <td className="mono faint">{f.accession_no}</td>
                           <td className="n actions">

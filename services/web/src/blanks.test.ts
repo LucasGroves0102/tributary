@@ -19,6 +19,13 @@ describe("the marks", () => {
     expect(readFigure({ ...base, raw: "0.5" })).toMatchObject({ value: 0.5, text: "50.0%", title: base.sourceTitle, asOf: null, old: false, status: null });
   });
 
+  it("a user's own metric with an input that has no figure names the input (Riley, test 10, finding 26)", () => {
+    const own = readFigure({ ...base, label: "Revenue per share", columnKey: "m_abc", raw: null, source: null,
+      reading: { status: "not_reported", reason: "shares_outstanding: no figure on file" } });
+    expect(own).toMatchObject({ value: null, text: NOT_REPORTED });
+    expect(own.title).toBe("Revenue per share: no value for this company: an input has no figure (shares_outstanding: no figure on file).");
+  });
+
   it("a real zero is a figure, not a blank", () => {
     expect(readFigure({ ...base, raw: "0" })).toMatchObject({ value: 0, text: "0.0%" });
   });

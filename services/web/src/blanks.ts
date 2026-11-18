@@ -164,6 +164,13 @@ export function readFigure({ label, columnKey, raw, reading, source, latestPerio
         asOf: dated(source, true),
         title: `${label}: ${sentence(reading?.reason)}${annualNote(source)} ${sourceTitle} It stays out of sorts, filters and medians.`,
       };
+    case "not_reported":
+      // a user's own metric whose input has no figure for this company: the API names the input
+      // (Riley, test 10, finding 26: blank cells said nothing)
+      return {
+        value: null, text: NOT_REPORTED, asOf: null, old: false, status,
+        title: `${label}: no value for this company: an input has no figure (${reading?.reason ?? "not on file"}).`,
+      };
     case "other_currency": {
       // an amount in the company's own currency (migration 056): shown in it, labelled, and never
       // ranked or averaged with dollars

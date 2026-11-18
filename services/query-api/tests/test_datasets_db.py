@@ -503,6 +503,14 @@ def test_an_own_metric_is_a_sortable_screener_column(world, token):
     values = {row["company_id"]: round(Decimal(row["values"][key]), 4) for row in body["rows"]}
     assert values == {CO: Decimal("12.5"), OTHER: Decimal("21.4286")}
     assert [row["company_id"] for row in body["rows"]] == [OTHER, CO]
+    # a company with no figure for an input says which (Riley, test 10, finding 26)
+    nameless = save_metric(world, token, ANN, "Per share", "revenue / shares_outstanding")
+    nkey = "m_" + nameless.replace("-", "")
+    blank = world.client.get("/v1/screener", headers=token(ANN),
+                             params={"metric": nameless, "company_id": [CO]}).json()["rows"][0]
+    assert blank["values"][nkey] is None
+    assert blank["readings"][nkey] == {"status": "not_reported",
+                                        "reason": "shares_outstanding: no figure on file"}
     filtered = world.client.get("/v1/screener", headers=token(ANN),
                                 params={"metric": item, "where": f"{key}:lt:20",
                                         "company_id": [CO, OTHER]}).json()

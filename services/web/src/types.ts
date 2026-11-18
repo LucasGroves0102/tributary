@@ -978,7 +978,9 @@ export interface ValueReading {
    * not_computed (069): no figure because Tributary computes none for this kind of company (Walmart's
    * gross margin), the reason says why; stale (069): the company's latest period is long past (a
    * quarterly filer's 270 days, an annual filer's 500), the figure kept but out of sorts and medians */
-  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency" | "not_computed" | "stale";
+  status: "not_applicable" | "not_meaningful" | "old" | "behind" | "other_currency" | "not_computed" | "stale"
+    /** a user's own metric (screener `m_` column) with an input that has no figure: the reason names it */
+    | "not_reported";
   reason?: string | null;
   unit?: string | null;
 }

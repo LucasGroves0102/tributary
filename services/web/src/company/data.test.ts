@@ -20,6 +20,7 @@ import {
   fiscalYear,
   parsedNote,
   financialsCsv,
+  filterChips,
   formMatches,
   formsOf,
   header,
@@ -355,6 +356,12 @@ it("counts a foreign filer's 20-F, 40-F and 6-K as reports, within the API's 20 
   }
   expect(formMatches("4", "reports")).toBe(false);
   expect(formMatches("DEF 14A", "reports")).toBe(false);
+  // a foreign private issuer files no 10-K, 10-Q, 8-K or Forms 3-5: its own chips (Riley, test 10, finding 60)
+  expect(filterChips("20-F").map(([, label]) => label)).toEqual(["Reports", "20-F", "6-K", "Proxy", "All"]);
+  expect(filterChips("40-F").find(([f]) => f === "annual")?.[1]).toBe("40-F");
+  expect(filterChips(null).map(([f]) => f)).toEqual(["reports", "10-K", "10-Q", "8-K", "proxy", "insider", "all"]);
+  expect(formMatches("20-F/A", "annual")).toBe(true);
+  expect(formMatches("6-K", "6-K")).toBe(true);
   expect(formsOf("reports").length).toBeLessThanOrEqual(20);
 });
 
@@ -578,6 +585,11 @@ describe("the Filings tab's headings and notes", () => {
     expect(parsedNote({ form: "4", sections: 0 })).toBeNull();
     expect(parsedNote({ form: "144", sections: null })).toBeNull();
     expect(parsedNote({ form: "10-Q", sections: 0 })).toBe("not parsed yet");
+    // filed days ago and still no text: not waiting to be parsed, not kept (Riley, test 10, finding 29)
+    const now = Date.parse("2026-11-17T12:00:00Z");
+    expect(parsedNote({ form: "8-K", sections: 0, filed: "2025-07-01" }, now)).toBe("text not kept here");
+    expect(parsedNote({ form: "8-K", sections: 0, filed: "2026-11-17" }, now)).toBe("not parsed yet");
+    expect(parsedNote({ form: "20-F", sections: 0, filed: "2026-11-16" }, now)).toBe("not parsed yet");
     expect(parsedNote({ form: "8-K", sections: null })).toBe("index only");
     expect(parsedNote({ form: "10-K", sections: 12 })).toBe("12 sections");
   });

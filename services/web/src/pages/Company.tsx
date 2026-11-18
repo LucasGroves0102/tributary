@@ -2,7 +2,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useRef, useState } from "react";
 
 import { ApiError, expectedFilingsOf, screener } from "../api";
-import { header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK } from "../company/data";
+import { foreignReport, header, HEADER_COLUMNS, HEADER_COLUMNS_WITH_BANK } from "../company/data";
 import { DataNotes } from "../company/DataNotes";
 import { EarningsView } from "../company/Earnings";
 import { Filings } from "../company/Filings";
@@ -233,7 +233,8 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
       )}
       {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
       {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} asOf={asOf} />}
-      {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes} />}
+      {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} initialDiff={changes}
+        foreign={foreignReport(row)} />}
       {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")} />}
       {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
       {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}

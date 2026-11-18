@@ -26,6 +26,7 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
+import { ANNUAL_FORMS } from "../blanks";
 import { metricKey } from "../data/dataset";
 import { paren } from "../format";
 import { FigureText } from "../components/FigureText";
@@ -266,6 +267,13 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
             )}
             {hasValueFilter(screen) && !scope &&
               " Value filters and size bands only match companies whose financials you can read."}
+            {/* a once-a-year filer ranks beside the others' twelve months: said once, under the table (Riley, test 10, finding 25) */}
+            {(data?.rows ?? []).some((r) => Object.values(r.sources ?? {}).some((s) => ANNUAL_FORMS.test(s?.form ?? ""))) && (
+              <span className="annual-foot">
+                {" "}A company that reports once a year (Form 20-F or 40-F) is ranked by its latest fiscal year, marked “annual” under the
+                figure, beside the others' twelve months to their latest quarter.
+              </span>
+            )}
           </p>
           <details className="how-to-read">
             <summary>How to read these figures</summary>
