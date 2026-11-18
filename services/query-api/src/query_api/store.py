@@ -34,6 +34,10 @@ BEHIND_DAYS = 120
 # on it reaches both UNION branches. Up to this many days from filing_date (a filing accepted
 # after hours before a long weekend is dated days later), so bounds on it carry this margin.
 FILED_ON_MARGIN_DAYS = 7
+# 155: a figure gold read or computed (a `derived:` source tag: the no-debt zero, gross profit as
+# revenue or net sales less cost) reads as derived, whatever gold's own value_source says, so no
+# reader seals it as a figure the filing states. shapes.value_source_shown is its Python twin.
+DERIVED_SHOWN = "CASE WHEN source_tag LIKE 'derived:%%' THEN 'derived' ELSE value_source END"
 # The companies the caller can read at any tier, as their CIKs: a base column of silver.filings
 # (company_id comes from a join inside each UNION branch), in the caller's session under RLS.
 READABLE_CIKS = """ARRAY(SELECT k.cik FROM silver.company_ciks k WHERE k.company_id IN (
@@ -552,7 +556,11 @@ class Store:
             cur.execute(
                 f"""
                 SELECT metric, period_start, period_end, fiscal_year, fiscal_quarter,
-                       calendar_year, calendar_quarter, value, unit, value_source,
+                       calendar_year, calendar_quarter, value, unit,
+                       -- 155: a figure Tributary read or computed (a `derived:` tag: the
+                       -- no-debt zero, gross profit on revenue or net sales) is derived to every
+                       -- reader, never sealed as stated; gold keeps its own value_source
+                       {DERIVED_SHOWN} AS value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
                        ingested_at,
                        -- 057: the dollar bases only for a company whose amounts are dollars;

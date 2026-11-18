@@ -43,6 +43,13 @@ PCT_TINY_BASE = "the earlier figure is under a fifth of this one, too small a ba
 TINY_BASE = Decimal("5")
 
 
+def value_source_shown(value_source: str | None, source_tag: str | None) -> str | None:
+    """How a figure reads to every reader (155; store.DERIVED_SHOWN is the SQL twin): one gold read
+    or computed (a `derived:` tag: the no-debt zero, gross profit less cost) is 'derived', never a
+    figure the filing states, whatever gold's own value_source."""
+    return "derived" if (source_tag or "").startswith("derived:") else value_source
+
+
 def percent_change(current: Decimal, earlier: Decimal, unit: str,
                    places: Decimal = Decimal("0.000001")) -> tuple[Decimal | None, str | None]:
     """The one rule for a period-on-period percentage change (the recap's QoQ and YoY, alerts'

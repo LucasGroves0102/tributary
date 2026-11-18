@@ -1348,7 +1348,37 @@ def test_stale_reads_today_from_the_clock_unless_a_session_pins_it(conn):
     assert conn.execute(sql, (QUARTERS_STOPPED, QUARTERS_STOPPED)).fetchone()[0] == want
 
 
-LENDER, BEHIND_20F = "9200000051", "9200000052"
+LENDER, BEHIND_20F, NO_DEBT = "9200000051", "9200000052", "9200000053"
+
+
+def test_a_figure_gold_read_or_computed_is_derived_to_every_reader(conn, token):
+    """155 (the seal rule): gold's no-debt zero is stored 'reported' (an instant) and its computed
+    gross profits 'derived', both with a `derived:` tag; every reader gets value_source 'derived'
+    (store.DERIVED_SHOWN), so the web never seals them as a figure the filing states."""
+    listed(conn, NO_DEBT, "Debt Free Co")
+    reported(conn, NO_DEBT, "cash", LATEST, 900)
+    for metric, tag, source in (("long_term_debt", "derived:no-debt", "reported"),
+                                ("gross_profit", "derived:net_sales-cost_of_revenue", "derived")):
+        reported(conn, NO_DEBT, metric, LATEST, 0 if metric == "long_term_debt" else 400)
+        conn.execute("UPDATE gold.quarterly_financials SET source_tag = %s, value_source = %s"
+                     " WHERE company_id = %s AND metric = %s", (tag, source, NO_DEBT, metric))
+    c = api(conn)
+    params = {"view": "quarter", "metrics": ["cash", "long_term_debt", "gross_profit"]}
+    rows = {r["metric"]: r for r in c.get(f"/v1/companies/{NO_DEBT}/financials",
+                                          headers=token(USER), params=params).json()["rows"]}
+    assert rows["long_term_debt"]["value_source"] == "derived"
+    assert rows["long_term_debt"]["citation"]["xbrl_tag"] == "derived:no-debt"
+    assert rows["gross_profit"]["value_source"] == "derived"
+    assert rows["cash"]["value_source"] == "reported"
+    csv = c.get(f"/v1/companies/{NO_DEBT}/financials", headers=token(USER),
+                params={**params, "format": "csv"}).text
+    assert ",derived," in next(line for line in csv.splitlines() if "derived:no-debt" in line)
+    comp = c.get(f"/v1/companies/{NO_DEBT}/components", headers=token(USER),
+                 params={"metric": "long_term_debt", "period_end": LATEST.isoformat()}).json()
+    assert (comp["figure"]["how"], comp["figure"]["value_source"]) == ("none", "derived")
+    # gold's stored value_source is untouched (point-in-time history reads it)
+    assert conn.execute("SELECT value_source FROM gold.quarterly_financials WHERE company_id = %s"
+                        " AND metric = 'long_term_debt'", (NO_DEBT,)).fetchone()[0] == "reported"
 
 
 def test_a_lenders_gross_margin_is_not_meaningful(conn, token):

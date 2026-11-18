@@ -411,18 +411,35 @@ describe("Morgan, test 11: lines that say what they hold", () => {
         value_source: "derived",
         citation: { accession_no: ACC, form: "10-K", filed: "2026-03-13", xbrl_tag: "derived:net_sales-cost_of_revenue", source_accessions: [ACC], filing_url: null },
       }),
+      // the API reports every `derived:` figure as derived (store.DERIVED_SHOWN, 155)
       fin("long_term_debt", "2026-01-31", "0", "FY2026 Q4", {
-        citation: { accession_no: ACC, form: "10-K", filed: "2026-03-13", xbrl_tag: NO_DEBT_TAG, source_accessions: [ACC], filing_url: null },
+        value_source: "derived",
+        citation: { accession_no: ACC, form: "10-K", filed: "2026-03-13", xbrl_tag: NO_DEBT_TAG, source_accessions: [ACC], filing_url: "https://www.sec.gov/x/" },
       }),
     ];
     const t = metricTable(rows, [...STATEMENTS.is.rows, ["long_term_debt", "Long-term debt", "usd"]], "q");
     const label = (m: string) => t.rows.find((r) => r.metric === m)!;
     expect(label("net_sales").label).toBe("Net sales");
-    expect(label("gross_profit").cells[0]!.title).toContain("net sales less cost of revenue");
+    const gp = label("gross_profit").cells[0]!;
+    expect(gp.title).toContain("net sales less cost of revenue");
     const none = label("long_term_debt").cells[0]!;
     expect(none.text).toBe("$0");
     expect(none.title).toContain("this filing tags no debt");
     expect(opensIntoParts(rows[2]!)).toBe(false);
+    // the seal rule: a figure the filing doesn't state as shown is derived (italic, the arrow, no
+    // seal: Tables.tsx draws the seal only when !cell.derived)
+    expect(gp.derived).toBe(true);
+    expect(none.derived).toBe(true);
+    expect(label("net_sales").cells[0]!.derived).toBe(false);
+  });
+
+  it("a key stat a no-debt zero feeds is computed, never sealed", () => {
+    // net debt and debt/equity read the no-debt zero; both are computed, so neither has a seal
+    const src = { period_end: "2026-01-31", accession_no: ACC, form: "10-K", filed: "2026-03-13" };
+    expect(statFiled({ key: "net_debt_q", source: src })).toMatchObject({ filed: false });
+    expect(statFiled({ key: "debt_to_equity_q", source: src })).toMatchObject({ filed: false });
+    expect(statFiled({ key: "gross_margin_ttm", source: src })).toMatchObject({ filed: false });
+    expect(statFiled({ key: "cash_q", source: src })).toEqual({ filed: true });
   });
 
   it("a blank interest expense says why it's often blank (Apple since FY2024)", () => {

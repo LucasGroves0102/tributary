@@ -282,6 +282,12 @@ accessions filed under more than one company's CIKs in the last 400 days (`silve
 10 such filings on 2026-11-09). Read once an hour per process (~190 ms cold); a failure leaves the
 list empty rather than failing the screener.
 
+**A figure gold read or computed** (155): a row whose source tag starts `derived:` (the no-debt zero,
+gross profit as revenue or net sales less cost) is `value_source: "derived"` in every answer
+(`/financials` JSON and CSV, the recap, `/components`, whose `how` is `none` for the no-debt zero), set
+once by `store.DERIVED_SHOWN` / `shapes.value_source_shown`; gold keeps its own value_source (the
+point-in-time history reads it). So no reader seals one as a figure the filing states.
+
 **How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
 and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
 margin over 100%, any margin over ±1,000%, growth of over 1,000% from under $10M or from a base under
