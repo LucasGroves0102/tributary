@@ -337,6 +337,16 @@ it("overview: a 20-F filer's sections say it files 20-Fs and 6-Ks, and ask for n
   expect(paths().some((u) => u.pathname.endsWith("/events") || u.pathname.includes("/recap") || u.pathname.includes("/sections"))).toBe(false);
 });
 
+it("overview: a once-a-year filer's revenue chart says why it has no quarters (Riley, test 10, finding 28)", async () => {
+  const BIRK = "0001977102";
+  const f20 = { period_end: "2025-12-31", accession_no: "0001977102-26-000004", form: "20-F", filed: "2026-02-12" };
+  rowFor = () => nvdaRow({ ...entry({ company_id: BIRK, name: "Birkenstock Holding", tickers: ["BIRK"] }), access: ["filings", "financials"],
+    sources: { revenue_ttm: f20, revenue_q: f20, cash_q: f20 } });
+  override = (u) => (u.pathname.endsWith("/financials") ? Response.json({ as_of: "", rows: [] }) : null);
+  await render("overview", BIRK);
+  expect(container.textContent).toContain("Birkenstock Holding reports once a year (Form 20-F), so there is no quarterly revenue to chart.");
+});
+
 const TTM_EPS = fin("eps_diluted", "2026-07-26", "4.9085", "FY2027 Q2", {
   value_source: "derived", as_filed: null, splits: [],
   derivation: { method: "ttm_eps", inputs: [

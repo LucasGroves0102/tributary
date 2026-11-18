@@ -618,7 +618,8 @@ export function figuresBehind(
   newest: { form: string; accession_no: string; filed: string; period_of_report?: string | null } | null,
   now: number = Date.now(),
 ): FiguresBehind | null {
-  if (!newest?.period_of_report || !/^10-[KQ]$/.test(newest.form) || !rows.length) return null;
+  // a foreign filer's annual report counts too (Riley, test 10, finding 2: TSMC a year behind, unsaid)
+  if (!newest?.period_of_report || !/^(10-[KQ]|20-F|40-F)$/.test(newest.form) || !rows.length) return null;
   const through = rows.reduce((m, r) => (r.period_end > m ? r.period_end : m), "");
   const cited = rows.reduce((m, r) => (r.citation.filed > m ? r.citation.filed : m), "");
   if (rows.some((r) => r.citation.accession_no === newest.accession_no)) return null;

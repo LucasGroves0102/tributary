@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { annualPerShare, ApiError, financialsView, perShare as fetchPerShare, segments as fetchSegments } from "../api";
+import { annualPerShare, ApiError, filingIndex, financialsView, perShare as fetchPerShare, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
 import { change, day, moneyRow, paren, pct } from "../format";
@@ -250,7 +250,7 @@ const BALANCE_NOT_TTM = "A balance is a point in time, so it has no trailing twe
 /** The figures stop before the newest 10-K/10-Q on EDGAR (H9): how far behind, in periods and days,
  * and where to read it meanwhile. No promise of when it catches up: the SEC's data keeps none. */
 function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind; companyId: string; name: string; url: string | null }) {
-  const word = behind.form === "10-K" ? "year" : "quarter";
+  const word = /^(10-K|20-F|40-F)$/.test(behind.form) ? "year" : "quarter";
   return (
     <p className="card-b stale-note" role="note">
       ⚠ Not in these figures yet: {name}'s {behind.form} for the {word} ending {day(behind.period, true)}, filed{" "}
@@ -344,14 +344,20 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
   // Today's index against today's figures only: as of a past day the figures are those filed by
   // then, so a report filed since isn't missing from them (Riley, test 10, finding 3)
   const [newest, setNewest] = useState<IndexedFiling | null>(null);
+  // a company that reports once a year (20-F, 40-F) is behind its own annual report, not a 10-K/10-Q
+  const yearly = load?.state === "ok" && load.data.annualOnly;
   useEffect(() => {
     let live = true;
     setNewest(null);
-    if (!asOf) void newestPeriodic(token, companyId).then((f) => live && setNewest(f));
+    if (asOf) return;
+    const ask = yearly
+      ? filingIndex(token, companyId, { forms: ["20-F", "40-F"], limit: 1 }).then((r) => r.filings[0] ?? null).catch(() => null)
+      : newestPeriodic(token, companyId);
+    void ask.then((f) => live && setNewest(f));
     return () => {
       live = false;
     };
-  }, [token, companyId, asOf]);
+  }, [token, companyId, asOf, yearly]);
   const behind = load?.state === "ok" && !asOf ? figuresBehind(load.data.rows, newest) : null;
   const exportCsv = () =>
     load?.state === "ok" && table &&

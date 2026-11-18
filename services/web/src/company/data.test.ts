@@ -335,6 +335,8 @@ describe("figures behind the filing index (H9)", () => {
   it("isn't behind when the figures hold that period or cite that filing, or for an older or other filing", () => {
     expect(figuresBehind([...rows, fin("revenue", "2026-06-30", "40867000000", "FY2026 Q2")], june, NOW)).toBeNull();
     expect(figuresBehind(rows, { ...june, period_of_report: "2026-04-02" }, NOW)).toBeNull(); // within a week
+    // a 20-F a year past the figures says so too (Riley, test 10, finding 2: TSMC)
+    expect(figuresBehind(rows, { ...june, form: "20-F" }, NOW)).toMatchObject({ form: "20-F" });
     expect(figuresBehind(rows, { ...june, form: "8-K" }, NOW)).toBeNull();
     expect(figuresBehind(rows, { ...june, period_of_report: null }, NOW)).toBeNull();
     expect(figuresBehind(rows, { ...june, filed: "2026-04-01" }, NOW)).toBeNull(); // filed before what's cited

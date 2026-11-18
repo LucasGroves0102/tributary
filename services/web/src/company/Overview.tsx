@@ -100,7 +100,7 @@ export function Overview({
       <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign}
         asOf={notKept ? asOf : undefined} />
       <Business token={token} companyId={companyId} name={name} canRead={canRead} foreign={foreign} />
-      {canFin && <Revenue token={token} companyId={companyId} />}
+      {canFin && <Revenue token={token} companyId={companyId} name={name} foreign={foreign} />}
       <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} folio />
       <YourData token={token} companyId={companyId} name={name} />
       </TodaysView.Provider>
@@ -384,7 +384,7 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
 
 /** Quarterly revenue (bars) and operating margin (line, right axis) on fiscal quarters, in the
  * chart builder's chart: hover shows each value's filing. */
-function Revenue({ token, companyId }: { token: string; companyId: string }) {
+function Revenue({ token, companyId, name, foreign }: { token: string; companyId: string; name: string; foreign: string | null }) {
   const svg = useRef<SVGSVGElement>(null);
   const load = useLoad(companyId, () => financials(token, companyId, 12, ["revenue", "operating_margin"]));
   const series = load?.state === "ok"
@@ -410,7 +410,12 @@ function Revenue({ token, companyId }: { token: string; companyId: string }) {
         ) : load.state === "error" ? (
           <ErrorPanel what="revenue" onRetry={load.retry} />
         ) : (
-          <p className="empty">No quarterly revenue to chart. Statements shows what this company reports.</p>
+          <p className="empty">
+            {/* a once-a-year filer has no quarters to chart: said, not blank (Riley, test 10, finding 28) */}
+            {foreign
+              ? `${name} reports once a year (Form ${foreign}), so there is no quarterly revenue to chart. Statements shows its years.`
+              : "No quarterly revenue to chart. Statements shows what this company reports."}
+          </p>
         )
       )}
     </Folio>
