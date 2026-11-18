@@ -173,6 +173,8 @@ describe("statements", () => {
     ];
     expect(metricTable(cal, STATEMENTS.is.rows, "q", "calendar").columns.map((c) => c.label)).toEqual(["CY2025 Q4", "CY2026 Q1"]);
     expect(metricTable(cal, STATEMENTS.is.rows, "a", "calendar").columns.map((c) => c.label)).toEqual(["CY2025"]);
+    // a year says it runs to its end, so "CY2025" over a January date reads as the year that ended then (Riley, test 10, 56)
+    expect(metricTable(cal, STATEMENTS.is.rows, "a", "calendar").columns[0]!.sub).toMatch(/^to [A-Z][a-z]{2} \d{1,2}, \d{4}$/);
     expect(metricTable(cal, STATEMENTS.is.rows, "a").columns.map((c) => c.label)).toEqual(["FY2026"]);
   });
 

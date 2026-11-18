@@ -9,6 +9,7 @@ import { forgetVisits } from "../home/lastVisit";
 import { loadScreens } from "../pages/lazy";
 import type { AlertNotification, RedLine } from "../types";
 import { RedLines } from "./RedLines";
+import { UndoDeletes } from "../workspaces/Actions";
 import { clearAlerts } from "./useAlerts";
 
 const ME = { user_id: "alice", companies: [{ company_id: NVDA, name: "Nvidia", industry: null, tiers: ["financials", "filings"] }] };
@@ -276,7 +277,7 @@ it("Monitor's red lines: crossed and clear on the latest figures; a typed 55 is 
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  await act(async () => root.render(<RedLines token="t" companyId={NVDA} name="Nvidia" />));
+  await act(async () => root.render(<><RedLines token="t" companyId={NVDA} name="Nvidia" /><UndoDeletes saved={null} /></>));
   await settle();
   const rows = [...container.querySelectorAll(".redline-list li")];
   expect(rows.map((r) => r.querySelector(".redline-state")?.textContent)).toEqual(["Crossed", "Clear"]);
@@ -284,10 +285,16 @@ it("Monitor's red lines: crossed and clear on the latest figures; a typed 55 is 
   expect(rows[0]!.textContent).toContain("Gross margin below 75% Over the trailing twelve months; 73.5% at Oct 26, 2026");
   expect(rows[0]!.querySelector("b")?.getAttribute("title")).toBe("Gross margin below 75.0%");
   expect(rows[1]!.textContent).toContain("3.1% at Oct 26, 2026");
+  // with red lines on file the form is folded behind a button (Riley, test 10, finding 67)
+  expect(container.querySelector(".redline-form")).toBeNull();
+  await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Add a red line")!.click());
   await act(async () => type(container.querySelector<HTMLInputElement>('input[inputmode="decimal"]')!, "55"));
   await settle();
   await act(async () => container.querySelector<HTMLFormElement>(".redline-form")!.requestSubmit());
   await settle();
   // the first preset is operating margin: most companies report it (Riley 84)
   expect(posted).toEqual([{ company_id: NVDA, label: "Operating margin below 55%", formula: "operating_margin", view: "ttm", op: "<", threshold: "0.55" }]);
+  // added: said in a toast, and the form folds again
+  expect(document.querySelector(".undo-stack")?.textContent).toContain("Added the red line “Operating margin below 55%”");
+  expect(container.querySelector(".redline-form")).toBeNull();
 });

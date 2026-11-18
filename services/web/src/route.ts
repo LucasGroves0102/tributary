@@ -96,8 +96,9 @@ export type NavView = "home" | "analysis" | "portfolio" | "companies" | "chart" 
 /** The left nav: label and the key after "g" that opens it. */
 export const NAV: { view: NavView; label: string; key: string }[] = [
   { view: "home", label: "Home", key: "h" },
-  { view: "analysis", label: "Analysis", key: "p" },
-  { view: "portfolio", label: "Portfolio", key: "o" },
+  // Portfolio is g p, Analysis g n (Riley, test 10, finding 70: "gp" beside Analysis read as Portfolio's)
+  { view: "analysis", label: "Analysis", key: "n" },
+  { view: "portfolio", label: "Portfolio", key: "p" },
   { view: "companies", label: "Companies", key: "c" },
   { view: "chart", label: "Chart builder", key: "b" },
   { view: "compare", label: "Compare", key: "x" },

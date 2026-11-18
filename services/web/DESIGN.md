@@ -95,6 +95,23 @@ were searched, names sections ("Risk Factors") instead of their keys, offers Ope
 accession number, and never doubles a phrase's quotes; Peers' shared terms appear once each, three at most;
 Business paragraphs rejoin a sentence a line break cut.
 
+### The restraint pass (Riley's audit, test 10, findings 37-107)
+
+Red is only the seal, the margin rubrics, red-letter days and the "may have changed" `*`: the Home badge,
+the bell's count, watchlist new-filing dots, where-you-are rules (nav, tabs, steps, sort, saved screens),
+disclosure triangles, red line states, crossed tags and severity tags are the ink or the ink's greys; a dark
+table's column rules are a warm grey (`--col-rule`; the paper's stay the red hairline). Buttons are one
+system: primary (ink filled), secondary (outline), quiet (text, underlined on hover, never a grey pill),
+destructive (the error ink, after a rule in a menu). An empty state is one line and one action, how the
+screen works behind `details.how-to-read` (Portfolio, Your data, Analysis, Alerts, a workspace). What just
+happened is a toast: a save (and the workspace it made), CSV exports, alert ticks, a red line, End demo (at
+the front door's foot too). The company tabs' own cards read as folios (rubric in the margin, no box; a CSS
+rule on `.company-page > section.card`, the markup unchanged). Confidence and a computed figure's how open
+on a tap or focus (`components/Why`, the ledger's focusable `dd`), not only a hover. The palette finds the
+pages and saved screens by what they do; the sidebar links Using the API; g p is Portfolio, g n Analysis.
+A phone's company header keeps only the listing, industry, year end, currency and confidence; its tabs are
+one scrolling row; the user's own tables read as labelled cards under 560px.
+
 ## Shell and layout
 
 Every screen sets the browser tab's title (`src/title.ts`: "Nvidia (NVDA) · Statements · Tributary").
@@ -130,9 +147,10 @@ so its sort buttons, the frozen first column and the sideways scroll work unchan
 copy to keep in step. Numeric headers stack their label over their unit, so a column is as wide as
 its numbers, and as a table narrows the wordy columns give way first (the screener's industry and
 Peers' "Why" move under the name; the watchlist's period end and Compare's fiscal label go to the
-hover). Dollars in a statement, segment or revenue row share the largest value's unit (`format.ts`
-`moneyRow`: $0.05M, $0.96M, $2.43M; a figure that would round to nothing keeps its own, and the hover
-has the exact value). A company header shows its main ticker and "+8 more", with the rest in the hover.
+hover). Dollars in a statement, segment or revenue row share one unit (`format.ts` `moneyRow`): the
+largest value's, or the next smaller one when a figure would read under one of the larger and the
+largest still fits four digits ($119M ... $3,955M rather than $0.12B ... $3.96B; $55K, $964K, $2,430K),
+thousands grouped; a figure that would round to nothing keeps its own, and the hover has the exact value. A company header shows its main ticker and "+8 more", with the rest in the hover.
 Charts are drawn for the width they have (`chart/layout.ts` `chartSize`), so their text is its real
 size at any width and titles and footnotes wrap instead of being cut; `svgRef` always gets the
 standard-size drawing, so Export SVG / PNG give the same deck-ready image from a phone or a monitor.
@@ -365,8 +383,10 @@ status, the shell, the company page and Statements, and the screener; the others
 tokens until their own pass. The company page's head has the sector in the margin, the name, then
 the facts as separate items (listing, SIC industry, fiscal year end, filer category, where it's
 incorporated in words: `companies/places.ts` maps EDGAR's state and country codes, "Y9" is Jersey,
-and a code EDGAR doesn't list isn't shown; currency; CIK, whose hover says what the user's access
-covers), the next expected filing only when the API has one, two actions in the open (Start an
+and a code EDGAR doesn't list isn't shown; currency; confidence, its reasons a tap away; the CIK, its
+hover the CIK's; "Your plan: ..." only for a plan short of a tier), the next expected filing only when
+the API has one ("expected around Nov 25, 2026 (an estimated date)", or due about now, or later than
+estimated), two actions in the open (Start an
 analysis, the one primary, and Watch) with Chart, Compare, Ask, New thesis and New model under More,
 and the tabs. The Overview: **The year**, the twelve months as a sentence
 (revenue, its growth, net income and net cash or net debt, `data.ts` `yearStory`: API values only,

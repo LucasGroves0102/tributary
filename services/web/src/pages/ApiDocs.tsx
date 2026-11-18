@@ -56,11 +56,18 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
         <h1>Using the API</h1>
         <p className="muted">
           What you read in Tributary, from your own scripts: the same figures and filing text, each with the filing it came from,
-          through the same permission checks as this site. A key reads only what you can read here.
+          through the same permission checks as this site. A key reads only what you can read here. Keys need an account (GitHub or a
+          password account): a demo sandbox can't make one.
         </p>
+        {/* a long page's contents up front (Riley, test 10, finding 71); buttons, since the address is the page's route */}
+        <nav className="api-toc" aria-label="On this page">
+          {API_SECTIONS.map(([id, label]) => (
+            <button key={id} className="link" onClick={() => document.getElementById(id)?.scrollIntoView({ block: "start" })}>{label}</button>
+          ))}
+        </nav>
       </div>
 
-      <Folio name="Your key" line="Made in Settings, shown once" lead>
+      <Folio name="Your key" line="Made in Settings, shown once" lead id="api-key">
         <ol className="api-steps">
           <li>
             {signedOut ? <><a href={href({ view: "home" })}>Sign in</a> with GitHub or your account, then open Settings: API keys is its last section.</>
@@ -82,7 +89,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
         </p>
       </Folio>
 
-      <Folio name="First request" line="curl and Python">
+      <Folio name="First request" line="curl and Python" id="api-first">
         <p>
           Every route is under <code className="api-base">{base}</code>. Send the key as a bearer token. Find a company, then read its
           revenue for the last eight quarters, each with its citation:
@@ -118,7 +125,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
         ].join("\n")}</code></pre>
       </Folio>
 
-      <Folio name="Connect your AI model" line="MCP: by its address, or with a key">
+      <Folio name="Connect your AI model" line="MCP: by its address, or with a key" id="api-ai">
         <p>
           Your own AI model (Claude, ChatGPT, or another agent that speaks the Model Context Protocol) can read Tributary through its MCP
           server at <code className="api-mcp">{mcp}</code>: the same figures, filing text and citations, through the same permission
@@ -146,7 +153,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
 
       <InYourSpreadsheet origin={origin} loadScript={loadScript} />
 
-      <Folio name="What a key can do" line="Read, or read and write">
+      <Folio name="What a key can do" line="Read, or read and write" id="api-scopes">
         <dl className="api-scopes">
           <dt>Read only</dt>
           <dd>Every route below marked Read: figures, segments, filings and their text, What changed, search, the screener, peers, events,
@@ -160,7 +167,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
         </dl>
       </Folio>
 
-      <Folio name="Routes" line="From the API's own description"
+      <Folio name="Routes" line="From the API's own description" id="api-routes"
         aside={<a href={`${base}/v1/openapi-keys.json`} target="_blank" rel="noreferrer">OpenAPI</a>}>
         {state.kind === "loading" && <p className="muted">Loading the routes…</p>}
         {state.kind === "error" && (
@@ -173,7 +180,7 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
         {state.kind === "ok" && <Routes routes={keyRouteList(state.doc)} />}
       </Folio>
 
-      <Folio name="Limits and errors" line="Per key">
+      <Folio name="Limits and errors" line="Per key" id="api-limits">
         <p>
           Each key makes up to {limits ? LIMITS_TEXT(limits) : "a set number of requests a minute and a day"}: a minute on the clock, a day
           from midnight UTC. Every answer says what's left in <code>X-RateLimit-Remaining-Minute</code> and{" "}
@@ -198,6 +205,12 @@ export function ApiDocs({ load = keyRoutes, signedOut = false, origin, loadScrip
     </div>
   );
 }
+
+/** The page's sections, for its contents. */
+const API_SECTIONS: [string, string][] = [
+  ["api-key", "Your key"], ["api-first", "First request"], ["api-ai", "Your AI model"], ["api-sheets", "Spreadsheets"],
+  ["api-scopes", "What a key can do"], ["api-routes", "Routes"], ["api-limits", "Limits and errors"],
+];
 
 /** The API's words with their `code` spans as code (text only: nothing is parsed as HTML). */
 function withCode(text: string) {

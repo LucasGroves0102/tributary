@@ -18,6 +18,7 @@ import { useLoad } from "../company/useLoad";
 import { useDirectory } from "../companies/directory";
 import { placeName } from "../companies/places";
 import { confidenceWords } from "../companies/rows";
+import { Why } from "../components/Why";
 import { Folio } from "../components/Folio";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
@@ -130,16 +131,20 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
           )}
           {h.industry && <span title={h.sic ? `SIC ${h.sic}, the SEC's industry code` : undefined}>{h.industry}</span>}
           {h.fye && <span>Fiscal year ends in {h.fye}</span>}
-          {h.filer && <span>{h.filer} filer</span>}
-          {place && <span title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}
           {h.currency && <span>Figures in {h.currency}</span>}
-          {/* 074: how far to trust the figures, quiet, its reasons in the hover */}
+          {/* the facts a phone can do without go quiet there (Riley, test 10, finding 94: six lines of metadata
+              filled the first screen); `.co-minor` hides below 600px of page */}
+          {h.filer && <span className="co-minor">{h.filer} filer</span>}
+          {place && <span className="co-minor" title={`EDGAR's code: ${h.state}`}>Incorporated in {place}</span>}
+          {/* 074: how far to trust the figures, quiet; its reasons open on a tap as well as a hover (Riley, test 10, finding 40) */}
           {confidence && (() => {
             const c = confidenceWords(confidence);
-            return <span className="defined co-confidence" title={c.hover}>{c.label}</span>;
+            return <Why className="co-confidence" label={c.label} why={c.hover} />;
           })()}
-          {/* what this user's access covers is the CIK's hover, not a mark in the masthead */}
-          <span className="co-cik" title={`Your access: ${accessWords(row.access)}`}>CIK {companyId}</span>
+          {/* the SEC's number for the company, said as such (Riley, test 10, finding 74: its hover was about access) */}
+          <span className="co-cik co-minor" title="The SEC's number for this company (its Central Index Key)">CIK {companyId}</span>
+          {/* access only when it is short of both tiers: a full reader needs no word of it */}
+          {row.access.length < 2 && <span className="co-access">{accessShort(row.access)}</span>}
         </p>
         {next && (
           <p className="meta co-meta">
@@ -147,9 +152,7 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
             {asOf && <span className="asof-today-k">Today:</span>}
             {next.last_filed && <span>Last periodic report filed {day(next.last_filed, true)}</span>}
             <span title={expected?.state === "ok" ? expected.data.method : undefined}>
-              Next {next.form}, for the period ending {day(next.period_end, true)}, expected
-              {next.expected_date ? ` around ${day(next.expected_date, true)}` : ""}
-              {" "}(an estimate{next.status !== "upcoming" ? `, ${next.status}` : ""})
+              {nextWords(next)}
             </span>
           </p>
         )}
@@ -294,10 +297,20 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
   );
 }
 
-/** What a user's access covers for a company, in words (the CIK's hover). */
-function accessWords(access: string[]): string {
-  if (!access.length) return "metadata only; your plan doesn't cover its financials or filing text";
-  return access.map((t) => (t === "filings" ? "filing text" : t)).join(" and ");
+/** The next periodic report in plain words (Riley, test 10, finding 53: "(an estimate, due)"): when it's
+ * expected, and that the date is an estimate; a report past its date says so. */
+export function nextWords(next: { form: string; period_end: string; expected_date: string | null; status: string }): string {
+  const when = next.expected_date ? `, expected around ${day(next.expected_date, true)}` : "";
+  const status = next.status === "due" ? ": due about now (an estimated date)"
+    : next.status === "overdue" ? ": later than its estimated date"
+      : next.expected_date ? " (an estimated date)" : "";
+  return `Next ${next.form}, for the period ending ${day(next.period_end, true)}${when}${status}`;
+}
+
+/** What a reader short of a tier can read, in a few words (the masthead says it only then). */
+function accessShort(access: string[]): string {
+  if (!access.length) return "Your plan: metadata only";
+  return access.includes("financials") ? "Your plan: financials, not filing text" : "Your plan: filing text, not financials";
 }
 
 /** The two ways to start research, side by side where the user chooses (L5): an analysis (the

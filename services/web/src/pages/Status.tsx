@@ -58,7 +58,7 @@ export function Status({ load = dataStatus, now = Date.now, signedOut = false, r
       <div className="page-header">
         <h1>Data status</h1>
         <p className="muted">
-          How fresh, complete and checked the data is, read live from the production database (counts
+          How fresh, complete and checked the data is, read from the production database when you open this page (counts
           and timestamps only), with the last recorded results of the tests on the assistant and the figures.
           {state.kind === "ok" && (
             <span className="faint">
@@ -186,19 +186,19 @@ function Completeness({ data, when }: { data: DataStatus; when: (iso: string | n
               </div>
             </div>
             <div>
-              <div className="k">Missing when checked</div>
+              <div className="k">Missing at a check, then fetched</div>
               <div className="v">{count(c.missing)}</div>
               <div className="p">
-                {c.days_with_missing ? `all on ${count(c.days_with_missing)} of those days` : "on none of those days"}
+                {c.days_with_missing ? `filings the feed had missed, all on ${count(c.days_with_missing)} of those days` : "on none of those days"}
               </div>
             </div>
             <div>
-              <div className="k">Fetched again</div>
+              <div className="k">Filer records fetched</div>
               <div className="v">{count(c.republished)}</div>
-              <div className="p">one per filer, and a filing can have several, so this can pass Missing</div>
+              <div className="p">one per filer of each missed filing (a filing can have several), so more than the filings</div>
             </div>
             <div>
-              <div className="k">Last check</div>
+              <div className="k">Last nightly check</div>
               <div className="v">{when(c.last_checked_at)}</div>
               {c.last_checked_at && <div className="p">{stamp(c.last_checked_at)}</div>}
             </div>

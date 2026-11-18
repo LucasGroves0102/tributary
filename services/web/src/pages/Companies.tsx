@@ -31,6 +31,8 @@ import { metricKey } from "../data/dataset";
 import { paren } from "../format";
 import { FigureText } from "../components/FigureText";
 import { MenuButton } from "../components/MenuButton";
+import { toast } from "../components/Toasts";
+import { Why } from "../components/Why";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
@@ -90,7 +92,6 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   const screen = useMemo(() => (scope ? { ...asked, mine: undefined } : asked), [scope, asked]);
   const [result, setResult] = useState<State>({ state: "loading" });
   const [exporting, setExporting] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [sectorList, setSectorList] = useState<Sectors | null>(null);
   const columnKeys = chosen.map((c) => c.key).join(",");
@@ -134,12 +135,16 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   const set = (patch: Partial<ScreenFilters>) =>
     go({ view: "companies", screen: { ...screen, page: undefined, ...patch } });
 
+  // a download says it happened (Riley, test 10, finding 48: Export CSV was silent), in the one toast system
   const exportCsv = () => {
     setExporting(true);
-    setNote(null);
     screenerCsv(token, params)
-      .then((blob) => download("screener.csv", blob))
-      .catch(() => setNote("Couldn't export the screen. Try again."))
+      .then((blob) => {
+        download("screener.csv", blob);
+        const n = Math.min(total ?? 0, SCREENER_CSV_ROWS);
+        toast({ text: `Exported ${n.toLocaleString()} ${n === 1 ? "company" : "companies"} to screener.csv.`, topic: "screener-csv" });
+      })
+      .catch(() => toast({ text: "Couldn't export the screen. Try again.", error: true, topic: "screener-csv" }))
       .finally(() => setExporting(false));
   };
 
@@ -188,7 +193,6 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
         {metricMenu}
         {saveBar}
       </div>
-      {note && <p className="empty error">{note}</p>}
       {savedScreens}
       {watch?.(columns)}
 
@@ -582,13 +586,14 @@ function Table({
                       )}
                       {joint && <span className="tag joint" title={joint}>combined 10-K</span>}
                     </a>
-                    {/* 074: only a mark worth a second look shows in the list; high says nothing */}
-                    {r.confidence && r.confidence.level !== "high" && (
-                      <span className="defined faint small co-confidence" title={confidenceWords(r.confidence).hover}>
-                        {confidenceWords(r.confidence).label}
-                      </span>
-                    )}
                     {r.industry && <div className="co-sub faint small" title={r.industry}>{r.industry}</div>}
+                    {/* 074: only a mark worth a second look shows in the list (high says nothing), under the industry, its
+                        reasons a tap away (Riley, test 10, finding 47: squeezed beside the ticker, hover only) */}
+                    {r.confidence && r.confidence.level !== "high" && (
+                      <div className="co-conf small">
+                        <Why className="co-confidence" label={confidenceWords(r.confidence).label} why={confidenceWords(r.confidence).hover} />
+                      </div>
+                    )}
                   </td>
                   <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>
                     <span className="ind-in">

@@ -118,11 +118,14 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-it("an empty portfolio explains itself and offers a holding or an import", async () => {
+it("an empty portfolio says so in a line, offers an import, and folds how it works (Riley, test 10, 97 and 106)", async () => {
   await show(<PortfolioPage token="t" />);
-  expect(container.querySelector(".portfolio-empty")?.textContent).toContain("Track what you own against the research behind it");
-  expect(container.textContent).toContain("Not investment advice");
+  expect(container.querySelector(".portfolio-empty .empty-line")?.textContent).toContain("No holdings yet. Track what you own against the research behind it");
+  expect(container.querySelector(".portfolio-empty details.how-to-read")?.textContent).toContain("Not investment advice");
   expect(container.querySelector<HTMLAnchorElement>('a[href="#/portfolio/import"]')).not.toBeNull();
+  // one heading and one Add a holding: the page bar's
+  expect([...container.querySelectorAll("h1, h2")].map((h) => h.textContent)).toEqual(["Portfolio"]);
+  expect([...container.querySelectorAll("button")].filter((b) => b.textContent === "Add a holding")).toHaveLength(1);
   await act(async () => button("Add a holding")!.click());
   expect(container.querySelector("form.pf-form")).not.toBeNull();
 });
@@ -245,8 +248,8 @@ it("adds a fund by its symbol, and writes why as the journal's first entry", asy
   const form = container.querySelector<HTMLFormElement>("form.pf-form")!;
   await act(async () => [...form.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((b) => b.textContent === "A fund or ETF")!.click());
   type(form.querySelector<HTMLInputElement>('input[placeholder="VOO"]')!, "voo");
-  type(form.querySelector<HTMLInputElement>('input[placeholder="2.5"]')!, "0.05");
-  type(form.querySelector<HTMLInputElement>('input[placeholder="250.00"]')!, "25");
+  type(form.querySelector<HTMLInputElement>('input[placeholder="e.g. 10"]')!, "0.05");
+  type(form.querySelector<HTMLInputElement>('input[placeholder="e.g. 1,250.00"]')!, "25");
   type(form.querySelector<HTMLTextAreaElement>("textarea")!, "Cheap index exposure while I learn.");
   await act(async () => form.requestSubmit());
   await settle();

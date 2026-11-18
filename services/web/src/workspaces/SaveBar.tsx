@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 
 import { failureReason } from "../api";
+import { MenuButton } from "../components/MenuButton";
 import { toast } from "../components/Toasts";
 import { ConfirmDelete } from "./Actions";
 import {
@@ -77,26 +78,34 @@ export function SaveBar({ current, saved, label }: Props) {
           )}
         </span>
       )}
-      {open && (
-        <button className="btn" onClick={() => void saveOver()} disabled={!dirty || busy || !ready || offline} title={why}>
+      {/* an open item: Save only when there is something to save, Save as and Close in a menu, so the page's bar
+          isn't six controls with a greyed Save and a bare "Close" (Riley, test 10, finding 86) */}
+      {open && dirty && (
+        <button className="btn" onClick={() => void saveOver()} disabled={busy || !ready || offline} title={why}>
           Save
         </button>
       )}
-      <button
-        className={open ? "btn" : "btn primary"}
-        onClick={() => {
-          setForm((f) => !f);
-          setError(null);
-        }}
-        disabled={!ready || offline}
-        title={why}
-        aria-expanded={form}
-      >
-        {open ? "Save as…" : "Save…"}
-      </button>
-      {open && (
-        <button className="btn ghost" onClick={() => (dirty ? setClosing(true) : saved.close(current.kind))} title={`Stop editing “${open.name}”; it stays saved as it was`}>
-          Close
+      {open ? (
+        <MenuButton label="More" count={false} items={[
+          { label: "Save as…", disabled: !ready || offline, title: why, onSelect: () => {
+            setForm(true);
+            setError(null);
+          } },
+          { label: `Close “${open.name}”`, title: `Stop editing it; it stays saved as it was`,
+            onSelect: () => (dirty ? setClosing(true) : saved.close(current.kind)) },
+        ]} />
+      ) : (
+        <button
+          className="btn primary"
+          onClick={() => {
+            setForm((f) => !f);
+            setError(null);
+          }}
+          disabled={!ready || offline}
+          title={why}
+          aria-expanded={form}
+        >
+          Save…
         </button>
       )}
       {closing && open && (
@@ -162,7 +171,11 @@ function SaveForm({
     setBusy(true);
     setError(null);
     try {
-      await saved.saveAs(current, name, target);
+      const item = await saved.saveAs(current, name, target);
+      // a workspace the save made says so (Riley, test 10, finding 43: "Screens" appeared in the sidebar unannounced)
+      if (item.madeWorkspace) {
+        toast({ text: `Saved “${item.name}” in a new workspace, ${item.workspace_name}: it's in the sidebar.`, topic: `saved-${current.kind}` });
+      }
       onDone();
     } catch (err) {
       setError(`Couldn't save: ${message(err)}.`);
@@ -174,7 +187,9 @@ function SaveForm({
   return (
     <form className="save-form card" onSubmit={(e) => void submit(e)} aria-label={`Save ${KIND_LABELS[current.kind].toLowerCase()}`}>
       <label htmlFor={`${id}-name`}>Name</label>
-      <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus />
+      {/* the suggestion is selected, so typing replaces it (Riley, test 10, finding 45) */}
+      <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus
+        onFocus={(e) => e.currentTarget.select()} />
       <label htmlFor={`${id}-ws`}>Workspace</label>
       <select id={`${id}-ws`} className="field" value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
         {list.map((w) => (
@@ -186,7 +201,7 @@ function SaveForm({
       </select>
       {workspace === NEW && (
         <>
-          <label htmlFor={`${id}-new`}>New workspace</label>
+          <label htmlFor={`${id}-new`}>The new workspace</label>
           <input
             id={`${id}-new`}
             className="field"

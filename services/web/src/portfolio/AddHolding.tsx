@@ -37,7 +37,7 @@ export function AddHolding({ token, onAdded, onCancel }: { token: string; onAdde
     if (what === "company" && !company) return setError("Pick the company.");
     if (what === "fund" && !/^[A-Za-z0-9][A-Za-z0-9./-]{0,11}$/.test(symbol.trim())) return setError("Type the fund's symbol, such as VOO.");
     if (!n) return setError("Shares: a number above zero.");
-    if (c === null) return setError(costMode === "total" ? "Cost: what the buy cost in all." : "Price: what a share cost.");
+    if (c === null) return setError(costMode === "total" ? "What you paid: the buy's total." : "Price per share: what one share cost.");
     setBusy(true);
     try {
       const made = await addHolding(token, {
@@ -97,19 +97,20 @@ export function AddHolding({ token, onAdded, onCancel }: { token: string; onAdde
         )}
         <label className="pf-field">
           <span>Shares</span>
-          <input className="field num" inputMode="decimal" value={count} onChange={(e) => setCount(e.target.value)} placeholder="2.5" />
+          <input className="field num" inputMode="decimal" value={count} onChange={(e) => setCount(e.target.value)} placeholder="e.g. 10" />
         </label>
+        {/* plain words (Riley, test 10, finding 50: "Cost, in all" and "In all / A share" read as translated) */}
         <div className="pf-field">
-          <span>{costMode === "total" ? "Cost, in all" : "Price a share"}</span>
+          <span>{costMode === "total" ? "What you paid in total" : "Price per share"}</span>
           <span className="row pf-cost">
-            <input className="field num" inputMode="decimal" aria-label={costMode === "total" ? "Cost, in all" : "Price a share"} value={cost}
-              onChange={(e) => setCost(e.target.value)} placeholder={costMode === "total" ? "250.00" : "100.00"} />
-            <Choices label="Cost given as" value={costMode} set={setCostMode} options={[["total", "In all"], ["share", "A share"]]} />
+            <input className="field num" inputMode="decimal" aria-label={costMode === "total" ? "What you paid in total" : "Price per share"} value={cost}
+              onChange={(e) => setCost(e.target.value)} placeholder={costMode === "total" ? "e.g. 1,250.00" : "e.g. 125.00"} />
+            <Choices label="What you paid, as" value={costMode} set={setCostMode} options={[["total", "Total"], ["share", "Per share"]]} />
           </span>
         </div>
         <label className="pf-field">
-          <span>Bought on</span>
-          <input type="date" value={bought} max={today()} onChange={(e) => setBought(e.target.value)} />
+          <span>Date bought</span>
+          <input type="date" className="field" value={bought} max={today()} onChange={(e) => setBought(e.target.value)} />
         </label>
         <label className="pf-field">
           <span>Account <span className="faint">(optional)</span></span>

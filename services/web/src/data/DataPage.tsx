@@ -29,6 +29,7 @@ import { Choices } from "../components/Choices";
 import { Folio } from "../components/Folio";
 import { MenuButton } from "../components/MenuButton";
 import { Empty, ErrorPanel, Skeleton } from "../components/States";
+import { download } from "../download";
 import { TableScroll } from "../components/TableScroll";
 import { toast } from "../components/Toasts";
 import { day, localDay } from "../format";
@@ -54,6 +55,14 @@ import {
 
 /** where new metrics are saved (found by name, made on first use) */
 export const METRICS_WORKSPACE = "Your metrics";
+
+/** An example of the file an upload takes: a company column, a date column, columns of numbers. Made here,
+ * never fetched; the API's own rules decide what it accepts. */
+const EXAMPLE_CSV = "ticker,date,stores,sales_per_store\nCOST,2026-08-31,914,301000000\nCOST,2026-05-11,905,284500000\nWMT,2026-07-31,10712,16900000\n";
+
+function downloadExample() {
+  download("tributary-example.csv", new Blob([EXAMPLE_CSV], { type: "text/csv" }));
+}
 /** /v1/formulas/validate needs a company for bare metrics; it reads no data, so any id does */
 const CHECK_ONLY_COMPANY = "0000000000";
 
@@ -120,10 +129,12 @@ export function DataPage({ token, saved }: { token: string; saved: Saved | null 
     <div className="page data-page">
       <div className="row page-bar">
         <h1 className="grow">Your data</h1>
+        {/* none yet: the room, not "1 KB of 200.0 MB" used by nothing (Riley, test 10, finding 42) */}
         {data && (
           <span className="muted">
-            {data.datasets.length} of {data.limits.datasets} datasets, {sizeWords(data.datasets.reduce((s, d) => s + d.bytes, 0))} of{" "}
-            {sizeWords(data.limits.user_bytes)}
+            {data.datasets.length
+              ? `${data.datasets.length} of ${data.limits.datasets} datasets, ${sizeWords(data.datasets.reduce((s, d) => s + d.bytes, 0))} of ${sizeWords(data.limits.user_bytes)}`
+              : `Room for ${data.limits.datasets} datasets, ${sizeWords(data.limits.user_bytes)}`}
           </span>
         )}
       </div>
@@ -136,10 +147,8 @@ export function DataPage({ token, saved }: { token: string; saved: Saved | null 
         ) : load.state === "off" ? (
           <Empty>Your data isn't available on this server yet.</Empty>
         ) : !load.data.datasets.length ? (
-          <Empty>
-            No datasets yet. Upload a CSV below: a company column (tickers or CIKs), a date column and columns of numbers. Formulas then
-            read each column as <code>mine.&lt;dataset&gt;.&lt;column&gt;</code>, beside Tributary's figures.
-          </Empty>
+          // one line (Riley, test 10, finding 106): what the file holds is said where it's uploaded
+          <Empty>No datasets yet: upload a CSV of your own figures below.</Empty>
         ) : (
           <TableScroll label="Your datasets">
             <table className="t data-table">
@@ -194,14 +203,29 @@ export function DataPage({ token, saved }: { token: string; saved: Saved | null 
             <Upload token={token} data={data} into={draftInto} onCancelInto={() => setDraftInto(null)}
               onStored={() => { setDraftInto(null); refresh(); }} />
           ) : (
-            <Empty>Your own data needs a permanent account: sign in with GitHub or with an account. A demo sandbox can't upload.</Empty>
+            // the refusal with what the file would look like (Riley, test 10, finding 42: plain text, nothing to try)
+            <Empty action={
+              <div className="row">
+                <button className="btn" disabled title="A demo sandbox can't upload">Choose a CSV</button>
+                <button className="btn ghost" onClick={downloadExample}>Download an example CSV</button>
+              </div>
+            }>
+              A demo sandbox can't upload: your own data needs a permanent account. Sign in with GitHub or an account from the front door
+              (End demo).
+            </Empty>
           )}
         </Folio>
       )}
 
       <Metrics token={token} saved={saved} datasets={data?.datasets ?? []} />
 
+      {/* one sentence in view, the rules behind a disclosure (Riley, test 10, finding 87: code type in a page of prose) */}
       <Folio name="How it reads" line="Your data beside Tributary's">
+        <p className="data-howto-lead">
+          A formula reads a field as <code>mine.dataset.field</code>: <code>revenue / mine.stores.count</code> is revenue per store.
+        </p>
+        <details className="how-to-read">
+          <summary>How dates, other companies and past days read</summary>
         <ul className="data-howto small">
           <li>
             A formula reads a field as <code>mine.&lt;dataset&gt;.&lt;field&gt;</code> for the default company, or{" "}
@@ -217,6 +241,7 @@ export function DataPage({ token, saved }: { token: string; saved: Saved | null 
           </li>
           <li>Only you can read your datasets and metrics. Amounts in your data are in the dataset's currency; Tributary converts none.</li>
         </ul>
+        </details>
       </Folio>
 
       {deleting && (
@@ -483,7 +508,7 @@ function Metrics({ token, saved, datasets }: { token: string; saved: Saved | nul
         <>
           {rows.length > 0 && (
             <TableScroll label="Your metrics">
-              <table className="t data-table">
+              <table className="t data-table cards-narrow">
                 <thead>
                   <tr>
                     <th className="first">Metric</th>
@@ -496,11 +521,11 @@ function Metrics({ token, saved, datasets }: { token: string; saved: Saved | nul
                   {rows.map((m) => (
                     <tr key={m.item_id}>
                       <td className="first"><b>{m.name}</b></td>
-                      <td><code>{m.state?.formula ?? "…"}</code></td>
-                      <td>{m.state ? (m.state.view === "quarter" ? "The latest quarter" : "Trailing twelve months") : ""}</td>
+                      <td className="wide" data-label="Formula"><code>{m.state?.formula ?? "…"}</code></td>
+                      <td data-label="Reads">{m.state ? (m.state.view === "quarter" ? "The latest quarter" : "Trailing twelve months") : ""}</td>
                       <td className="row">
                         <a className="btn sm" href={href({ view: "companies", screen: { metric: [m.item_id] } })}>Screen with it</a>
-                        <button className="btn sm ghost" onClick={() => saved.deleteWithUndo("item", m.item_id)}>Delete</button>
+                        <button className="btn sm ghost danger" onClick={() => saved.deleteWithUndo("item", m.item_id)}>Delete</button>
                       </td>
                     </tr>
                   ))}
@@ -546,8 +571,9 @@ function NewMetric({ token, saved, datasets, count }: { token: string; saved: Sa
         const first = check.errors[0];
         return setError(first ? `${first.message}${first.hint ? `. ${first.hint}` : ""}` : "That formula doesn't read.");
       }
-      await saved.create("metric", name.trim(), { formula: formula.trim(), view }, { newWorkspace: METRICS_WORKSPACE });
-      toast({ text: `Saved ${name.trim()}. Add it to the screener from Companies' Your metrics.` });
+      const item = await saved.create("metric", name.trim(), { formula: formula.trim(), view }, { newWorkspace: METRICS_WORKSPACE });
+      // the workspace it made says so (Riley, test 10, finding 43)
+      toast({ text: `Saved ${name.trim()}${item.madeWorkspace ? ` in a new workspace, ${item.workspace_name}` : ""}. Add it to the screener from Companies' Your metrics.` });
       setName("");
       setFormula("");
     } catch (err) {

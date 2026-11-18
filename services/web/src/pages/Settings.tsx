@@ -18,6 +18,7 @@ import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { ConnectedAppsSection } from "../connect/ConnectedApps";
 import { Skeleton } from "../components/States";
 import { localDay } from "../format";
+import { href } from "../route";
 import { refreshMarketData, useMarketData } from "../market/useMarketData";
 import type { MarketConnection, MarketProvider, ScreenWatches } from "../types";
 
@@ -68,6 +69,9 @@ export function Settings({ token, watches }: { token: string; watches?: ScreenWa
       )}
       <ConnectedAppsSection token={token} />
       <ApiKeysSection token={token} />
+      <p className="foot settings-api">
+        Spreadsheets, scripts and your own AI model read your data through the API: <a href={href({ view: "api" })}>Using the API</a>.
+      </p>
     </div>
   );
 }

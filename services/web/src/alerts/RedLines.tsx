@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 
 import { addRedLine, ApiError, deleteRedLine, failureReason, redLines, validateFormula } from "../api";
+import { toast } from "../components/Toasts";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { day } from "../format";
 import type { RedLineOp, RedLineResult, RedLines as RedLinesData } from "../types";
@@ -39,6 +40,9 @@ export function RedLines({ token, companyId, name }: { token: string; companyId:
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // the form opens by itself only while there are no red lines; after an add it folds, so a saved rule doesn't
+  // look unsaved below its own line (Riley, test 10, finding 67)
+  const [formOpen, setFormOpen] = useState<boolean | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -98,9 +102,12 @@ export function RedLines({ token, companyId, name }: { token: string; companyId:
     setBusy(true);
     setError(null);
     try {
-      await addRedLine(token, { company_id: companyId, label: (label.trim() || autoLabel).slice(0, 120), formula: formula.trim(), view, op, threshold: stored });
+      const named = (label.trim() || autoLabel).slice(0, 120);
+      await addRedLine(token, { company_id: companyId, label: named, formula: formula.trim(), view, op, threshold: stored });
       setLabel("");
       setThreshold(chosen?.threshold ?? "");
+      setFormOpen(false);
+      toast({ text: `Added the red line “${named}”: each new 10-K or 10-Q is checked against it.`, topic: `redline-${companyId}` });
       setAttempt((n) => n + 1);
     } catch (err) {
       setError(failureReason(err));
@@ -124,6 +131,7 @@ export function RedLines({ token, companyId, name }: { token: string; companyId:
   const results = new Map((load.data.evaluation ?? []).map((r) => [r.rule_id, r]));
   const rules = load.data.red_lines;
   const full = rules.length >= load.data.max_per_company;
+  const showForm = formOpen ?? rules.length === 0;
   return (
     <>
       {rules.length ? (
@@ -150,7 +158,9 @@ export function RedLines({ token, companyId, name }: { token: string; companyId:
         <p className="empty">No red lines yet. Decide now what would worry you about {name}'s numbers; each new 10-K or 10-Q is checked against them.</p>
       )}
       {!load.evaluated && <p className="faint small">Your plan doesn't include {name}'s financials, so these can't be evaluated.</p>}
-      {!full ? (
+      {!full && !showForm ? (
+        <p><button className="btn sm" onClick={() => setFormOpen(true)}>Add a red line</button></p>
+      ) : !full ? (
         <form className="redline-form" onSubmit={(e) => void add(e)} aria-label="Add a red line">
           <div className="row wrap">
             <label htmlFor={`${id}-preset`} className="faint small">Rule</label>

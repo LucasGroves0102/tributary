@@ -371,13 +371,15 @@ it("#20: a page stops editing an item whose workspace is being deleted, and Undo
   await render("#/");
   await click(sidebarItem("NVDA comps"));
   expect($(".savebar .saved-as")?.textContent).toContain("Semis: NVDA comps");
-  expect(buttons("Save")).toHaveLength(1);
+  // nothing to save yet: no greyed Save, Save as and Close in More (Riley, test 10, finding 86)
+  expect(buttons("Save")).toEqual([]);
+  expect($(".savebar .more-btn")).not.toBeNull();
   await click(buttons(/Actions for workspace Semis/)[0]!);
   await click(buttons(/Delete workspace Semis/)[0]!);
   await click(document.querySelector<HTMLButtonElement>(".ws-confirm button")!);
   // the comps stay on screen as unsaved work: no header naming the deleted workspace, no Save over it
   expect($(".savebar .saved-as")).toBeNull();
-  expect(buttons("Save")).toEqual([]);
+  expect($(".savebar .more-btn")).toBeNull();
   expect(buttons("Save…")).toHaveLength(1);
   expect(window.location.hash).toBe(`#/compare?target=${NVDA}&peers=${AAPL}`);
   await click(document.querySelector<HTMLButtonElement>(".undo-stack .undo-note button")!);

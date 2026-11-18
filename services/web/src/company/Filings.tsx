@@ -89,13 +89,15 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
       <section className="card">
         <div className="card-h wrap">
           <h2>Filings</h2>
-          <span className="sub">
-            The SEC's filing index, newest first{fiscalYearEnd ? ", headed by fiscal year" : ""}.{filter === "reports" ? " Reports are the 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F and 6-K; All has insider forms and the rest." : ""}
-          </span>
-          <span className="grow" />
+          <span className="sub">The SEC's filing index, newest first{fiscalYearEnd ? ", headed by fiscal year" : ""}.</span>
+        </div>
+        {/* the filters on a row of their own, in the same place whatever is chosen (Riley, test 10, finding 83:
+            they moved when the line above them changed length) */}
+        <div className="filings-bar">
           <span className="seg" role="group" aria-label="Form">
             {chips.map(([f, label]) => (
               <button key={f} className={f === filter ? "on" : undefined} aria-pressed={f === filter}
+                title={f === "reports" ? "The 10-K, 10-Q, 8-K, and a foreign filer's 20-F, 40-F and 6-K; All adds insider forms and the rest" : undefined}
                 onClick={() => refilter(() => setFilter(f))}>
                 {label}
               </button>
@@ -142,7 +144,6 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                       <th>Form</th>
                       <th>Period</th>
                       <th>Items / sections</th>
-                      <th>Accession</th>
                       <th><span className="visually-hidden">Actions</span></th>
                     </tr>
                   </thead>
@@ -156,11 +157,12 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                         <Fragment key={f.accession_no}>
                         {headings[i] && (
                           <tr className="year-h">
-                            <th colSpan={6} scope="rowgroup">{headings[i]}</th>
+                            <th colSpan={5} scope="rowgroup">{headings[i]}</th>
                           </tr>
                         )}
                         <tr className={diff === f.accession_no ? "sel" : undefined}>
-                          <td className="muted">{day(f.filed, true)}</td>
+                          {/* the accession number is the date's hover, not a column (Riley, test 10, finding 83) */}
+                          <td className="muted" title={`Accession ${f.accession_no}`}>{day(f.filed, true)}</td>
                           <td>
                             <FormMark form={f.form} />
                           </td>
@@ -169,7 +171,7 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                           </td>
                           <td className="muted items">
                             {eightK.length
-                              ? eightK.join(" · ")
+                              ? eightK.join("; ")
                               : insiderLines.has(f.accession_no)
                                 ? insiderLines.get(f.accession_no)
                               : insiderLines.size && /^[345](\/A)?$/.test(f.form)
@@ -178,7 +180,6 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                                 ? note
                                 : note && <span className="faint" title={note === "text not kept here" ? NOT_KEPT_TITLE : undefined}>{note}</span>}
                           </td>
-                          <td className="mono faint">{f.accession_no}</td>
                           <td className="n actions">
                             {f.sections_available ? (
                               <a className="btn sm ghost" href={href({ view: "filing", companyId, accessionNo: f.accession_no, section: null })}>

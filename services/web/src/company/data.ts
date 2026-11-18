@@ -799,7 +799,9 @@ export function metricTable(
     if (period === "ttm") return `TTM ${fp ?? calendarLabel(end)}`;
     return fp ?? calendarLabel(end);
   };
-  const columns = ends.map((end) => ({ periodEnd: end, label: label(end), sub: day(end, true) }));
+  // a year says it runs to its end: "CY2018" over "to Jan 27, 2019" reads as the year that ended then, not a typo
+  // (Riley, test 10, finding 56: a calendar year is the four quarters ending nearest its Q4)
+  const columns = ends.map((end) => ({ periodEnd: end, label: label(end), sub: period === "a" ? `to ${day(end, true)}` : day(end, true) }));
   const by = new Map(kept.map((r) => [`${r.metric}|${r.period_end}`, r]));
   const why = new Map(meaningless.map((p) => [`${p.metric}|${p.period_end}`, p.reason]));
   const called = new Map(period === "q" ? callouts.map((c) => [`${c.metric}|${c.period_end}`, c]) : []);

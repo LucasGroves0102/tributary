@@ -1,11 +1,13 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 export interface MenuChoice {
   label: string;
   onSelect: () => void;
   disabled?: boolean;
   title?: string;
+  /** a destructive action (Delete…): set apart by a rule above it and the error ink (Riley, test 10, finding 105) */
+  danger?: boolean;
 }
 
 /** An option that stays on or off (a chart's filing markers): ticked in the menu, which stays open. */
@@ -47,7 +49,7 @@ export function MenuButton({ label, items, disabled = false, title, align = "end
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Content className="menu" align={align} sideOffset={6} collisionPadding={12}>
-          {items.map((it) => isCheck(it) ? (
+          {items.map((it, i) => isCheck(it) ? (
             <Menu.CheckboxItem key={it.label} className="menu-item menu-check" checked={it.checked} disabled={it.disabled} title={it.title}
               onCheckedChange={(v) => it.onCheckedChange(v === true)} onSelect={(e) => e.preventDefault()}>
               <span className="menu-box" aria-hidden="true">
@@ -56,9 +58,12 @@ export function MenuButton({ label, items, disabled = false, title, align = "end
               {it.label}
             </Menu.CheckboxItem>
           ) : (
-            <Menu.Item key={it.label} className="menu-item" disabled={it.disabled} title={it.title} onSelect={it.onSelect}>
-              {it.label}
-            </Menu.Item>
+            <Fragment key={it.label}>
+              {it.danger && i > 0 && <Menu.Separator className="menu-sep" />}
+              <Menu.Item className={it.danger ? "menu-item danger" : "menu-item"} disabled={it.disabled} title={it.title} onSelect={it.onSelect}>
+                {it.label}
+              </Menu.Item>
+            </Fragment>
           ))}
         </Menu.Content>
       </Menu.Portal>

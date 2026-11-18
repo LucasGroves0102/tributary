@@ -172,7 +172,11 @@ it("a demo sandbox is told uploads need a permanent account", async () => {
   list = { datasets: [], limits: LIMITS, uploads_allowed: false };
   await show();
   expect(container.querySelector('input[type="file"]')).toBeNull();
-  expect(container.textContent).toContain("Your own data needs a permanent account");
+  expect(container.textContent).toContain("A demo sandbox can't upload: your own data needs a permanent account");
+  // what the file would look like, and the form's button, off (Riley, test 10, finding 42)
+  expect([...container.querySelectorAll("button")].find((b) => b.textContent === "Choose a CSV")?.hasAttribute("disabled")).toBe(true);
+  expect([...container.querySelectorAll("button")].some((b) => b.textContent === "Download an example CSV")).toBe(true);
+  expect(container.querySelector(".page-bar")!.textContent).toContain("Room for 50 datasets");
 });
 
 it("saves a metric, checked first, into Your metrics, and lists metrics with a screen link", async () => {

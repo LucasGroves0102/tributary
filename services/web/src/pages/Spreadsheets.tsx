@@ -37,7 +37,7 @@ export function InYourSpreadsheet({ origin = window.location.origin, loadScript 
   };
 
   return (
-    <Folio name="In your spreadsheet" line="Excel and Google Sheets, with the same key">
+    <Folio name="In your spreadsheet" line="Excel and Google Sheets, with the same key" id="api-sheets">
       <p>
         Formulas that fetch Tributary's figures into cells, each from the filing it came from: the same figures, readings and
         permission checks as this site, with your API key (read-only is enough).
@@ -95,11 +95,12 @@ export function InYourSpreadsheet({ origin = window.location.origin, loadScript 
         {script.kind === "error" && <p className="error" role="alert">Couldn't load the script: download it instead.</p>}
         {script.kind === "ok" && (
           <>
-            <p className="row wrap">
-              <button className="btn sm" onClick={copy}>{copied === "yes" ? "Copied" : "Copy the script"}</button>
-              {copied === "no" && <span className="small muted">This browser didn't let the page copy it: select it and copy it yourself.</span>}
-            </p>
-            <pre className="api-code" tabIndex={0} aria-label="The Google Sheets script"><code>{script.text}</code></pre>
+            {/* the copy button sits on the code it copies, not floating above it (Riley, test 10, finding 102) */}
+            <div className="api-code-wrap">
+              <button className="btn sm api-copy" onClick={copy}>{copied === "yes" ? "Copied" : "Copy the script"}</button>
+              <pre className="api-code" tabIndex={0} aria-label="The Google Sheets script"><code>{script.text}</code></pre>
+            </div>
+            {copied === "no" && <p className="small muted">This browser didn't let the page copy it: select it and copy it yourself.</p>}
           </>
         )}
       </details>

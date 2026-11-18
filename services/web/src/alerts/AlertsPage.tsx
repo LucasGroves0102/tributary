@@ -55,8 +55,8 @@ export function AlertsPage({ token, watches }: { token: string; watches?: Screen
       <section className="card">
         <NotificationList key={epoch} token={token} onLoaded={setLoaded} empty={
           <>
-            No alerts yet. Filings of companies on your watchlist, or that you <a href={href({ view: "analysis" })}>analyse</a>, show here
-            from the day you follow them. Choose which forms alert in <a href={href({ view: "settings" })}>Settings</a>.
+            No alerts yet: new filings of the companies you watch or <a href={href({ view: "analysis" })}>analyse</a> show here
+            (which forms, in <a href={href({ view: "settings" })}>Settings</a>).
           </>
         } />
       </section>

@@ -27,7 +27,10 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
   const fromQuarters = builtFromQuarters(run);
   const out: { key: string; text: string }[] = [];
   const ttm = rr.period ? `the trailing twelve months to ${rr.period}` : `FY${base?.fy ?? ""}`;
-  const longRun = `${run.long_run.growth.toFixed(1)}% growth (the ${statLabel(st.cagr, st.cagr_years, "CAGR")}, held between 0% and ${LONG_RUN_GROWTH_CAP}%) and the ${statLabel(st.avg_margin, st.margin_years, "avg")} margin`;
+  // a history outside the long run's bounds says which bound it met, not "held between 0% and 5%" beside 66.9% (Riley, test 10, 65)
+  const bound = st.cagr === null ? "" : st.cagr * 100 > LONG_RUN_GROWTH_CAP ? `, capped at ${LONG_RUN_GROWTH_CAP}% for the long run`
+    : st.cagr < 0 ? ", floored at 0% for the long run" : "";
+  const longRun = `${run.long_run.growth.toFixed(1)}% growth (the ${statLabel(st.cagr, st.cagr_years, "CAGR")}${bound}) and the ${statLabel(st.avg_margin, st.margin_years, "avg")} margin`;
   if (fromQuarters && cur?.actual && cur.prior && cur.remainder_prior) {
     const a = cur.actual;
     const r = cur.remainder_prior;
@@ -50,7 +53,9 @@ export function defaultRules(run: ModelRun, selected: Scenario): { key: string; 
   }
   out.push({
     key: "nonOperating",
-    text: `Interest and other: ${ttm}'s operating income less pretax income, ${pct(rr.non_operating ?? 0)} of revenue (negative is net income from it), every year.`,
+    // the sign said as what it does to profit, not as a convention to decode (Riley, test 10, finding 65)
+    text: `Interest and other: ${ttm}'s operating income less pretax income, ${pct(rr.non_operating ?? 0)} of revenue, every year`
+      + `${(rr.non_operating ?? 0) < 0 ? ": a negative cost, so it adds to pretax income" : (rr.non_operating ?? 0) > 0 ? ": a cost, taken off pretax income" : ""}.`,
   });
   const tax = rr.tax_source === "ttm" ? `${ttm}'s effective rate, ${pct(rr.tax_rate)}`
     : rr.tax_source === "five_year" ? `the last five years' tax over pretax income, ${pct(rr.tax_rate)} (the TTM's isn't a usable rate)`

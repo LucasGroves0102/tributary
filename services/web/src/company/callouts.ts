@@ -7,7 +7,7 @@
  * sign changes in SWING or more of the shown quarters is said once, for the row (JPMorgan's operating
  * cash flow), instead of once per quarter. */
 
-import { money } from "../format";
+import { money, paren } from "../format";
 import type { Callout } from "../types";
 import type { MetricTable, TableCell } from "./data";
 
@@ -26,15 +26,17 @@ const times = (f: number | null) => (f === null ? "" : `${f >= 10 ? Math.round(f
 
 /** One callout as a sentence, for the cell's hover and the list under the table. `sign` is the row's
  * display sign (-1 on an outflow line). */
-export function calloutText(c: Callout, label: string, period: string, sign = 1): string {
-  const v = (x: number) => money(sign * x, "USD");
+export function calloutText(c: Callout, label: string, period: string, sign = 1, shown = false): string {
+  // `shown`: the list under the table writes a negative as the table does, in parentheses (Riley, test 10,
+  // finding 81); a hover keeps the signed figure
+  const v = (x: number) => (shown ? paren : (t: string) => t)(money(sign * x, "USD"));
   const [a, b] = c.beside.map((x) => v(x.value));
   const against = c.edge ? "the two quarters before it" : "the quarters either side";
   if (c.kind === "outlier") {
-    return `${label}, ${period}: ${v(c.value)}, ${times(c.factor)} ${against} (${a} and ${b}).` +
+    return `${label}, ${period}: ${v(c.value)}, ${times(c.factor)} ${against}, ${a} and ${b}.` +
       (c.seasonal ? " The same quarter peaks in other years too: it's the company's pattern." : " The filing says why.");
   }
-  return `${label}, ${period}: ${v(c.value)}, the other sign from ${against} (${a} and ${b}). The filing says why.`;
+  return `${label}, ${period}: ${v(c.value)}, the other sign from ${against}, ${a} and ${b}. The filing says why.`;
 }
 
 /** The callouts of a table's shown cells, one line each, or one for a row that swings. */
@@ -53,7 +55,7 @@ export function calloutLines(table: MetricTable): CalloutLine[] {
         key: `${row.metric}|swings`,
         metric: row.metric,
         text: `${row.label} changes sign in ${flips.length} of these ${row.cells.filter(Boolean).length} quarters, ` +
-          `from ${money(lo, "USD")} to ${money(hi, "USD")}: read any one quarter with the ones beside it.`,
+          `from ${paren(money(lo, "USD"))} to ${paren(money(hi, "USD"))}: read any one quarter with the ones beside it.`,
         cells: flips.map(({ cell, i }) => ({ label: table.columns[i]!.label, cell })),
       });
     }
@@ -62,7 +64,7 @@ export function calloutLines(table: MetricTable): CalloutLine[] {
       out.push({
         key: `${row.metric}|${table.columns[i]!.periodEnd}`,
         metric: row.metric,
-        text: calloutText(cell.callout!, row.label, table.columns[i]!.label, sign),
+        text: calloutText(cell.callout!, row.label, table.columns[i]!.label, sign, true),
         cells: [{ label: table.columns[i]!.label, cell }],
       });
     }

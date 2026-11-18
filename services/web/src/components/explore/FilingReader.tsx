@@ -293,7 +293,16 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
               </h2>
               {terms.length > 0 && sectionText && !diffOn && (
                 <MatchNav matches={matches} current={match} passages={hitsBySection.get(active.section_key)?.passages_matched ?? 0}
-                  searched={hits?.state === "ok"} query={query} onStep={step} />
+                  searched={hits?.state === "ok"} query={query} onStep={step}
+                  elsewhere={(() => {
+                    // none here but some in another section: say where, with the way there (Riley, test 10, finding 62)
+                    const other = hits?.state === "ok" ? hits.data.find((h) => h.section_key !== active.section_key && h.passages_matched > 0) : undefined;
+                    const s = other ? f.sections.find((x) => x.section_key === other.section_key) : undefined;
+                    return other && s ? {
+                      label: sectionTitle(s.section_key, s.title),
+                      href: href({ view: "filing", companyId, accessionNo, section: s.section_key, ...(query ? { q: query } : {}) }),
+                    } : null;
+                  })()} />
               )}
               {diff && (
                 <button className="btn sm" aria-pressed={diffOn} onClick={() => setDiffFor(diffOn ? null : active.section_key)}>
@@ -339,7 +348,7 @@ function Marked({ runs }: { runs: Run[] }) {
 
 /** "Highlight 3 of 40" with previous and next, and the section's passage count: the outline's
  * number, so the two can be read together. */
-function MatchNav({ matches, current, passages, searched, query, onStep }: {
+function MatchNav({ matches, current, passages, searched, query, onStep, elsewhere = null }: {
   matches: number;
   current: number;
   passages: number;
@@ -347,15 +356,25 @@ function MatchNav({ matches, current, passages, searched, query, onStep }: {
   searched: boolean;
   query: string;
   onStep: (by: 1 | -1) => void;
+  /** the first other section with matching passages, when this one has none */
+  elsewhere?: { label: string; href: string } | null;
 }) {
   const of = passages === 1 ? "1 passage" : `${passages} passages`;
+  if (searched && passages === 0 && matches === 0) {
+    return (
+      <span className="match-nav" role="status">
+        <span className="faint">No match for “{query}” in this section.</span>
+        {elsewhere && <a href={elsewhere.href}>Matches in {elsewhere.label}</a>}
+      </span>
+    );
+  }
   return (
     <span className="match-nav" role="status">
       <span className="faint">
-        {searched && `${of} match “${query}” · `}
+        {searched && `${of} match “${query}”. `}
         {matches === 0
-          ? "no words to highlight here"
-          : `highlight ${Math.max(current, 0) + 1} of ${matches}`}
+          ? "No words to highlight here."
+          : `Highlight ${Math.max(current, 0) + 1} of ${matches}.`}
       </span>
       {matches > 1 && (
         <>
@@ -408,23 +427,35 @@ function SectionBody({ load, terms, at, current, onOpen }: {
   }
   return (
     <div ref={ref}>
-      {blocks.map((b, i) =>
-        b.kind === "p" ? (
-          <p key={b.start} className={i === target ? "hit" : undefined}>{marked(b.text)}</p>
-        ) : (
+      {blocks.map((b, i) => {
+        if (b.kind === "p") return <p key={b.start} className={i === target ? "hit" : undefined}>{marked(b.text)}</p>;
+        // a table's first rows with no figures ("(In millions, except per share data)", "(Unaudited)", "Three Months
+        // Ended") are its heading, not data: they read in the head, under the dates, in the order they're counted
+        // (Riley, test 10, finding 84; the parser keeps them as rows)
+        const lead = b.rows.findIndex((r) => r.cells.length > 0);
+        const notes = lead > 0 ? b.rows.slice(0, lead) : [];
+        const body = notes.length ? b.rows.slice(lead) : b.rows;
+        return (
           <div key={b.start} className={i === target ? "hit filing-table" : "filing-table"}>
             <TableScroll label="A table in the filing">
               <table className="t ftable">
-                {b.heads && (
+                {(b.heads || notes.length > 0) && (
                   <thead>
-                    <tr>
-                      <th className="first">{marked(b.heads.label)}</th>
-                      {b.heads.cells.map((c, k) => <th key={k} className="n">{marked(c)}</th>)}
-                    </tr>
+                    {b.heads && (
+                      <tr>
+                        <th className="first">{marked(b.heads.label)}</th>
+                        {b.heads.cells.map((c, k) => <th key={k} className="n">{marked(c)}</th>)}
+                      </tr>
+                    )}
+                    {notes.map((r) => (
+                      <tr key={r.start} className="head-note">
+                        <th colSpan={b.columns + 1} scope="colgroup">{marked(r.label)}</th>
+                      </tr>
+                    ))}
                   </thead>
                 )}
                 <tbody>
-                  {b.rows.map((r) =>
+                  {body.map((r) =>
                     r.cells.length ? (
                       <tr key={r.start}>
                         <td className="first">{marked(r.label)}</td>
@@ -440,8 +471,8 @@ function SectionBody({ load, terms, at, current, onOpen }: {
               </table>
             </TableScroll>
           </div>
-        ),
-      )}
+        );
+      })}
       {section.truncated && (
         <p className="muted small">
           Showing the first {section.text.length.toLocaleString()} of {section.total_chars.toLocaleString()} characters

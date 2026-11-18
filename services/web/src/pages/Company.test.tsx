@@ -407,9 +407,10 @@ it("an ungranted company shows its metadata and says what its plan doesn't cover
   rowFor = () => tesla;
   await render("overview", TSLA);
   expect($("h1")?.textContent).toBe("Tesla");
-  // no access marks in the masthead: what the plan covers is the CIK's hover
+  // no access marks in the masthead: a plan short of a tier says so quietly in words; the CIK's hover is the CIK's (Riley, test 10, 74)
   expect($(".tier")).toBeNull();
-  expect($(".co-cik")?.getAttribute("title")).toContain("metadata only");
+  expect($(".co-access")?.textContent).toBe("Your plan: metadata only");
+  expect($(".co-cik")?.getAttribute("title")).toBe("The SEC's number for this company (its Central Index Key)");
   expect(container.textContent).toContain("Financials for Tesla aren't included in your access");
   expect(container.textContent).toContain("The recap needs financials for Tesla");
   expect(container.textContent).toContain("needs the pro plan and a grant for Tesla");
@@ -560,7 +561,9 @@ it("statements say how far behind EDGAR they are, and promise nothing (H9)", asy
 
 it("statements: range is for Quarterly and TTM; Annual has its ten years", async () => {
   await render("statements", NVDA, null, { period: "a" });
-  expect($('[aria-label="Range"]')).toBeNull();
+  // in place but off, so the bar doesn't move (Riley, test 10, finding 79)
+  expect([...container.querySelectorAll('[aria-label="Range"] button')].every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+  expect($('[aria-label="Range"] button')?.getAttribute("title")).toContain("Annual shows the last ten years");
   const q = paths().find((u) => u.pathname.endsWith("/financials"))!;
   expect(q.searchParams.get("quarters")).toBe("40");
 });
@@ -576,6 +579,9 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect(cell.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
   expect(cell.querySelector("a.cell-edgar")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
   expect(cell.querySelector("a.cell-edgar")?.getAttribute("target")).toBe("_blank");
+  // a reported figure's mark is the seal (Riley, test 10, finding 103); the cell's text stays the figure
+  expect(cell.querySelector("a.cell-edgar.sealed svg.seal")).not.toBeNull();
+  expect(cell.textContent).toBe("$46.74B");
   await click(button("Annual"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a`);
   act(() => root.unmount());
@@ -592,9 +598,11 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   act(() => root.unmount());
   await render("statements", NVDA, null, { period: "a", basis: "calendar" });
   expect(paths().filter((u) => u.pathname.endsWith("/financials")).at(-1)!.searchParams.get("basis")).toBe("calendar");
-  expect(container.textContent).toContain("Calendar quarters");
+  // an annual table's margin says years, and each year runs to its date (Riley, test 10, finding 56)
+  expect(container.textContent).toContain("Calendar years");
   act(() => root.unmount());
   await render("statements", NVDA, null, { basis: "calendar" });
+  expect(container.textContent).toContain("Calendar quarters");
   await click(button("Export CSV"));
   expect(vi.mocked(download).mock.calls.at(-1)![0]).toBe("nvda-is-q-calendar.csv");
 });
@@ -942,9 +950,10 @@ it("F5: the cash flow statement has its subtotals, starts and ends with cash, an
   expect(rows).toEqual(["Net cash from operating activities", "Dividends paid", "Change in cash", "Cash at beginning of period",
     "Cash at end of period", "Beginning + change = end?", "Free cash flow (operating cash flow less capex)"]);
   const dividends = [...container.querySelectorAll(".t.statement tbody tr")].find((tr) => tr.textContent!.startsWith("Dividends paid"))!;
-  // one unit across a row (moneyRow); the quarter before the first only gives it its starting cash, here shown too.
+  // one unit across a row (moneyRow), the smaller one where a figure would read under one of the larger (Riley, test 10, 80);
+  // the quarter before the first only gives it its starting cash, here shown too.
   // Seal: an outflow (negative since F5) reads in parentheses, as the statement prints it; the hover keeps the sign
-  expect([...dividends.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["·", "($0.24B)", "($6.05B)"]);
+  expect([...dividends.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["·", "($243M)", "($6,047M)"]);
   const called = dividends.querySelector("td.called")!;
   expect(called.getAttribute("title")).toContain("Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it");
   expect($(".callouts")?.textContent).toContain("Worth a look");

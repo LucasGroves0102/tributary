@@ -133,9 +133,7 @@ export function AnalysisHome({ token, saved, readable, label, start }: Props) {
         </button>
       </div>
       <p className="muted analysis-intro">
-        A guided path from a company's filings to your own thesis: what the business does, ten years of numbers, what changed
-        in the latest filings, how it compares with its peers, a model with bear, base and bull cases, the thesis itself, and a
-        check of it after every new 10-Q or 10-K. Everything you pin, chart and write stays in the project, visible only to you.
+        A guided path from a company's filings to your own thesis, checked after every new 10-Q or 10-K. Only you can see it.
       </p>
       {creating && (
         <NewAnalysis token={token} saved={saved} readable={readable} onDone={() => setCreating(false)}
@@ -147,15 +145,15 @@ export function AnalysisHome({ token, saved, readable, label, start }: Props) {
         <p className="empty card">Saved work is unavailable right now, so projects can't be listed or created. Try again shortly.</p>
       ) : rows.length === 0 ? (
         !creating && (
-          <section className="card analysis-empty">
-            <div className="card-b">
-              <h2>No analyses yet</h2>
-              <ol className="step-list">
+          <div className="analysis-empty portfolio-empty">
+            <p className="empty-line">No analyses yet: New analysis starts one on a company.</p>
+            <details className="how-to-read">
+              <summary>The eight steps</summary>
+              <ol className="step-list foot">
                 {STEPS.map((s) => <li key={s.key}><b>{s.label}</b> <span className="muted">{s.why}</span></li>)}
               </ol>
-              <button className="btn primary" onClick={() => setCreating(true)}>Start your first analysis</button>
-            </div>
-          </section>
+            </details>
+          </div>
         )
       ) : (
         <ul className="project-list" aria-label="Your analyses">

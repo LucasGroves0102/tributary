@@ -21,15 +21,19 @@ const prefix = (code: string) => SYMBOLS[code] ?? `${code} `;
 /** Decimals for an amount in its scale: two below 100, one from 100 (Riley 123: "$227.00M" claimed a
  * precision the scale doesn't have; four significant figures at most). The exact figure is in the hover
  * and the CSV. */
-const places = (scaled: number) => (Math.abs(scaled) >= 99.995 ? 1 : 2);
+const places = (scaled: number) => (Math.abs(scaled) >= 999.95 ? 0 : Math.abs(scaled) >= 99.995 ? 1 : 2);
+
+/** A number with its thousands grouped and a fixed count of decimals: 1743.84 → "1,743.84"
+ * (Riley, test 10, finding 85: "$1743.84" in the screener). */
+const grouped = (n: number, dp: number) => n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
 export function money(value: number, unit: string): string {
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
   const p = prefix(currencyOf(unit));
-  if (!/^[A-Z]{3}$/.test(unit)) return `${sign}${p}${abs.toFixed(2)}`;
+  if (!/^[A-Z]{3}$/.test(unit)) return `${sign}${p}${grouped(abs, 2)}`;
   for (const [size, suffix] of SCALES) {
-    if (abs >= size) return `${sign}${p}${(abs / size).toFixed(places(abs / size))}${suffix}`;
+    if (abs >= size) return `${sign}${p}${grouped(abs / size, places(abs / size))}${suffix}`;
   }
   return `${sign}${p}${abs.toFixed(0)}`;
 }
@@ -45,20 +49,26 @@ export function asFiled(value: number, unit: string): string {
   return `${sign}${digits}`;
 }
 
-/** A row of amounts in one unit, the largest value's, so periods compare at a glance: $0.05M,
- * $0.96M, $2.43M instead of $54.74K, $963.57K, $2.43M. A value that would round to nothing in that
- * unit keeps its own: a figure never reads as $0.00. `currency`: the row's (USD unless a company
- * reports in another, migration 056). */
+/** A row of amounts in one unit, so periods compare at a glance: the largest value's ($2.43M,
+ * $4.10M), or the next smaller one when a value would read under one of the larger and the largest
+ * still fits in four digits of the smaller: $119M ... $3,955M, not $0.12B ... $3.96B (Riley, test 10,
+ * finding 80), and $55K, $964K, $2,430K rather than a mix of K and M. A value that would round to
+ * nothing in that unit keeps its own: a figure never reads as $0.00. `currency`: the row's (USD unless
+ * a company reports in another, migration 056). */
 export function moneyRow(values: (number | null)[], currency = "USD"): (string | null)[] {
-  const top = Math.max(0, ...values.map((v) => (v === null ? 0 : Math.abs(v))));
-  const scale = SCALES.find(([size]) => top >= size);
+  const sizes = values.flatMap((v) => (v === null || v === 0 ? [] : [Math.abs(v)]));
+  const top = Math.max(0, ...sizes);
+  let at = SCALES.findIndex(([size]) => top >= size);
+  const smaller = at >= 0 ? SCALES[at + 1] : undefined;
+  if (smaller && Math.min(...sizes) < SCALES[at]![0] && top / smaller[0] < 9999.5) at += 1;
+  const scale = at >= 0 ? SCALES[at] : undefined;
   const p = prefix(currency);
   // one count of decimals for the row, the largest value's, so the row's points line up
   const dp = scale ? places(top / scale[0]) : 2;
   return values.map((v) => {
     if (v === null) return null;
     if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.5 * 10 ** -dp) return money(v, currency);
-    return `${v < 0 ? "-" : ""}${p}${(Math.abs(v) / scale[0]).toFixed(dp)}${scale[1]}`;
+    return `${v < 0 ? "-" : ""}${p}${grouped(Math.abs(v) / scale[0], dp)}${scale[1]}`;
   });
 }
 

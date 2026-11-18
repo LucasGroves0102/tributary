@@ -201,6 +201,11 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
         title="Freshness, completeness, checks">
         Data status
       </a>
+      {/* the API, its spreadsheet add-ins and the AI connection, from inside the app (Riley, test 10, finding 38) */}
+      <a className="cover-link" href={href({ view: "api" })} aria-current={route.view === "api" ? "page" : undefined}
+        title="API keys, spreadsheets, and your own AI model">
+        Using the API
+      </a>
       {/* always: Settings holds filing alerts (F6) as well as "Connect your data" (#60) */}
       <a className="cover-link" href={href({ view: "settings" })} aria-current={route.view === "settings" ? "page" : undefined}
         title={connections ? "Filing alerts and your market data" : "Filing alerts"}>

@@ -73,8 +73,7 @@ function Alerts({ token, list, watching = false }: { token: string; list: Screen
   if (!list.length) {
     return (
       <p className="empty">
-        No screen alerts yet. Open a saved screen under <a href={href({ view: "companies" })}>Companies</a> and choose
-        Watch to hear when companies enter or leave it, or cross a line you set.
+        No screen alerts yet: save a screen under <a href={href({ view: "companies" })}>Companies</a> and choose Watch.
       </p>
     );
   }

@@ -110,6 +110,10 @@ export function ImportFidelity({ token }: { token: string }) {
           Pick the CSV and check every row before anything is saved. Account numbers are dropped as the file is read: they are never
           stored or shown. The file itself isn't kept.
         </p>
+        {/* what it reads, up front (Riley, test 10, finding 52) */}
+        <p className="small import-scope">
+          It reads Fidelity's export only, for now; for another broker, add each holding by hand from the portfolio.
+        </p>
         <details className="how-to-read">
           <summary>Where to find it</summary>
           <p className="small">
@@ -189,7 +193,7 @@ export function ImportFidelity({ token }: { token: string }) {
                 <input type="checkbox" checked={keepPrices} onChange={(e) => setKeepPrices(e.target.checked)} />
                 Keep the export's last prices as my own, from
               </label>
-              <input type="date" aria-label="The export's day" value={priceOn} max={today()} disabled={!keepPrices}
+              <input type="date" className="field" aria-label="The export's day" value={priceOn} max={today()} disabled={!keepPrices}
                 onChange={(e) => setPriceOn(e.target.value)} />
               <span className="grow" />
               {missing.length > 0 && <span className="err small">Type a cost for {missing.map((m) => m.symbol).join(", ")}</span>}
