@@ -11,7 +11,8 @@ export function FigureText({ cell }: { cell: { text: string; asOf?: string | nul
   return (
     <span className={cell.old ? "fig old" : "fig"}>
       {paren(cell.text)}
-      <span className="asof">{cell.old ? `since ${cell.asOf}` : cell.asOf}</span>
+      {/* "none since", not a bare "since" under the dash (Riley, test 10, finding 59: "— since Mar '24" read as cryptic) */}
+      <span className="asof">{cell.old ? `none since ${cell.asOf}` : cell.asOf}</span>
     </span>
   );
 }

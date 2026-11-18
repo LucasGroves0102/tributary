@@ -194,7 +194,7 @@ function HoldingsTable({ token, rows, data, name, onChanged }: { token: string; 
   if (!rows.length) return <p className="empty">Nothing open: every holding has been sold.</p>;
   return (
     <TableScroll label="Your holdings">
-      <table className="t portfolio-table">
+      <table className="t portfolio-table cards-narrow">
         <thead>
           <tr>
             <th className="first">Holding</th>
@@ -218,9 +218,9 @@ function HoldingsTable({ token, rows, data, name, onChanged }: { token: string; 
                   <span className="holding-review" title={reviewWords(h.review_due)}>Review due</span>
                 )}
               </td>
-              <td className="n">{shares(h.shares)}</td>
-              <td className="n">{cash(h.cost_basis, data.currency)}</td>
-              <td className="n" title={h.price ? priceWords(h.price, data.stale_after_days) : h.covered ? "No price yet: type one, or import your Fidelity export" : "Tributary keeps no price for a fund or ETF"}>
+              <td className="n" data-label="Shares">{shares(h.shares)}</td>
+              <td className="n" data-label="Cost">{cash(h.cost_basis, data.currency)}</td>
+              <td className="n" data-label="Price" title={h.price ? priceWords(h.price, data.stale_after_days) : h.covered ? "No price yet: type one, or import your Fidelity export" : "Tributary keeps no price for a fund or ETF"}>
                 {h.price ? (
                   <>
                     {perShare(h.price.value, data.currency)}
@@ -228,14 +228,14 @@ function HoldingsTable({ token, rows, data, name, onChanged }: { token: string; 
                   </>
                 ) : <span className="faint">—</span>}
               </td>
-              <td className="n">{h.value !== null ? cash(h.value, data.currency) : <span className="faint">—</span>}</td>
-              <td className="n">
+              <td className="n" data-label="Value">{h.value !== null ? cash(h.value, data.currency) : <span className="faint">—</span>}</td>
+              <td className="n" data-label="Gain">
                 {h.unrealised !== null ? (
                   <span title={signedPct(h.unrealised_pct) ?? undefined}>{cash(h.unrealised, data.currency)}</span>
                 ) : <span className="faint">—</span>}
               </td>
-              <td className="n">{h.weight !== null ? pct(Number(h.weight)) : <span className="faint">—</span>}</td>
-              <td>
+              <td className="n" data-label="Weight">{h.weight !== null ? pct(Number(h.weight)) : <span className="faint">—</span>}</td>
+              <td className="pf-next" data-label="Next report">
                 {h.next_report ? (
                   <span className="next-report" title={`For the period ending ${day(h.next_report.period_end, true)} (an estimate)`}>
                     <FormMark form={h.next_report.form} expected title={null} />
@@ -243,7 +243,7 @@ function HoldingsTable({ token, rows, data, name, onChanged }: { token: string; 
                   </span>
                 ) : <span className="faint">—</span>}
               </td>
-              <td>
+              <td className="pf-research wide" data-label="Research">
                 {h.link ? (
                   <a href={h.link.kind === "project" ? href({ view: "analysis", projectId: h.link.id }) : href({ view: "thesis", itemId: h.link.id })}>
                     {h.link.name}

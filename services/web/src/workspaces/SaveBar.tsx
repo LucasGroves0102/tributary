@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 
 import { failureReason } from "../api";
+import { MenuButton } from "../components/MenuButton";
 import { toast } from "../components/Toasts";
 import { ConfirmDelete } from "./Actions";
 import {
@@ -77,26 +78,34 @@ export function SaveBar({ current, saved, label }: Props) {
           )}
         </span>
       )}
-      {open && (
-        <button className="btn" onClick={() => void saveOver()} disabled={!dirty || busy || !ready || offline} title={why}>
+      {/* an open item: Save only when there is something to save, Save as and Close in a menu, so the page's bar
+          isn't six controls with a greyed Save and a bare "Close" (Riley, test 10, finding 86) */}
+      {open && dirty && (
+        <button className="btn" onClick={() => void saveOver()} disabled={busy || !ready || offline} title={why}>
           Save
         </button>
       )}
-      <button
-        className={open ? "btn" : "btn primary"}
-        onClick={() => {
-          setForm((f) => !f);
-          setError(null);
-        }}
-        disabled={!ready || offline}
-        title={why}
-        aria-expanded={form}
-      >
-        {open ? "Save as…" : "Save…"}
-      </button>
-      {open && (
-        <button className="btn ghost" onClick={() => (dirty ? setClosing(true) : saved.close(current.kind))} title={`Stop editing “${open.name}”; it stays saved as it was`}>
-          Close
+      {open ? (
+        <MenuButton label="More" count={false} items={[
+          { label: "Save as…", disabled: !ready || offline, title: why, onSelect: () => {
+            setForm(true);
+            setError(null);
+          } },
+          { label: `Close “${open.name}”`, title: `Stop editing it; it stays saved as it was`,
+            onSelect: () => (dirty ? setClosing(true) : saved.close(current.kind)) },
+        ]} />
+      ) : (
+        <button
+          className="btn primary"
+          onClick={() => {
+            setForm((f) => !f);
+            setError(null);
+          }}
+          disabled={!ready || offline}
+          title={why}
+          aria-expanded={form}
+        >
+          Save…
         </button>
       )}
       {closing && open && (

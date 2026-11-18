@@ -149,7 +149,7 @@ function Entry({ token, e, correction = false, onCorrect, onEdit, onChanged }: {
         ) : (
           <>
             <button className="btn sm ghost" onClick={onEdit}>Edit</button>
-            <button className="btn sm ghost" onClick={() => setConfirm(true)}>Delete</button>
+            <button className="btn sm ghost danger" onClick={() => setConfirm(true)}>Delete</button>
           </>
         )}
       </footer>

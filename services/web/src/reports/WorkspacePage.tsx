@@ -86,14 +86,6 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
         {saved && <WorkspaceActions workspace={ws} saved={saved} onDeleted={() => go({ view: "home" })} />}
         <span className="grow" />
         {saved && <NewWork token={token} saved={saved} workspaceId={workspaceId} />}
-        <button
-          className="btn primary"
-          disabled={busy || items.length === 0}
-          title={items.length ? undefined : "Save a chart, comps table or screen here first"}
-          onClick={() => setAsking(true)}
-        >
-          Write a report
-        </button>
       </div>
       {/* it spends questions, so it asks first and says how many (Riley 89: it started on the click) */}
       {asking && (
@@ -105,17 +97,6 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
             writer.start(workspaceId, null);
           }} />
       )}
-      <p className="muted small">
-        A report is a research note the assistant writes from the items below; it counts as {REPORT_QUESTIONS} assistant questions{allowance ? ` (you have ${leftText(allowance)})` : ""}
-        {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
-      </p>
-      <details className="how-to-read">
-        <summary>What a report holds</summary>
-        <p className="foot">
-          A summary, a section per item with the chart or table drawn in place, and what changed in the latest filings where
-          your plan includes them. Every number is checked against the data and cited; anything it can't verify is flagged.
-        </p>
-      </details>
       {ws.project && (
         <p className="report-status" role="note">
           This workspace is an analysis project: its guided steps, thesis and model open in the project.{" "}
@@ -152,17 +133,26 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
             ))}
           </ul>
         ) : (
-          <p className="empty">
-            No thesis or model yet. A model forecasts a company's revenue and operating income from its history and your
-            assumptions; a thesis is your argument in Markdown, with the charts and models drawn in place.
-          </p>
+          // one line (Riley, test 10, finding 106); New thesis and New model are the page bar's
+          <p className="empty">No thesis or model yet.</p>
         )}
       </section>
 
       <section className="card">
+        {/* Write a report sits with the reports, a secondary action: it spends questions, and an empty workspace has nothing
+            to write from (Riley, test 10, finding 68: it was the page's primary button, above an empty state) */}
         <div className="card-h">
           <h2>Reports</h2>
           <span className="sub">written by the assistant from this workspace</span>
+          <span className="grow" />
+          <button
+            className="btn sm"
+            disabled={busy || items.length === 0}
+            title={items.length ? undefined : "Save a chart, comps table or screen here first"}
+            onClick={() => setAsking(true)}
+          >
+            Write a report
+          </button>
         </div>
         {reports.length ? (
           <ul className="ws-list">
@@ -178,8 +168,21 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
             ))}
           </ul>
         ) : (
-          <p className="empty">No reports yet. Write one from the items below.</p>
+          <p className="empty">
+            {items.length ? "No reports yet." : "No reports yet: save a chart, comps table or screen here to write one from."}{" "}
+            <span className="faint small">
+              A report counts as {REPORT_QUESTIONS} assistant questions{allowance ? ` (you have ${leftText(allowance)})` : ""}
+              {items.length > MAX_REPORT_ITEMS ? ` and covers the first ${MAX_REPORT_ITEMS} items` : ""}.
+            </span>
+          </p>
         )}
+        <details className="how-to-read card-b">
+          <summary>What a report holds</summary>
+          <p className="foot">
+            A summary, a section per item with the chart or table drawn in place, and what changed in the latest filings where
+            your plan includes them. Every number is checked against the data and cited; anything it can't verify is flagged.
+          </p>
+        </details>
       </section>
 
       <section className="card">
@@ -201,8 +204,8 @@ export function WorkspacePage({ token, workspaceId, writer, onOpen, version, sav
           </ul>
         ) : (
           <p className="empty">
-            Nothing saved here yet. Use Save on the <a href={href({ view: "chart" })}>Chart builder</a>,{" "}
-            <a href={href({ view: "compare" })}>Compare</a> or <a href={href({ view: "companies" })}>Companies</a>.
+            Nothing saved here yet: Save on the <a href={href({ view: "chart" })}>Chart builder</a>,{" "}
+            <a href={href({ view: "compare" })}>Compare</a> or <a href={href({ view: "companies" })}>Companies</a> puts it here.
           </p>
         )}
       </section>

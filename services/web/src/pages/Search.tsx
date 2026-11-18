@@ -212,7 +212,8 @@ export function Search({ token, search, companies, open = false, suggestions = N
                               filing's own capitals */}
                           <b>{sectionName(h.section_key)}</b>
                         </a>
-                        {h.passages_matched > 1 && <span className="faint small">; {h.passages_matched} passages match</span>}
+                        {/* a count beside the name, not "; 6 passages match" (Riley, test 10, finding 63) */}
+                        {h.passages_matched > 1 && <span className="faint small search-count">{h.passages_matched} passages match</span>}
                         <div className="snippet">
                           {snippetRuns(h.snippet, terms).map((r, i) => (typeof r === "string" ? r : <mark key={i}>{r.mark}</mark>))}
                         </div>

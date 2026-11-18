@@ -241,9 +241,9 @@ describe("ranked and grouped notes (M2)", () => {
 
   it("summarises by rank, and says nothing from an older API", () => {
     expect(summaryText({ attention: 1, note: 3, minor: 40, findings: 312 })).toBe(
-      "1 needs attention · 3 worth a look · 40 minor or old, from 312 check findings");
+      "1 needs attention, 3 are worth a look and 40 are minor or old. The 44 notes gather 312 findings of the nightly data checks: a note is one check's findings across periods.");
     expect(summaryText({ attention: 0, note: 0, minor: 2, findings: 5 })).toBe(
-      "nothing needs attention · 2 minor or old, from 5 check findings");
+      "Nothing needs attention and 2 are minor or old. The 2 notes gather 5 findings of the nightly data checks: a note is one check's findings across periods.");
     expect(summaryText(undefined)).toBeNull();
   });
 

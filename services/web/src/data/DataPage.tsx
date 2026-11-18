@@ -508,7 +508,7 @@ function Metrics({ token, saved, datasets }: { token: string; saved: Saved | nul
         <>
           {rows.length > 0 && (
             <TableScroll label="Your metrics">
-              <table className="t data-table">
+              <table className="t data-table cards-narrow">
                 <thead>
                   <tr>
                     <th className="first">Metric</th>
@@ -521,11 +521,11 @@ function Metrics({ token, saved, datasets }: { token: string; saved: Saved | nul
                   {rows.map((m) => (
                     <tr key={m.item_id}>
                       <td className="first"><b>{m.name}</b></td>
-                      <td><code>{m.state?.formula ?? "…"}</code></td>
-                      <td>{m.state ? (m.state.view === "quarter" ? "The latest quarter" : "Trailing twelve months") : ""}</td>
+                      <td className="wide" data-label="Formula"><code>{m.state?.formula ?? "…"}</code></td>
+                      <td data-label="Reads">{m.state ? (m.state.view === "quarter" ? "The latest quarter" : "Trailing twelve months") : ""}</td>
                       <td className="row">
                         <a className="btn sm" href={href({ view: "companies", screen: { metric: [m.item_id] } })}>Screen with it</a>
-                        <button className="btn sm ghost" onClick={() => saved.deleteWithUndo("item", m.item_id)}>Delete</button>
+                        <button className="btn sm ghost danger" onClick={() => saved.deleteWithUndo("item", m.item_id)}>Delete</button>
                       </td>
                     </tr>
                   ))}

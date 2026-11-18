@@ -420,8 +420,9 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
           </div>
         )}
         <span className="grow" />
-        {onNew && (
-          <button className="btn" onClick={onNew} disabled={!chart.layers.length && !chart.title}
+        {/* an empty chart has nothing to start over, export or save: no row of disabled buttons (Riley, test 10, finding 64) */}
+        {onNew && (chart.layers.length > 0 || !!chart.title) && (
+          <button className="btn" onClick={onNew}
             title="Start an empty chart. Your draft can be restored until you start another">
             New chart
           </button>
@@ -431,12 +432,12 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
             Restore the previous draft
           </button>
         )}
-        <MenuButton label="Export" disabled={!series.length} items={[
+        {chart.layers.length > 0 && <MenuButton label="Export" disabled={!series.length} items={[
           { label: "CSV, exact values", onSelect: exportCsv, disabled: !series.length, title: "Exact values, with the filing behind each point" },
           { label: "SVG, for slides", onSelect: exportSvg, disabled: !series.length },
           { label: "PNG, for slides", onSelect: exportPng, disabled: !series.length },
-        ]} />
-        {saveBar}
+        ]} />}
+        {chart.layers.length > 0 && saveBar}
       </div>
 
       <div className="builder">
@@ -532,6 +533,10 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                   title: t.hint + (t.per === "one" ? " (the chart's first company)" : "") + (chart.layers.length ? ". Replaces the layers; you can restore them" : ""),
                   onSelect: () => {
                     if (chart.layers.length || chart.title) onReplace?.(`Replaced your layers with the ${t.label} template.`);
+                    else {
+                      const used = fallback.slice(0, t.per === "one" ? 1 : 4).map((id) => short(id));
+                      if (used.length) toast({ text: `${t.label} for ${used.length > 1 ? `${used.slice(0, -1).join(", ")} and ${used.at(-1)}` : used[0]}: change a layer's company to chart another.`, topic: "template" });
+                    }
                     setChart((s) => applyTemplate(s, t, fallback));
                   },
                 }))} />
@@ -639,7 +644,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                   : emptyNote
                 : chart.layers.length
                   ? "Every layer is hidden. Show one, or add a metric or formula layer."
-                  : "Start with + Metric (a company and a metric), + Formula (e.g. net_income / revenue), or one of the templates."}
+                  : "Chart a company: pick one above, or start from a template."}
             </p>
           )}
           {latest && <div className="foot">Point at a value, or tap it, for its period and filing; click it to open the filing in the reader.</div>}

@@ -2,6 +2,7 @@ import { useRef } from "react";
 
 import { companyEvents, financials, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
 import { LayerChart } from "../chart/LayerChart";
+import { excerptBlocks } from "../reader/text";
 import { financialSeries } from "../chart/series";
 import { Folio, TodaysView } from "../components/Folio";
 import { Seal, SealLink } from "../components/Seal";
@@ -367,7 +368,10 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
           {() =>
             section ? (
               <div className="business">
-                <p className="excerpt">{excerpt(section.text)}</p>
+                {/* its own headings as headings, not one run of text (Riley, test 10, finding 76); the words are the filing's */}
+                {excerptBlocks(excerpt(section.text)).map((b, i) => (b.heading
+                  ? <h3 key={i} className="excerpt-h">{b.text}</h3>
+                  : <p key={i} className="excerpt">{b.text}</p>))}
                 <a href={href({ view: "filing", companyId, accessionNo: section.citation.accession_no, section: section.section_key })}>
                   Read Item 1
                 </a>

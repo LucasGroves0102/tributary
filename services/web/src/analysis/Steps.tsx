@@ -5,6 +5,7 @@
  * changed), Compare (Peers). Data is read through the Query API as the viewer, like on
  * those screens; the project grants nothing. */
 
+import { isHeading } from "../reader/text";
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { filingIndex, latestSection } from "../api";
@@ -136,7 +137,10 @@ export function Business({ token, companyId, name, project, onNotes, notesStatus
               <p className="empty">No parsed 10-K Item 1 for {name} yet. Its filings are on the company page.</p>
             ) : (
               <div className="card-b item1">
-                {shown.map((p, i) => (
+                {shown.map((p, i) => isHeading(p) ? (
+                  // the filing's own headings as headings, without a pin each (Riley, test 10, finding 76)
+                  <h4 key={i} className="item1-h">{p}</h4>
+                ) : (
                   <p key={i} className="pinnable">
                     {p}{" "}
                     <PinButton compact what="passage" make={async () => quoteBlock({

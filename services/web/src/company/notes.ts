@@ -429,9 +429,13 @@ export function groupNotes(notes: DataNote[]): { key: string; label: string; not
 export function summaryText(s: { attention: number; note: number; minor: number; findings: number } | undefined): string | null {
   if (!s) return null;
   const parts = [
-    s.attention ? `${s.attention} need${s.attention === 1 ? "s" : ""} attention` : "nothing needs attention",
-    s.note ? `${s.note} worth a look` : null,
-    s.minor ? `${s.minor} minor or old` : null,
-  ].filter(Boolean);
-  return `${parts.join(" · ")}, from ${s.findings.toLocaleString("en-US")} check finding${s.findings === 1 ? "" : "s"}`;
+    s.attention ? `${s.attention} need${s.attention === 1 ? "s" : ""} attention` : "Nothing needs attention",
+    s.note ? `${s.note} ${s.note === 1 ? "is" : "are"} worth a look` : null,
+    s.minor ? `${s.minor} ${s.minor === 1 ? "is" : "are"} minor or old` : null,
+  ].filter((p): p is string => !!p);
+  const said = parts.length === 1 ? parts[0]! : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  const notes = s.attention + s.note + s.minor;
+  // what the second count is (Riley, test 10, finding 58: "from 84 check findings" was never explained)
+  return `${said}. The ${notes.toLocaleString("en-US")} ${notes === 1 ? "note gathers" : "notes gather"} ` +
+    `${s.findings.toLocaleString("en-US")} finding${s.findings === 1 ? "" : "s"} of the nightly data checks: a note is one check's findings across periods.`;
 }

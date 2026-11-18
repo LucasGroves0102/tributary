@@ -197,3 +197,14 @@ export function priorComparable(
   earlier.sort((a, b) => b.filed.localeCompare(a.filed) || b.accession_no.localeCompare(a.accession_no));
   return earlier[0] ?? null;
 }
+
+/** A section's opening as headings and paragraphs: a short line without a sentence's end ("Our Company") is a
+ * heading; the section's own title line ("Item 1. Business") is the rubric's already, so it goes. Display only. */
+export function excerptBlocks(text: string): { text: string; heading: boolean }[] {
+  return text.split(/\n+/).map((l) => l.trim()).filter(Boolean)
+    .filter((l, i) => !(i === 0 && /^item\s*1\.?\s*business\.?$/i.test(l)))
+    .map((l) => ({ text: l, heading: isHeading(l) }));
+}
+
+/** A line that reads as a heading: short, no sentence's end. */
+export const isHeading = (line: string) => line.length <= 70 && !/[.:;,…"”)]$/.test(line) && /^[A-Z]/.test(line) && line.split(" ").length <= 9;

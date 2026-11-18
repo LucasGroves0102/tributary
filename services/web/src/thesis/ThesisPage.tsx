@@ -519,8 +519,11 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
         <button className="btn sm" onClick={showVersions} aria-expanded={!!versions} title="Earlier saved versions of this thesis">
           History
         </button>
-        {/* finding 22: the cost and the time before a check, while no check panel says them */}
-        {!showChecks && written && checkCostShort(allowance) && (
+        {/* finding 22: the cost and the time before a check, while no check panel says them; off, why it's off, in
+            view (Riley, test 10, finding 66: disabled with no reason) */}
+        {!checking && (!written || dirty) ? (
+          <span className="faint small check-why">{!written ? "Write your own words to check them" : "Save to check"}</span>
+        ) : !showChecks && written && checkCostShort(allowance) && (
           <span className="faint small check-cost-inline">{checkCostShort(allowance)}</span>
         )}
         <button className="btn sm" onClick={checks.start} disabled={dirty || checking || !written}
@@ -692,8 +695,30 @@ export function ThesisBody({ markdown, items, label, token, readable, hasTtm, on
 }
 
 function Markdown({ markdown }: { markdown: string }) {
-  const html = useMemo(() => renderMarkdown(markdown), [markdown]);
-  return <div className="answer report-text" dangerouslySetInnerHTML={{ __html: html }} />;
+  // a template's guidance (an HTML comment under each heading) reads in the preview as a faint prompt, so a heading
+  // isn't left empty (Riley, test 10, finding 66); React sets its text, nothing of it is parsed as HTML
+  const parts = useMemo(() => guided(markdown).map((p) => (p.guide === undefined ? { html: renderMarkdown(p.text) } : p)), [markdown]);
+  return (
+    <div className="answer report-text">
+      {parts.map((p, i) => ("html" in p
+        ? <div key={i} dangerouslySetInnerHTML={{ __html: p.html }} />
+        : <p key={i} className="thesis-guide">{p.guide}</p>))}
+    </div>
+  );
+}
+
+/** Guidance comments (`<!-- ... -->`, never the embed or check markers) between runs of Markdown. */
+export function guided(markdown: string): { text: string; guide?: string }[] {
+  const out: { text: string; guide?: string }[] = [];
+  let at = 0;
+  for (const m of markdown.matchAll(/<!--(?!\s*\/?tributary:)([\s\S]*?)-->/g)) {
+    if (m.index! > at) out.push({ text: markdown.slice(at, m.index) });
+    const guide = m[1]!.trim();
+    if (guide) out.push({ text: "", guide });
+    at = m.index! + m[0].length;
+  }
+  if (at < markdown.length) out.push({ text: markdown.slice(at) });
+  return out;
 }
 
 /** "3 Nov, 14:05" for a draft's time. */

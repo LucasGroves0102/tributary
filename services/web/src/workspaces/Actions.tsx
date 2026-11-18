@@ -179,7 +179,8 @@ export function WorkspaceActions({
         }))}>
         Duplicate
       </button>
-      <button className="btn sm ghost" onClick={() => setMode("delete")}>Delete</button>
+      {/* destructive, so set apart: the error ink (Riley, test 10, findings 68 and 105) */}
+      <button className="btn sm ghost danger" onClick={() => setMode("delete")}>Delete</button>
       {note && <span className="faint small" role="status">{note}</span>}
       {error && <span className="err small" role="alert">{error}</span>}
       {mode === "delete" && (
@@ -224,7 +225,7 @@ export function ItemActions({ item, saved }: { item: Pick<SavedItem, "item_id" |
       <button className="btn sm ghost" onClick={() => run("duplicate it", saved.duplicateItem(item.item_id))} aria-label={`Duplicate ${item.name}`}>
         Duplicate
       </button>
-      <button className="btn sm ghost" onClick={() => setMode("delete")} aria-label={`Delete ${item.name}`}>Delete</button>
+      <button className="btn sm ghost danger" onClick={() => setMode("delete")} aria-label={`Delete ${item.name}`}>Delete</button>
       {error && <span className="err small" role="alert">{error}</span>}
       {mode === "delete" && (
         <ConfirmDelete

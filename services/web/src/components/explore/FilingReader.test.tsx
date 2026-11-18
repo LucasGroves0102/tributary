@@ -147,7 +147,7 @@ it("opens at a cited passage with the search words marked, and lists this filing
   expect([...container.querySelectorAll(".section-text mark")].map((m) => m.textContent)).toEqual(["Export", "controls"]);
   // the same two passages as the outline, and what next/previous steps through: both labelled
   expect($(".match-nav")?.textContent).toContain("2 passages match “export controls”");
-  expect($(".match-nav")?.textContent).toContain("highlight 1 of 2");
+  expect($(".match-nav")?.textContent).toContain("Highlight 1 of 2");
   expect($("mark.cur")?.textContent).toBe("Export");
   const search = paths().find((u) => u.pathname === "/api/query/v1/search")!;
   expect(Object.fromEntries(search.searchParams)).toMatchObject({ q: "export controls", company: NVDA, form: "10-Q", from: "2026-08-26", to: "2026-08-26" });
@@ -171,7 +171,7 @@ it("jumps to the first match when a section opens, and steps through them both w
     expect(scrolled.at(-1)).toBe("Export");
     await act(async () => $('button[aria-label="Next match"]')!.click());
     expect($("mark.cur")?.textContent).toBe("controls");
-    expect($(".match-nav")?.textContent).toContain("highlight 2 of 2");
+    expect($(".match-nav")?.textContent).toContain("Highlight 2 of 2");
     expect(scrolled.at(-1)).toBe("controls");
     await act(async () => $('button[aria-label="Next match"]')!.click());
     expect($("mark.cur")?.textContent).toBe("Export"); // wraps

@@ -165,7 +165,7 @@ describe("Status", () => {
     });
     await mount(<Status load={async () => empty} now={() => NOW} />);
     expect(text()).toContain("First check pending.");
-    expect(text()).not.toContain("Missing when checked");
+    expect(text()).not.toContain("Missing at a check");
   });
 
   it("shows dashes, not zeros, when the feed caught nothing", async () => {

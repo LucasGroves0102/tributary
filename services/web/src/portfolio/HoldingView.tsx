@@ -254,7 +254,7 @@ function Lots({ token, h, cur, onChanged }: { token: string; h: Holding; cur: st
     <>
       {h.lots.length > 0 && (
         <TableScroll label="Buys">
-          <table className="t portfolio-lots">
+          <table className="t portfolio-lots cards-narrow">
             <thead>
               <tr>
                 <th className="first">Bought</th><th className="n">Shares</th><th className="n">Cost</th><th className="n">A share</th>
@@ -266,11 +266,11 @@ function Lots({ token, h, cur, onChanged }: { token: string; h: Holding; cur: st
                 <tr key={l.id}>
                   <td className="first">{l.bought_on ? day(l.bought_on, true) : <span className="faint" title="A positions export has no buy dates">Day not known</span>}
                     {l.source === "fidelity" && <span className="faint small"> (Fidelity export)</span>}</td>
-                  <td className="n">{shares(l.shares)}</td>
-                  <td className="n">{cash(l.cost_total, cur)}</td>
-                  <td className="n">{perShare(l.cost_per_share, cur)}</td>
-                  <td>{l.account_label ?? <span className="faint">—</span>}</td>
-                  <td><button className="btn sm ghost" aria-label="Delete this buy" onClick={() => void remove(l.id)}>Delete</button></td>
+                  <td className="n" data-label="Shares">{shares(l.shares)}</td>
+                  <td className="n" data-label="Cost">{cash(l.cost_total, cur)}</td>
+                  <td className="n" data-label="A share">{perShare(l.cost_per_share, cur)}</td>
+                  <td data-label="Account">{l.account_label ?? <span className="faint">—</span>}</td>
+                  <td><button className="btn sm ghost danger" aria-label="Delete this buy" onClick={() => void remove(l.id)}>Delete</button></td>
                 </tr>
               ))}
             </tbody>
@@ -304,7 +304,7 @@ function Sells({ token, h, cur, onChanged }: { token: string; h: Holding; cur: s
     <>
       {h.sells.length > 0 && (
         <TableScroll label="Sales">
-          <table className="t portfolio-sells">
+          <table className="t portfolio-sells cards-narrow">
             <thead>
               <tr><th className="first">Sold</th><th className="n">Shares</th><th className="n">A share</th><th className="n">Proceeds</th><th><span className="visually-hidden">Delete</span></th></tr>
             </thead>
@@ -312,10 +312,10 @@ function Sells({ token, h, cur, onChanged }: { token: string; h: Holding; cur: s
               {h.sells.map((s) => (
                 <tr key={s.id}>
                   <td className="first">{day(s.sold_on, true)}</td>
-                  <td className="n">{shares(s.shares)}</td>
-                  <td className="n">{perShare(s.price, cur)}</td>
-                  <td className="n">{cash(s.proceeds, cur)}</td>
-                  <td><button className="btn sm ghost" aria-label="Delete this sale" onClick={() => void remove(s.id)}>Delete</button></td>
+                  <td className="n" data-label="Shares">{shares(s.shares)}</td>
+                  <td className="n" data-label="A share">{perShare(s.price, cur)}</td>
+                  <td className="n" data-label="Proceeds">{cash(s.proceeds, cur)}</td>
+                  <td><button className="btn sm ghost danger" aria-label="Delete this sale" onClick={() => void remove(s.id)}>Delete</button></td>
                 </tr>
               ))}
             </tbody>
