@@ -132,7 +132,13 @@ describe("names and open items", () => {
     expect(suggestName({ kind: "comps", compare: { target: NVDA, peers: [AAPL] } }, label)).toBe("NVDA comps");
     // a screen is named for what it screens
     expect(suggestName({ kind: "screen", screen: {} }, label)).toBe("All companies");
-    expect(suggestName({ kind: "screen", screen: { industry: "beverages" } }, label)).toBe('Industry contains "beverages"');
+    expect(suggestName({ kind: "screen", screen: { industry: "beverages" } }, label)).toBe('Industry "beverages"');
+    // every filter (Morgan 33: "Revenue $1B to $10B" named a growth and margin screen)
+    expect(suggestName({ kind: "screen", screen: { band: "1b-10b", growth: 15, margin: 15 } }, label))
+      .toBe("Revenue $1B to $10B, growth ≥ 15%, operating margin ≥ 15%");
+    expect(suggestName({ kind: "screen", screen: { sector: "Technology", sector_industry: "Semiconductors", band: "10b-100b", growth: 10,
+      margin: 20, fye: 12, exchange: "Nasdaq", filer: "large_accelerated", mine: true } }, label))
+      .toBe("Semiconductors, revenue $10B to $100B, growth ≥ 10% +5 more");
     expect(suggestName({ kind: "comps", compare: { target: NVDA } }, label)).toBe("NVDA comps");
   });
 

@@ -252,6 +252,25 @@ export function describe(f: ScreenFilters): string {
   return parts.length ? parts.join(", ") : "no filters";
 }
 
+/** A screen's filters as a name: every one, tersely (Morgan 33: "Revenue $1B to $10B" named a screen
+ * with growth and margin filters too), in `describe`'s order. */
+export function nameClauses(f: ScreenFilters): string[] {
+  return [
+    f.q && `"${f.q}"`,
+    f.industry && `industry "${f.industry}"`,
+    f.sic && `SIC ${f.sic}`,
+    f.sector_industry ?? f.sector,
+    f.band && `revenue ${BAND_LABELS[f.band]}`,
+    f.growth !== undefined && `growth ≥ ${f.growth}%`,
+    f.margin !== undefined && `operating margin ≥ ${f.margin}%`,
+    f.fye && `FY ends ${MONTHS[f.fye - 1]}`,
+    f.exchange,
+    f.filer && FILER_LABELS[f.filer].toLowerCase() + " filers",
+    f.issue && `check: ${checkName(f.issue) ?? f.issue}`,
+    f.mine && "readable only",
+  ].filter((x): x is string => typeof x === "string" && x !== "");
+}
+
 export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December"];
 

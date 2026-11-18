@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useContext, useRef } from "react";
 
 import { companyEvents, financials, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
 import { LayerChart } from "../chart/LayerChart";
@@ -400,9 +400,11 @@ function Revenue({ token, companyId, name, foreign }: { token: string; companyId
   // the heading says what's drawn: a bank reports no operating margin, so it gets revenue alone
   const heading = series.length === 1 ? series[0]!.name : "Revenue and operating margin";
   const without = series.length === 1 ? (series[0]!.id === 1 ? "No operating margin reported" : "No revenue reported") : undefined;
+  // the chart is today's (said so), but its way to the statements keeps the page's day (Morgan 10: it went to today)
+  const asOf = useContext(TodaysView);
   return (
     <Folio name={heading} line="Fiscal quarters, the last twelve"
-      aside={<>{without && <>{without}. </>}<a href={href({ view: "company", companyId, tab: "statements" })}>The statements</a></>}>
+      aside={<>{without && <>{without}. </>}<a href={href({ view: "company", companyId, tab: "statements", ...(asOf ? { asOf } : {}) })}>The statements</a></>}>
       {series.length ? (
         <div className="overview-chart">
           <LayerChart series={series} title="" footnote={[]} svgRef={svg}

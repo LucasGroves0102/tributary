@@ -8,7 +8,7 @@
 
 import { metricLabel } from "../chart/metrics";
 import { chartTitle, emptyChart, layerCompanies, restoreChart, type ChartState } from "../chart/model";
-import { describe, isEmpty, parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
+import { isEmpty, nameClauses, parseScreen, screenQuery, type ScreenFilters } from "../companies/screen";
 import { cleanCompare, compareQuery, parseCompare, type CompareState } from "../compare/state";
 import type { Route } from "../route";
 import type { ItemKind, SavedKind, SavedWorkspace } from "../types";
@@ -269,17 +269,21 @@ export function suggestName(c: Current, label: (companyId: string) => string): s
     const s = cleanCompare(c.compare);
     return s.target ? `${label(s.target)} comps`.slice(0, ITEM_NAME_MAX) : "Comps";
   }
-  // a name, not the whole filter sentence (Riley 66): its first whole filters, never cut mid-filter with "…"
-  // (Riley, test 10, finding 45: "Sector Technology, revenue $10B to…")
-  const what = isEmpty(c.screen) ? "All companies" : describe(c.screen);
-  const clauses = what.split(", ");
+  // every filter, tersely (Morgan 33: "Revenue $1B to $10B" left out growth and margin), never cut mid-filter
+  // with "…" (Riley, test 10, finding 45); past SCREEN_NAME the rest are counted ("+2 more")
+  const clauses = isEmpty(c.screen) ? [] : nameClauses(c.screen);
+  if (!clauses.length) return "All companies";
   let short = clauses[0]!;
+  let used = 1;
   for (const next of clauses.slice(1)) {
-    if (`${short}, ${next}`.length > SCREEN_NAME) break;
+    const more = clauses.length - used - 1;
+    if (`${short}, ${next}${more ? ` +${more} more` : ""}`.length > SCREEN_NAME) break;
     short = `${short}, ${next}`;
+    used += 1;
   }
+  if (used < clauses.length) short = `${short} +${clauses.length - used} more`;
   return (short.charAt(0).toUpperCase() + short.slice(1)).slice(0, ITEM_NAME_MAX);
 }
 
-/** How long a screen's suggested name may be. */
-const SCREEN_NAME = 40;
+/** How long a screen's suggested name may be ("+N more" says what's past it). */
+const SCREEN_NAME = 80;
