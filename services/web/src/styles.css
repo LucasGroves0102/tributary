@@ -3022,6 +3022,17 @@ button.chip:disabled {
   content: "↗";
 }
 
+/* a reported figure's mark is the seal, small, in the same corner (Riley, test 10, finding 103) */
+.t td.n > .cell-edgar.sealed::before {
+  content: none;
+}
+
+.t td.n > .cell-edgar.sealed .seal {
+  display: block;
+  width: 11px;
+  height: 11px;
+}
+
 .t td.n:hover > .cell-edgar,
 .t td.n > .cell-edgar:focus-visible {
   opacity: 1;
@@ -8506,6 +8517,10 @@ label.check {
 .why-term:hover,
 .why.open .why-term {
   color: var(--ink);
+}
+
+.why-text[hidden] {
+  display: none;
 }
 
 .why-text {

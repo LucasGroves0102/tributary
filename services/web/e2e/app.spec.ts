@@ -185,7 +185,9 @@ test("save a chart to a new workspace and reopen it", async ({ page }) => {
   expect([...fake.items.values()].map((i) => i.name)).toEqual(["Margin check"]);
 
   // start over, then reopen it from the sidebar
-  await page.getByRole("button", { name: "Close", exact: true }).click();
+  // Save as and Close are in the bar's More (Riley, test 10, finding 86)
+  await page.locator(".savebar .more-btn").click();
+  await page.getByRole("menuitem", { name: /^Close/ }).click();
   await page.getByRole("button", { name: /with a template/ }).click();
   await page.getByRole("menuitem", { name: "Leverage" }).click();
   await expect(page.getByLabel("Chart title")).toHaveValue(""); // written from the layers

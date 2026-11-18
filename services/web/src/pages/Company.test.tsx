@@ -579,6 +579,9 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect(cell.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
   expect(cell.querySelector("a.cell-edgar")?.getAttribute("href")).toBe("https://www.sec.gov/x/");
   expect(cell.querySelector("a.cell-edgar")?.getAttribute("target")).toBe("_blank");
+  // a reported figure's mark is the seal (Riley, test 10, finding 103); the cell's text stays the figure
+  expect(cell.querySelector("a.cell-edgar.sealed svg.seal")).not.toBeNull();
+  expect(cell.textContent).toBe("$46.74B");
   await click(button("Annual"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?period=a`);
   act(() => root.unmount());

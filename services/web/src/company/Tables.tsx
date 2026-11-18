@@ -41,6 +41,7 @@ import { go, href } from "../route";
 import type { StatementView } from "./statementView";
 import { Choices } from "../components/Choices";
 import { Folio } from "../components/Folio";
+import { Seal } from "../components/Seal";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { useLoad, type Load } from "./useLoad";
@@ -103,10 +104,14 @@ function Cell({ cell, blank = NO_DATA_CELL, companyId, note }: { cell: TableCell
       ) : (
         text
       )}
-      {/* the arrow is drawn by CSS, so a copied table and the cell's text stay the figure */}
+      {/* a figure the filing reports carries the seal on hover or focus, opening the filing on EDGAR; a derived one
+          (italic) keeps the arrow (Riley, test 10, finding 103: one rule for the seal everywhere). Both are drawn
+          without text, so a copied table and the cell's text stay the figure */}
       {reader && edgar && (
-        <a className="cell-edgar" href={edgar} target="_blank" rel="noopener noreferrer"
-          aria-label={`The ${form} on EDGAR, sec.gov`} title={`The ${form} on EDGAR, sec.gov`} />
+        <a className={cell.derived ? "cell-edgar" : "cell-edgar sealed"} href={edgar} target="_blank" rel="noopener noreferrer"
+          aria-label={`The ${form} on EDGAR, sec.gov`} title={cell.derived ? `The ${form} on EDGAR, sec.gov` : `Stated in the ${form}: open it on EDGAR, sec.gov`}>
+          {!cell.derived && <Seal size="ledger" />}
+        </a>
       )}
     </td>
   );
@@ -658,7 +663,8 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
             ))}
             <div className="foot">
               Share: of consolidated revenue in the latest quarter, so lines that overlap each read
-              their true share. YoY: latest quarter vs the quarter ending a year earlier. A member marked
+              their true share. YoY: latest quarter vs the quarter ending a year earlier. {NO_DATA} marks a quarter
+              with no figure for that member. A member marked
               "until" stopped being reported (an old segmentation) and is listed after the current ones.
             </div>
           </>

@@ -31,9 +31,10 @@ seal on every figure taken from a filing. Professional before decorative: no arc
 | `--ink-2` | #4c4646 | #b9b0a6 | labels, supporting text |
 | `--ink-3` | #706965 | #958c83 | periods, notes, metadata (tuned from #78716d / #8f867d for AA on `--sheet-2`) |
 | `--rule` | #e6e0db | #2f2829 | row and section rules |
-| `--red` | #b3111e | #e05a63 | the seal, margin rubrics, red-letter days, a "may have changed" mark (since 2026-11-15) |
+| `--red` | #b3111e | #e05a63 | the seal, margin rubrics, red-letter days, a "may have changed" mark (since 2026-11-15); nothing else (2026-11-17) |
 | `--red-ink` | #ffffff | #1a0d0f | text on red |
-| `--red-rule` | rgba(179,17,30,.36) | rgba(224,90,99,.42) | ledger column rules |
+| `--red-rule` | rgba(179,17,30,.36) | rgba(224,90,99,.42) | (kept for the print block) |
+| `--col-rule` | rgba(179,17,30,.36) | #3d3435 | ledger and table column rules: the red hairline on paper, a warm grey on the dark page |
 | `--red-wash` | rgba(179,17,30,.05) | rgba(224,90,99,.07) | the current column only |
 | `--action` | #161314 | #ede6dc | the one primary button (filled), checkboxes; `--action-ink` #ffffff / #131011 on it |
 | `--link` | = `--ink` | = `--ink` | links, with a rule under them (`--link-rule`, the ink at 38%) |
@@ -81,9 +82,11 @@ twelve months are the annual report's year; otherwise its margin line says "Four
 
 ## Components
 
-- Buttons: square corners. Primary `--action` fill (the ink; red until 2026-11-15); secondary 1px `--ink` outline, transparent; press scale(.97) 120ms.
-  One primary per view.
-- Tabs and nav: sans 14px, active = `--ink` + 2px `--red` inset underline.
+- Buttons: square corners. Primary `--action` fill (the ink; red until 2026-11-15); secondary 1px `--ink` outline,
+  transparent; quiet (`.ghost`) text that underlines on hover, never a filled pill; destructive (`.danger`) the
+  `--error` ink, outlined in a confirm and after a rule in a menu; press scale(.97) 120ms. One primary per view.
+- Tabs and nav: sans 14px, active = `--ink` + 2px `--ink` inset underline (the sidebar's and steps' rule at the
+  edge too; red until 2026-11-17).
 - Toggle group: 1px `--ink` border, active segment inverted (`--ink` bg).
 - Ledger (figures): two columns of label / value rows, each value after a 1px `--red-rule` left rule, right-aligned,
   min-width 120px, a 14px seal after a filed figure; a figure a later filing may change keeps the ink with a red `*`.
@@ -141,7 +144,8 @@ Decisions taken while building, so later batches hold to them:
 - Long notes under a table go behind "How to read these figures" (`details`, closed), one sentence left in view; the
   blanks are a legend (`·`, `—`, `$0` each with its meaning), never a dotted string.
 - No middle dot as a separator anywhere in new copy: separate items (flex gap) or sentences.
-- Statement row labels stay on one line where the table has 900px or more (`@container tw`), and wrap below it.
+- Statement row labels keep one line up to 280px where the table has 900px or more (`@container tw`), and wrap
+  there (2026-11-17: a long label hid periods); below 900px they wrap at 190px.
 - Screener: column rules between figures only.
 
 ## The human pass (Riley's audit, branch riley-fixes, 2026-11-15)
@@ -177,3 +181,33 @@ Decisions taken while fixing test 6, so later work holds to them:
 - Long steps lead with contents and fold: the Numbers step lists its charts and shows two a row, a long What changed
   paragraph opens at five lines.
 - Amounts: four significant figures at most, negatives in parentheses on every table.
+
+## The restraint pass (Riley's audit, test 10, branch ui-fixes-2, 2026-11-17)
+
+Decisions taken while fixing findings 37-107, so later work holds to them:
+
+- Red: only the seal, the margin rubrics, red-letter days and the "may have changed" `*`. Badges and counts
+  (Home, the bell) are the ink filled; new-filing dots the ink; where-you-are rules (nav, tabs, analysis steps,
+  sort, the open saved screen) the ink; disclosure triangles `--ink-3`; red line states and crossed tags by
+  weight; severity tags by weight and ink (error ink and bold, warning `--ink-2`, info `--ink-3`). A dark
+  table's column rules are `--col-rule` (warm grey); on paper they stay the red hairline.
+- Buttons: one system (above). Destructive actions are the `--error` token, a separate token from the seal's
+  red, so it can move; they sit after a rule in a menu or are the confirm's outlined button.
+- Empty states: one line and one action; how a screen works folds behind `details.how-to-read`. A page's
+  heading isn't repeated by its first section; its primary action isn't repeated by the empty state.
+- Toasts: every action that changes something says so once (`components/Toasts`): saves (and the workspace a
+  save made), exports, alert settings, red lines, linking a holding, End demo (the front door shows toasts too).
+- Seals: a seal marks a figure a filing states as shown, wherever it is shown: the Overview's ledger and lead
+  sentence (as before), a tag disagreement's figures, and now a Statements cell the filing reports, as a small
+  seal on hover or focus in place of the EDGAR arrow (a derived, italic cell keeps the arrow). TTM, ratios,
+  the screener, Compare, Portfolio and Analysis figures are computed and have none. The Overview's legend says
+  why ("stated as shown"; "four quarters added up, a ratio or a difference: hover or tap one for how").
+- Readable without a hover: a term with a reason (confidence) is `components/Why` (a dotted-underline button,
+  the reason on its own line when opened); a computed ledger figure's how opens on focus.
+- Company tabs: a card straight under `.company-page` reads as a folio (rubric in the margin, ruled, no box),
+  by CSS alone. Below 1100px the rubric sits above, as a folio's does.
+- Statement labels keep one line up to 280px and wrap there (a long line no longer hides periods); a row of
+  amounts steps down a unit rather than read under one ($119M ... $3,955M, not $0.12B), thousands grouped.
+- A phone: the company header shows the listing, industry, year end, currency and confidence (`.co-minor`
+  hides the filer category, incorporation and CIK); tabs scroll in one row; the user's own tables
+  (holdings, buys, sales, metrics) are labelled cards under 560px (`.t.cards-narrow`).

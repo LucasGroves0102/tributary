@@ -201,7 +201,7 @@ function SaveForm({
       </select>
       {workspace === NEW && (
         <>
-          <label htmlFor={`${id}-new`}>The new workspace's name</label>
+          <label htmlFor={`${id}-new`}>The new workspace</label>
           <input
             id={`${id}-new`}
             className="field"

@@ -734,13 +734,18 @@ li.event:first-child {
   background: color-mix(in srgb, var(--red) 5%, var(--sheet));
 }
 
-/* a table on a Seal page sits on the page's ground, not a sheet */
+/* a table on a Seal page sits on the page's ground, not a sheet (a company tab's own sections too) */
 .folio .t th,
-.folio .t td.first {
+.folio .t td.first,
+.company-page > section.card .t th,
+.company-page > section.card .t td.first,
+.company-page > section.card .t.filings td.actions {
   background: var(--page);
 }
 
-.folio .t tbody tr:hover td.first {
+.folio .t tbody tr:hover td.first,
+.company-page > section.card .t tbody tr:hover td.first,
+.company-page > section.card .t.filings tbody tr:hover td.actions {
   background: var(--sheet-2);
 }
 

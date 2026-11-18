@@ -35,9 +35,12 @@ More: [DESIGN.md, Look](DESIGN.md#look-seal) and [Shell and layout](DESIGN.md#sh
 
 ## Shell
 
-A sidebar (screens with `g`-then-letter shortcuts, the watchlist, next expected filings, freshness), a
+A sidebar (screens with `g`-then-letter shortcuts, g p Portfolio and g n Analysis; the watchlist, next
+expected filings, freshness; at its foot What Tributary covers, Data status, Using the API, Settings), a
 top bar (breadcrumb, Ctrl/Cmd-K command palette, the filing alerts bell, theme, who is signed in) and
-the assistant drawer (Ctrl/Cmd-J; `/` focuses). Every screen sets the tab's title (`src/title.ts`). A
+the assistant drawer (Ctrl/Cmd-J; `/` focuses). The palette finds companies, the nav's screens, Alerts,
+Settings, Using the API, Data status, saved screens and, where the API allows them, API keys and
+Connected apps (`PalettePlace`, built in App). Every screen sets the tab's title (`src/title.ts`). A
 page that fails to render shows "This page didn't load" and keeps the shell
 (`components/ErrorBoundary.tsx`). Pages lay out by the room they have (`@container main`), since the
 assistant takes 372px at any window size. `?` opens the keyboard shortcuts.
@@ -81,20 +84,31 @@ front door, keeps the request in the tab while you sign in, and opens again afte
 - **One blanks vocabulary** (`src/blanks.ts`): — not reported, · no data in this period, n/a, n/m, $0 a
   real zero. Whether a figure is n/m, n/a, old or stale is the API's reading (migrations 035, 069)
   ([Blanks and readings](DESIGN.md#blanks-readings-currencies-and-per-share-figures)).
-- **Money** has four significant figures at most, negatives in parentheses on every table (display
-  only: CSV and hovers keep the sign), one unit per row (`format.ts` `moneyRow`), and another currency
-  shown in it, never converted.
+- **Money** has four significant figures at most, thousands grouped, negatives in parentheses on every
+  table and the lists under them (display only: CSV and hovers keep the sign), one unit per row
+  (`format.ts` `moneyRow`: the next smaller unit when a figure would read under one, so $119M ... $3,955M,
+  not $0.12B), and another currency shown in it, never converted.
 - **One sign convention**: outflows (capex, dividends, buybacks) are negative on statements, their CSV
   and the Numbers charts; the chart builder and screener keep the API's metric, the amount paid.
 - **Times** are the viewer's local date and clock with the zone (`format.ts` `localTime`).
 - **Freshness words**: *listed* (in the filing index), *parsed* (text in the reader), *checks last
   ran*, *last checked* (one company) ([Freshness and times](DESIGN.md#freshness-and-times)).
-- **A seal** marks only a figure the filing states; a computed figure says how it is worked out. A
-  tag disagreement's data note shows its two figures exactly as filed (`format.ts` `asFiled`), each
-  with a seal to the filing (migration 075), or says they were corrected since.
+- **A seal** marks only a figure the filing states: the Overview's ledger and lead sentence, a tag
+  disagreement's two figures, and a Statements cell a filing reports (on hover or focus, opening EDGAR;
+  a derived cell keeps the ↗). A computed figure (TTM, ratios, the screener, Compare, Portfolio) has
+  none and says how it is worked out, on hover or a tap.
 - **Confidence** (migration 074) is the API's level and reasons, worded by `companies/rows.ts`
-  `confidenceWords`: quiet text with a dotted underline and the reasons on hover, in the company
-  header always and in the screener only when medium or low; never a colour or a traffic light.
+  `confidenceWords`: quiet text with a dotted underline whose reasons open on a tap as well as a hover
+  (`components/Why`), in the company header always and in the screener only when medium or low; never a
+  colour or a traffic light.
+- **Buttons**: primary (the ink filled, one per view), secondary (outline), quiet (text, underlined on
+  hover), destructive (the error ink; after a rule in a menu). An open saved item's bar shows Save only
+  with changes, Save as and Close in More.
+- **Feedback**: what just happened is a toast (`components/Toasts`): a save, a new workspace made by a
+  save, an export, an alert setting, a red line, End demo. Empty states are one line and one action;
+  how a screen works folds behind `details.how-to-read`.
+- **A phone**: tables of the user's own records read as labelled cards under 560px (`.t.cards-narrow`,
+  labels from `data-label`); the company header keeps the minor facts (`.co-minor`) for wider pages.
 - **Model output** renders only through `src/markdown.ts` (marked + DOMPurify); an accession number
   becomes an EDGAR link only if a tool returned it. A user's thesis renders the same way, without the
   citation check.
