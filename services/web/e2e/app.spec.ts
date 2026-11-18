@@ -705,7 +705,7 @@ test("your data: a CSV checked, then stored, and its rows on the company page", 
 
   // a metric over it, saved into "Your metrics", then a screener column
   await page.goto("/#/data");
-  await page.getByPlaceholder("Revenue per store").fill("Revenue per store");
+  await page.getByPlaceholder("Revenue per share").fill("Revenue per store");
   await page.locator("form.data-metric-form input.field").nth(1).fill("revenue / mine.store_counts.stores");
   await page.getByRole("button", { name: "Save metric" }).click();
   await expect(page.locator(".data-table").nth(1)).toContainText("revenue / mine.store_counts.stores");
