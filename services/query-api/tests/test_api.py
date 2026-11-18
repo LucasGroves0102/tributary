@@ -77,7 +77,8 @@ class FakeStore:
                              "last_checked_at": None},
             "coverage": {"companies_with_financials": 6025, "documents": 265625,
                          "indexed_filings": 265000, "sections": 1780000,
-                         "last_indexed_at": "2026-11-02T10:00:00Z", "ticker": "NVDA"},
+                         "last_indexed_at": "2026-11-02T10:00:00Z", "ticker": "NVDA",
+                         "catalog_companies": 6030},
             "quality": [{"check_name": "impossible_value", "severity": "error", "findings": 3,
                          "companies": 2, "companies_checked": 6024,
                          "last_checked_at": "2026-11-02T08:00:00Z", "company_id": NVDA,
@@ -478,6 +479,8 @@ def test_status_data_is_public_and_aggregate_only(client):
                               "filings": 40000, "via_feed": 39000, "live_pct": 97.5,
                               "p50_seconds": 41.2, "p95_seconds": 170.0}
     assert body["coverage"]["companies_with_financials"] == 6025
+    # the catalog's size (141): the sidebar's count, so every page says one number (Riley, test 10)
+    assert body["coverage"]["catalog_companies"] == 6030
     assert body["quality"] == {
         "companies_checked": 6024, "last_checked_at": "2026-11-02T08:00:00Z",
         "figures": 13790000,

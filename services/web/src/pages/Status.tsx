@@ -112,11 +112,20 @@ function Body({ data, now, signedIn, readable }: { data: DataStatus; now: number
             {count(i.via_feed)} of {count(i.filings)} filings; the rest came from EDGAR's daily index
           </div>
         </div>
-        <div>
-          <div className="k">Companies with quarterly financials</div>
-          <div className="v">{count(c.companies_with_financials)}</div>
-          <div className="p">{companiesNote(c.companies_with_financials, readable)}</div>
-        </div>
+        {c.catalog_companies ? (
+          // one count everywhere (finding 36): the catalog's, as the front door and the sidebar say
+          <div>
+            <div className="k">Companies to read</div>
+            <div className="v">{count(c.catalog_companies)}</div>
+            <div className="p">with XBRL financials or a filing's text; {count(c.companies_with_financials)} of them with quarterly financials</div>
+          </div>
+        ) : (
+          <div>
+            <div className="k">Companies with quarterly financials</div>
+            <div className="v">{count(c.companies_with_financials)}</div>
+            <div className="p">{companiesNote(c.companies_with_financials, readable)}</div>
+          </div>
+        )}
       </section>
       <p className="faint small status-note">
         EDGAR accepts filings until 10 pm ET, but most accepted after 5:30 pm ET reach its feed the next
@@ -487,7 +496,7 @@ function Recorded({ data }: { data: DataStatus }) {
       <ul className="cover-list">
         <li>
           <b>
-            Access: {a.attacks} attempts to reach data a user can't read, {a.leaks} succeeded
+            Access: {a.attacks} prompt attacks on the assistant, {a.leaks} leaked data
           </b>
           <span>
             {a.attacks} prompts in {a.categories} categories tried to get the assistant to reveal data outside

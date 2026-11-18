@@ -386,7 +386,7 @@ it("runs the axis to the answer's day, so a balance that stopped in 2022 shows i
   expect([...container.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual(["NVDA loans"]);
   expect(container.querySelector<HTMLSelectElement>('select[aria-label="Transform"]')!.selectedOptions[0]!.textContent).toBe("Quarterly");
   expect([...container.querySelectorAll(".ch-axis text")].at(-1)!.textContent).toBe("CY2026 Q2");
-  expect([...container.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("NVDA loans: stops at CY2022 Q2.");
+  expect([...container.querySelectorAll(".ch-foot")].map((f) => f.textContent).join(" ")).toContain("NVDA loans: stops at CY2022 Q2 (nothing on file after it).");
 });
 
 const type = async (input: HTMLInputElement, text: string) => {

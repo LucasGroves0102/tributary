@@ -1569,6 +1569,9 @@ export interface DataStatus {
   };
   coverage: {
     companies_with_financials: number | null;
+    /** the public catalog's size (141): every company with XBRL financials or a stored filing's
+     * text, the sidebar's count; 0 while closed, absent from an older API */
+    catalog_companies?: number | null;
     documents: number | null;
     indexed_filings: number | null;
     sections: number | null;

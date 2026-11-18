@@ -218,6 +218,16 @@ describe("layout", () => {
     expect(nearest(lay, lay.x[2]! + 3)).toBe(2);
   });
 
+  it("reaches a span given for small multiples on one scale, and draws a strong series heavier (Riley, test 10, finding 32)", () => {
+    const rev = toSeries(series([[1, "Q1", "10"], [2, "Q2", "20"], [3, "Q3", "30"]]), metric(), "rev", 0);
+    expect(layout([rev], true).left).toMatchObject({ lo: 0, hi: 30 });
+    expect(layout([rev], true, [], { span: [-40, 90] }).left).toMatchObject({ lo: -40, hi: 100 });
+    expect(layout([rev], true, [], { span: [0, 900], log: true }).left?.hi).toBeLessThan(900); // a log scale keeps its own
+    const strong = layout([{ ...rev, strong: true }], true);
+    expect(strong.drawn[0]!.strong).toBe(true);
+    expect(strong.legend[0]!.strong).toBe(true);
+  });
+
   it("dashes a series that asks for it (a model's forecast) on the left axis, never bars", () => {
     const line = toSeries(series([[1, "Q1", "10"], [2, "Q2", "20"]]), metric(), "forecast", 0);
     const bar = toSeries(series([[1, "Q1", "10"]]), metric({ id: 2, type: "bar" }), "bars", 1);

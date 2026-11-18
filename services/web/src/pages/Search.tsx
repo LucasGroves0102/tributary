@@ -160,7 +160,19 @@ export function Search({ token, search, companies, open = false, suggestions = N
       ) : load.state === "denied" ? (
         <p className="empty locked">That company's filings aren't included in your access.</p>
       ) : load.state === "error" ? (
-        <p className="empty error">{load.message}</p>
+        <div className="empty error">
+          <p>{load.message}</p>
+          {/* widened to every date and refused as too broad: the way back (Riley, test 10, finding 34) */}
+          {/too broad/i.test(load.message) && !search.company && (search.allDates || search.from) && (
+            <p className="row wrap">
+              <span>Every company's every date is too much to rank for these words. Search</span>
+              <button className="btn sm" onClick={() => go({ view: "search", search: { ...search, allDates: undefined, from: undefined, to: undefined, page: undefined } })}>
+                The newest filings
+              </button>
+              <span>or narrow it by company, form or section.</span>
+            </p>
+          )}
+        </div>
       ) : load.data.results.length === 0 ? (
         <p className="empty">
           No passages match “{search.q}”{page ? " on this page" : ""}
@@ -243,7 +255,9 @@ function ScopeLine({ search, data, name }: { search: SearchState; data: SectionS
       <span className="grow">{scope.text}</span>
       {scope.widen && (
         <span className="row wrap">
-          <span className="faint small">Every company's filings are ranked from the newest; for more:</span>
+          {/* the window is the default for every company's filings: older reports aren't in it, said with the way to them
+              (Riley, test 10, finding 34); All dates may be too broad for common words, and then says so with the way back */}
+          <span className="small">Older filings aren't in these results. Search further back:</span>
           <button className="btn sm" onClick={() => go({ view: "search", search: { ...search, from: pastYear, page: undefined } })}>
             The past year
           </button>

@@ -23,6 +23,7 @@ import {
   sortRows,
   statText,
   type CompareSort,
+  olderThan,
   type CompareState,
 } from "../compare/state";
 import { MAX_COMPANY_LINES } from "../chart/model";
@@ -171,6 +172,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
   );
   const stats = useMemo(() => peerStats(rows, cols), [rows, cols]);
   const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  // the newest latest quarter among them: an older one says so beside its date
+  const newestEnd = rows.reduce<string | null>((m, r) => (r.latest && (!m || r.latest.periodEnd > m) ? r.latest.periodEnd : m), null);
   /** A sortable header: a button in the th, so the keyboard reaches it. */
   const sortHead = (key: string, content: ReactNode, title?: string, unit?: string) => (
     <button type="button" className="th-sort" title={title} onClick={() => setSort((s) => nextSort(s, key))}>
@@ -361,6 +364,11 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                         the calendar and fiscal labels are the hover */}
                     <td className="muted" title={r.latest ? `${short(r.latest.calendar)}${r.latest.fiscal ? `, ${short(r.latest.fiscal)} in the company's fiscal year` : ""}. ${r.latest.form} filed ${day(r.latest.filed, true)}` : undefined}>
                       {r.latest ? day(r.latest.periodEnd, true) : "—"}
+                      {/* a quarter or more before the newest here: said, so its figures aren't read as the same months
+                          (Riley, test 10, finding 33) */}
+                      {r.latest && olderThan(r.latest.periodEnd, newestEnd) && (
+                        <span className="unit older">{olderThan(r.latest.periodEnd, newestEnd)}</span>
+                      )}
                     </td>
                     {cols.map((k) => {
                       const cell = r.cells[k]!;
@@ -398,11 +406,15 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   ))}
                   <td />
                 </tr>
+                {/* High and Low say how many peers they're of, like the median (Riley, test 10, finding 33) */}
                 <tr className="agg">
                   <td className="first">High</td>
                   <td />
                   {cols.map((k) => (
-                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.high) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}</td>
+                    <td key={k} className="n" title={medianTitle(stats[k]!)}>
+                      {stats[k]!.n ? statText(k, stats[k]!.high) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}
+                      <span className="unit count">{countText(stats[k]!)}</span>
+                    </td>
                   ))}
                   <td />
                 </tr>
@@ -410,7 +422,10 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   <td className="first">Low</td>
                   <td />
                   {cols.map((k) => (
-                    <td key={k} className="n">{stats[k]!.n ? statText(k, stats[k]!.low) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}</td>
+                    <td key={k} className="n" title={medianTitle(stats[k]!)}>
+                      {stats[k]!.n ? statText(k, stats[k]!.low) : stats[k]!.banks ? NOT_APPLICABLE : NOT_REPORTED}
+                      <span className="unit count">{countText(stats[k]!)}</span>
+                    </td>
                   ))}
                   <td />
                 </tr>

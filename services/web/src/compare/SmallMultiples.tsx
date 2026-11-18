@@ -125,9 +125,40 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
   // a spread of over 100x flattens all but the largest in dollars (Riley 38): such a page opens indexed, and
   // says why; dollars is a click away
   const scale: Scale = chosen ?? (spread ? "indexed" : "dollars");
+  // one scale per unit across the charts, when asked (Riley, test 10, finding 32): margins beside margins
+  const [shared, setShared] = useState(false);
+  const drawn = charts.map((c) => {
+    const dollars = isDollars(c);
+    const indexed = dollars && scale === "indexed";
+    const series: Series[] = c.layers.flatMap(({ layer, key }, i) => {
+      const a = answer(key);
+      if (a?.state !== "ok") return [];
+      const s = toSeries(a.data, indexed ? { ...layer, transform: "idx" } : layer, label(layer.companyId!), i);
+      // the target (first) is drawn heavier: told apart by weight as well as colour (finding 32)
+      return [i === 0 ? { ...s, strong: true } : s];
+    });
+    return { c, dollars, indexed, log: dollars && scale === "log", series, unit: series.find((s) => s.points.length)?.unit ?? null };
+  });
+  const spans = new Map<string, [number, number]>();
+  for (const d of drawn) {
+    if (!d.unit || d.log) continue;
+    const ys = d.series.flatMap((s) => s.points.flatMap((p) => (p.y === null ? [] : [p.y])));
+    if (!ys.length) continue;
+    const was = spans.get(d.unit);
+    spans.set(d.unit, [Math.min(was?.[0] ?? Infinity, ...ys), Math.max(was?.[1] ?? -Infinity, ...ys)]);
+  }
+  const sharing = drawn.filter((d) => d.unit && drawn.filter((x) => x.unit === d.unit).length > 1).length > 0;
 
   return (
     <div className="multiples">
+      {sharing && (
+        <div className="multiples-bar">
+          <label className="chk small multiples-shared" title="Charts in the same unit (percent, dollars, multiples) on one scale, so their lines compare by height">
+            <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)} />
+            <span>One scale for charts in the same unit</span>
+          </label>
+        </div>
+      )}
       {charts.some(isDollars) && (
         <div className="multiples-bar">
           <span className="seg" role="group" aria-label="Dollar charts' scale">
@@ -142,20 +173,14 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
           </span>
         </div>
       )}
-      {charts.map((c) => {
-        const dollars = isDollars(c);
-        const indexed = dollars && scale === "indexed";
-        const log = dollars && scale === "log";
-        const series: Series[] = c.layers.flatMap(({ layer, key }, i) => {
-          const a = answer(key);
-          return a?.state === "ok" ? [toSeries(a.data, indexed ? { ...layer, transform: "idx" } : layer, label(layer.companyId!), i)] : [];
-        });
+      {drawn.map(({ c, indexed, log, series, unit }) => {
         const loading = c.layers.some(({ key }) => answer(key)?.state !== "ok" && answer(key)?.state !== "error");
         const failed = c.layers.filter(({ key }) => answer(key)?.state === "error").length;
         return (
           <figure key={c.col} className="card multiple" aria-label={c.title}>
             {series.some((s) => s.points.length) ? (
               <Multiple series={series} title={indexed ? `${c.title}, indexed` : c.title} onOpen={open} log={log}
+                span={shared && unit ? spans.get(unit) ?? null : null}
                 extra={log ? " Log scale: zero and negative values aren't drawn." : indexed ? " Indexed: first value in the range = 100." : ""} />
             ) : loading ? (
               <Skeleton chart label={`Loading ${c.title}`} />
@@ -172,10 +197,10 @@ export function SmallMultiples({ token, companyIds, cols, label }: {
   );
 }
 
-function Multiple({ series, title, onOpen, log, extra }: { series: Series[]; title: string; onOpen: (s: Source) => void; log: boolean; extra: string }) {
+function Multiple({ series, title, onOpen, log, extra, span }: { series: Series[]; title: string; onOpen: (s: Source) => void; log: boolean; extra: string; span: [number, number] | null }) {
   const svg = useRef<SVGSVGElement>(null);
   return (
-    <LayerChart compact series={series} title={title} onOpen={onOpen} svgRef={svg} log={log}
+    <LayerChart compact series={series} title={title} onOpen={onOpen} svgRef={svg} log={log} span={span}
       footnote={[`Source: SEC filings via Tributary. Calendar quarters.${extra}`]} />
   );
 }

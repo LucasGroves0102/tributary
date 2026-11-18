@@ -132,6 +132,8 @@ export interface LegendItem {
   dashed: boolean;
   /** drawn lighter (a model's bear / bull case) */
   faint?: boolean;
+  /** drawn heavier (Compare's target) */
+  strong?: boolean;
 }
 
 export interface Drawn {
@@ -140,6 +142,7 @@ export interface Drawn {
   type: Series["type"];
   dashed: boolean;
   faint?: boolean;
+  strong?: boolean;
   /** line/area: the path; area also gets `area` closed to the zero line (or the stack below) */
   path?: string;
   area?: string;
@@ -209,6 +212,9 @@ export interface LayoutOptions {
   /** the chart's end: the time axis runs on to the newest period due on file by then (series.ts
    * `xAxis`), a shaded gap after a series that stopped */
   through?: string | null;
+  /** values the left axis must reach as well as its own (Compare's small multiples on one scale
+   * per unit); ignored on a log scale */
+  span?: [number, number] | null;
 }
 
 const stacked = (t: Series["type"]) => t === "sbar" || t === "sarea";
@@ -272,8 +278,9 @@ export function dateX(date: string, ends: (string | null)[], xs: number[], right
   return x - xl > spacing * 1.2 ? null : Math.min(x, right);
 }
 
-function scaleFor(series: Series[], sp: ([number, number] | null)[][], log: boolean): Scale | null {
+function scaleFor(series: Series[], sp: ([number, number] | null)[][], log: boolean, span?: [number, number] | null): Scale | null {
   const ys = sp.flat().flatMap((v) => (v ? [v[0], v[1]] : []));
+  if (ys.length && span && !log) ys.push(...span);
   if (!ys.length || !series.length) return null;
   const unit = axisUnit(series);
   if (log) {
@@ -321,7 +328,7 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
   const ticks = xAxis(series, opts.through);
   const sp = spans(series, ticks);
   const on = (axis: "L" | "R") => series.flatMap((s, i) => (s.axis === axis && hasValues(s) ? [i] : []));
-  const left = scaleFor(on("L").map((i) => series[i]!), on("L").map((i) => sp[i]!), !!opts.log);
+  const left = scaleFor(on("L").map((i) => series[i]!), on("L").map((i) => sp[i]!), !!opts.log, opts.span);
   const right = scaleFor(on("R").map((i) => series[i]!), on("R").map((i) => sp[i]!), false);
   const hasRight = right !== null;
 
@@ -344,7 +351,7 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
       x = lead;
       y += LEGEND_LINE;
     }
-    legend.push({ id: s.id, color: s.color, name, x, y, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}) });
+    legend.push({ id: s.id, color: s.color, name, x, y, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}), ...(s.strong ? { strong: true } : {}) });
     x += w;
   }
   const top = (legend.length ? y : y - LEGEND_LINE) + 14;
@@ -384,7 +391,7 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
   const bw = Math.max(2, Math.min(MOST_BAR_W, (slot * 0.7) / Math.max(1, slots.length)));
   const drawn: Drawn[] = series.map((s, si) => {
     const sc = s.axis === "R" ? right : left;
-    const base = { id: s.id, color: s.color, type: s.type, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}) };
+    const base = { id: s.id, color: s.color, type: s.type, dashed: dashedOf(s), ...(s.faint ? { faint: true } : {}), ...(s.strong ? { strong: true } : {}) };
     if (!sc) return { ...base, ys: ticks.map(() => null) };
     const at = sp[si]!.map((v) => (sc.log && v !== null && v[1] <= 0 ? null : v));
     const val = (v: [number, number]) => (stacked(s.type) ? (v[1] > 0 || v[0] === 0 ? v[1] : v[0]) : v[1]);

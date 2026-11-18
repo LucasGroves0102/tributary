@@ -889,7 +889,14 @@ class Store:
             cur.execute("SELECT * FROM ops.public_completeness()")
             out["completeness"] = cur.fetchone() or {}
             cur.execute("SELECT * FROM ops.public_coverage()")
-            out["coverage"] = cur.fetchone() or {}
+            out["coverage"] = dict(cur.fetchone() or {})
+            # 141: the public catalog's size, the sidebar's count (an older database: none)
+            cur.execute("SELECT to_regprocedure('ops.public_catalog_size()') IS NOT NULL AS ok")
+            row = cur.fetchone()
+            if row and row["ok"]:
+                cur.execute("SELECT ops.public_catalog_size() AS n")
+                size = cur.fetchone()
+                out["coverage"]["catalog_companies"] = size["n"] if size else None
             cur.execute("SELECT * FROM ops.public_quality()")
             out["quality"] = cur.fetchall()
             cur.execute("SELECT * FROM ops.public_parser_quality()")

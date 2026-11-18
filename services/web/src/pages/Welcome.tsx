@@ -320,7 +320,9 @@ export function proofFigures(d: DataStatus): { value: string; what: string }[] {
   const n = (v: number) => v.toLocaleString("en-US");
   const { coverage: c, ingest: i, recorded: r } = d;
   return [
-    c.companies_with_financials !== null && { value: n(c.companies_with_financials), what: "companies with quarterly financials from XBRL" },
+    // one count everywhere (Riley, test 10, finding 36): the catalog's, as the sidebar counts; an older API's quarterly count
+    c.catalog_companies ? { value: n(c.catalog_companies), what: "companies to read: XBRL financials or a filing's text" }
+      : c.companies_with_financials !== null && { value: n(c.companies_with_financials), what: "companies with quarterly financials from XBRL" },
     c.documents !== null && { value: n(c.documents), what: "10-K, 10-Q and 8-K documents stored" },
     i.p50_seconds !== null && {
       value: duration(i.p50_seconds),
@@ -328,7 +330,8 @@ export function proofFigures(d: DataStatus): { value: string; what: string }[] {
     },
     // what the tests mean for a reader, not how they're scored (Riley 74: "0 of 59 attempts ... succeeded")
     r.citations.figures > 0 && { value: `${n(r.citations.figures_traced)} of ${n(r.citations.figures)}`, what: "figures the assistant gave in testing traced back to their filings" },
-    r.adversarial.attacks > 0 && { value: `${n(r.adversarial.leaks)} of ${n(r.adversarial.attacks)}`, what: `tries to read another user's data got through, in ${n(r.adversarial.attacks)} attempts` },
+    // what the suite is (Riley, test 10, finding 69): prompts trying to make the assistant reveal data, not cross-user tests
+    r.adversarial.attacks > 0 && { value: `${n(r.adversarial.leaks)} of ${n(r.adversarial.attacks)}`, what: "prompt attacks on the assistant leaked data, in recorded tests" },
   ].filter((f): f is { value: string; what: string } => !!f);
 }
 

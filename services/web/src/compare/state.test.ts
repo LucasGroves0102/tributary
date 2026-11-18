@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { entry, NVDA, TESLA, TSLA } from "../fixtures";
 import type { ScreenerRow } from "../types";
 import {
+  olderThan,
   calendarLabel,
   chartMetric,
   cleanCompare,
@@ -63,6 +64,15 @@ describe("the URL", () => {
     // revenue is read even when not shown: each company's size for the median's floor
     expect(compareParams({ target: NVDA, peers: [AAPL], cols: ["net_margin_ttm"] }).columns)
       .toEqual(["net_margin_ttm", "revenue_ttm", "revenue_q"]);
+  });
+});
+
+describe("a latest quarter older than the newest in the table (Riley, test 10, finding 33)", () => {
+  it("says how much older, by dates alone", () => {
+    expect(olderThan("2026-07-26", "2026-09-30")).toBe("a quarter older");
+    expect(olderThan("2026-01-25", "2026-09-30")).toBe("3 quarters older");
+    expect(olderThan("2026-09-26", "2026-09-30")).toBeNull();
+    expect(olderThan("2026-09-26", null)).toBeNull();
   });
 });
 

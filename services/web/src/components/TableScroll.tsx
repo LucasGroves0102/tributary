@@ -93,7 +93,9 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
     const cells = scrolls
       ? header.map((c) => {
           const r = c.getBoundingClientRect();
-          return { left: r.left, right: r.right, width: r.width, frozen: c.classList.contains("first") };
+          // frozen: the `.first` column, and any other a table keeps in view (`data-frozen`: the model's
+          // Case column; Riley, test 10, finding 6: the year under it read "ɛ6.91B", cut mid-number)
+          return { left: r.left, right: r.right, width: r.width, frozen: c.classList.contains("first") || c.dataset.frozen !== undefined };
         })
       : [];
     const next = { ...columnsOff(cells, view), scrolls };

@@ -119,6 +119,26 @@ describe("TableScroll", () => {
     expect(container.querySelector("th[colspan]")?.classList.contains("tw-cut")).toBe(false);
   });
 
+  it("a second frozen column (data-frozen) hides the column under it too (Riley, test 10, finding 6)", () => {
+    layout(600, 400);
+    // the model's table: Line frozen at 0-100, Case frozen beside it at 100-170, a year scrolled half under Case
+    const at = [[0, 100], [100, 170], [150, 250], [250, 350]];
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const i = this.parentElement ? [...this.parentElement.children].indexOf(this) : 0;
+      if (this.tagName === "TH") return { left: at[i]![0], right: at[i]![1], width: at[i]![1]! - at[i]![0]! } as DOMRect;
+      return { left: 0, right: 400, width: 400 } as DOMRect;
+    };
+    act(() => root.render(
+      <TableScroll>
+        <table>
+          <thead><tr><th className="first">Line</th><th data-frozen="">Case</th><th>FY2022</th><th>FY2023</th></tr></thead>
+          <tbody><tr><td className="first">EPS</td><td>Base</td><td>$3.85</td><td>$0.17</td></tr></tbody>
+        </table>
+      </TableScroll>,
+    ));
+    expect([...container.querySelectorAll(".tw-cut")].map((c) => c.textContent)).toEqual(["FY2022", "$3.85"]);
+  });
+
   it("opens at the far end when asked, so a statement shows its newest periods", () => {
     layout(800, 300);
     act(() => root.render(<TableScroll atEnd>{table}</TableScroll>));

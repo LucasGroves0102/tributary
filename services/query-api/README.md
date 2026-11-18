@@ -383,7 +383,8 @@ Details: [DESIGN.md](DESIGN.md#customizable-views).
 `GET /v1/status/data` (`status.py`) backs the web app's public `#/status` page. No token, so it
 returns only aggregate counts and timestamps (freshness, ingest latency, completeness, coverage,
 data quality by tier with findings per 1,000 figures, the parser-output checks, the coverage
-sweep's gaps per kind and reason (`gaps`, 076), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
+sweep's gaps per kind and reason (`gaps`, 076), the public catalog's size (`coverage.catalog_companies`,
+141: the sidebar's count, so every page says one number), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
 named fields only. Cached 60 s per process. Fields and an example: [DESIGN.md](DESIGN.md#status-page).
 
 ## Demo sandboxes

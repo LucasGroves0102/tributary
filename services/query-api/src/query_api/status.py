@@ -112,7 +112,7 @@ def shape(raw: dict, recorded: dict) -> dict:
                     "last_checked_at"),
         },
         "coverage": _pick(raw.get("coverage") or {}, "companies_with_financials", "documents",
-                          "indexed_filings", "sections", "last_indexed_at"),
+                          "indexed_filings", "sections", "last_indexed_at", "catalog_companies"),
         "quality": _quality(raw.get("quality") or []),
         "parser": _parser(raw.get("parser") or []),
         "gaps": _gaps(raw.get("gaps") or []),

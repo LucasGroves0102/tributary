@@ -6063,6 +6063,14 @@ button.chip.on {
   margin-left: var(--sp-2);
 }
 
+/* a case being previewed, not added: outlined, never the filled "applied" look (Riley, test 10, 35) */
+.scenario-switch button.on.preview {
+  background: transparent;
+  color: var(--ink);
+  outline: 1px dashed var(--ink);
+  outline-offset: -3px;
+}
+
 .scenario-note {
   margin: 0;
   padding: var(--sp-4) var(--sp-6) 0;
@@ -8351,4 +8359,26 @@ label.check {
 /* an address that names no page (finding 11) */
 .not-found h1 {
   margin-bottom: 8px;
+}
+
+/* the screens a user watches, on Alerts and Settings (findings 14, 72) */
+.watched-screens ul {
+  margin: 4px 0 10px;
+  padding-left: 18px;
+}
+
+.watched-screens li {
+  margin: 2px 0;
+}
+
+/* Compare: one scale for charts in the same unit (finding 32) */
+.multiples-shared {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compare: a latest quarter older than the others (finding 33) */
+.comps td .unit.older {
+  display: block;
 }

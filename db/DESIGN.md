@@ -1139,3 +1139,13 @@ filed by the day, the metric's best tag within that filing. 036's DEFINER patter
 grant on the facts' values): `authz.readable_companies('financials')` its only rule, search_path pinned,
 EXECUTE only `query_api`. One company a call (NVIDIA: 320 rows, 4 ms on hermes). Gold is unchanged;
 query_api.per_share swaps these in only for `shares=as_filed`. CREATE FUNCTION only.
+
+### 141_public_catalog_size.sql
+
+One company count everywhere (Riley, test 10, finding 36): the front door and Data status said 6,625
+(companies with quarterly financials, 028) and the sidebar 6,630 (the catalog a user reads: gold
+financials, quarterly or annual, or a stored filing's text). `ops.public_catalog_size()`: the number of
+companies in `authz.public_access` (0 while the catalog is closed), aggregate-only like the other
+`ops.public_*`, DEFINER because public_access's policy lets query_api read it only with a user; one count,
+search_path pinned, EXECUTE only `query_api`; the primary key serves it (2 ms on hermes). The status
+route adds it as `coverage.catalog_companies`. CREATE FUNCTION only.

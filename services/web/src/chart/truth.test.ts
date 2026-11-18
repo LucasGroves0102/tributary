@@ -175,7 +175,7 @@ describe("the time axis", () => {
     expect(ticks.at(-1)!.period).toBe("CY2026 Q2"); // Q3 2026 ended Sep 30: not due until 90 days on
     expect(ticks.filter((t) => t.gap)).toHaveLength(16);
     expect(xAxis([loans], "2026-12-29").at(-1)!.period).toBe("CY2026 Q3");
-    expect(chartNotes([loans], { through: "2026-11-14" })[0]).toBe("GS loans: stops at CY2022 Q2.");
+    expect(chartNotes([loans], { through: "2026-11-14" })[0]).toBe("GS loans: stops at CY2022 Q2 (nothing on file after it).");
     const lay = layout([loans], false, [], { through: "2026-11-14" });
     expect(lay.ticks).toHaveLength(20);
     expect(lay.gaps).toHaveLength(1); // one shaded stretch to now
@@ -191,7 +191,7 @@ describe("the time axis", () => {
     // one company current, one stopped: the axis is the current one's, and the stopped one says so
     const stopped = series(2, [cq(2026, 1)], { name: "S2" });
     expect(xAxis([current, stopped], "2026-11-14")).toHaveLength(3);
-    expect(chartNotes([current, stopped], { through: "2026-11-14" })[0]).toBe("S2: stops at CY2026 Q1.");
+    expect(chartNotes([current, stopped], { through: "2026-11-14" })[0]).toBe("S2: stops at CY2026 Q1 (nothing on file after it).");
     // a model's fiscal years aren't periods: never extended
     expect(xAxis([series(1, [point(2025, "FY2025"), point(2028, "FY2028E")])], "2030-01-01")).toHaveLength(2);
   });
@@ -413,13 +413,13 @@ describe("what a chart says about what isn't on it", () => {
   it("says when a series starts late or stops early against the others", () => {
     const all = [year(2017), year(2018), year(2019), year(2020)];
     expect(chartNotes([series(1, all), series(2, all.slice(2))])[0]).toBe("S2: starts FY2019.");
-    expect(chartNotes([series(1, all), series(2, all.slice(0, 2))])[0]).toBe("S2: stops at FY2018.");
+    expect(chartNotes([series(1, all), series(2, all.slice(0, 2))])[0]).toBe("S2: stops at FY2018 (nothing on file after it).");
   });
 
   it("doesn't call one quarter behind the others a gap: companies file at different times", () => {
     const all = [quarter(2020, 1), quarter(2020, 2), quarter(2020, 3)];
     expect(chartNotes([series(1, all), series(2, all.slice(0, 2))])).toEqual([]);
-    expect(chartNotes([series(1, all), series(2, all.slice(0, 1))])[0]).toBe("S2: stops at FY2020 Q1.");
+    expect(chartNotes([series(1, all), series(2, all.slice(0, 1))])[0]).toBe("S2: stops at FY2020 Q1 (nothing on file after it).");
   });
 
   it("names layers with nothing to draw", () => {

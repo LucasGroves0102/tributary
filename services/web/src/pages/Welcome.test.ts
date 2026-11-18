@@ -20,4 +20,10 @@ describe("the front door's figures", () => {
     } as unknown as DataStatus;
     expect(proofFigures(none).map((f) => f.value)).toEqual(["128 of 128", "0 of 59"]);
   });
+
+  it("say one company count, the catalog's, and what the attack suite is (Riley, test 10, findings 36, 69)", () => {
+    const open = { ...status, coverage: { ...status.coverage, catalog_companies: 6630 } } as unknown as DataStatus;
+    expect(proofFigures(open)[0]).toEqual({ value: "6,630", what: "companies to read: XBRL financials or a filing's text" });
+    expect(proofFigures(open).at(-1)!.what).toBe("prompt attacks on the assistant leaked data, in recorded tests");
+  });
 });

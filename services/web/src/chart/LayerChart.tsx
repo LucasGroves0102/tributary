@@ -32,6 +32,8 @@ interface Props {
   through?: string | null;
   /** a log scale on the left axis (Compare's dollar charts) */
   log?: boolean;
+  /** values the left axis must also reach: small multiples on one scale (layout.ts `span`) */
+  span?: [number, number] | null;
   /** false: no notes about gaps (a model's forecast starting where its history stops isn't one) */
   notes?: boolean;
   /** layers (by id) with nothing on file at all: the note says so, not "in this range" */
@@ -56,7 +58,7 @@ export function newestSource(p: Point | undefined): Source | null {
  * On screen it is drawn for the width it has (layout.ts `chartSize`), so its text is its real size
  * whatever the window. `svgRef` always gets the standard-size drawing (hidden when that isn't the
  * one on screen), so Export SVG / PNG give the same deck-ready image from a phone or a wide monitor. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, through = null, log = false, notes = true, emptyOnFile = [] }: Props) {
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, through = null, log = false, span = null, notes = true, emptyOnFile = [] }: Props) {
   const room = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState<number | null>(null);
   useEffect(() => {
@@ -79,11 +81,11 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
     const w = o.width ?? WIDTH;
     const foot = footnoteLines(said, w);
     const heading = titleLines(title, w);
-    const lay = layout(series, Boolean(title), markers, { ...o, log, through, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
+    const lay = layout(series, Boolean(title), markers, { ...o, log, through, span, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
     return { lay, foot, heading };
   };
-  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, said, size.width, size.plotHeight, log, through]);
-  const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, said, compact, log, through]);
+  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, said, size.width, size.plotHeight, log, through, span?.join()]);
+  const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, said, compact, log, through, span?.join()]);
   const lay = shown.lay;
   const sameDrawing = shown.lay.width === standard.lay.width && shown.lay.height === standard.lay.height;
   const [hover, setHover] = useState<number | null>(null);
@@ -269,7 +271,7 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
         {lay.legend.map((g) => (
           <g key={g.id} className={`c${g.color}`}>
             <line x1={g.x} x2={g.x + 14} y1={g.y - 4} y2={g.y - 4} stroke="currentColor"
-              strokeWidth={g.dashed ? 2 : 4} strokeDasharray={g.dashed ? "4 2" : undefined}
+              strokeWidth={g.dashed ? 2 : g.strong ? 6 : 4} strokeDasharray={g.dashed ? "4 2" : undefined}
               strokeOpacity={g.faint ? FAINT : undefined} />
             <text x={g.x + 18} y={g.y}>
               {g.name}
@@ -308,7 +310,7 @@ function Drawing({ lay, heading, subtitle, foot, onMarker, children }: {
         <g key={d.id} className={`c${d.color}`}>
           {d.area && <path d={d.area} fill="currentColor" fillOpacity={d.type === "sarea" ? 0.35 : 0.15} />}
           {d.path && (
-            <path d={d.path} fill="none" stroke="currentColor" strokeWidth={d.faint ? 1.5 : 2}
+            <path d={d.path} fill="none" stroke="currentColor" strokeWidth={d.faint ? 1.5 : d.strong ? 3.5 : 2}
               strokeDasharray={d.dashed ? "5 3" : undefined} strokeOpacity={d.faint ? FAINT : undefined} />
           )}
           {d.bars?.map((b, i) => (
