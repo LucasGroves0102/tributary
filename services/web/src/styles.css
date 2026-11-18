@@ -8336,3 +8336,19 @@ label.check {
   width: 1%;
   text-align: right;
 }
+
+/* --- UI audit, part 1 (Riley, test 10) ------------------------------------------------------------ */
+
+/* the reader: a 10-K's Item 8 that only points to the statements leads to them (finding 10) */
+.statements-elsewhere {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  background: var(--sheet-2);
+  font-family: var(--sans);
+  font-size: var(--fs-meta);
+}
+
+/* an address that names no page (finding 11) */
+.not-found h1 {
+  margin-bottom: 8px;
+}

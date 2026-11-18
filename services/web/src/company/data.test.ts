@@ -10,7 +10,9 @@ import PS_TTM from "./fixtures/nvda-per-share-ttm.json";
 import type { PerShare, Recap, RecapValue, SegmentRow } from "../types";
 import {
   eightKItems,
+  epsStat,
   howFiled,
+  statFiled,
   figuresBehind,
   FINANCE_ARMS,
   financeArmNote,
@@ -709,5 +711,28 @@ describe("howFiled: which figures a seal may say were taken from the filing (Ril
     expect(howFiled("free_cash_flow_ttm", k)).toMatchObject({ filed: false });
     expect(howFiled("revenue_ttm", q)).toEqual({ filed: false, how: "the four quarters to Jul 26, 2026 added up" });
     expect(howFiled("revenue_q", k)).toMatchObject({ filed: false, how: expect.stringContaining("year less the first three quarters") });
+  });
+});
+
+describe("epsStat: the Overview's EPS is twelve months, from /per-share (Riley, test 10, finding 1)", () => {
+  const quarter = keyStats(nvdaRow()).find((s) => s.key === "eps_diluted_q")!;
+  it("reads /per-share's TTM: derived, so no seal, and says how", () => {
+    const ttm = (PS_TTM as unknown as PerShare).rows.find((r) => r.metric === "eps_diluted")!;
+    const s = epsStat([ttm], quarter);
+    expect(s).toMatchObject({ key: "eps_diluted_ttm", label: "EPS (diluted)", period: `TTM to ${s.period.slice(7)}` });
+    expect(s.value).toBe(Number(ttm.value));
+    expect(statFiled(s)).toMatchObject({ filed: false, how: expect.stringContaining("four quarters' diluted EPS added, on today's share basis") });
+    expect(statFiled(epsStat([ttm], quarter, "2024-01-31"))).toMatchObject({ how: expect.stringContaining("share basis of Jan 31, 2024") });
+  });
+  it("a year as its report states it is sealed; one a split was applied to isn't", () => {
+    const year = fin("eps_diluted", "2025-12-31", "2.10", "FY2025", { citation: { ...fin("x", "", "", "").citation, form: "20-F" }, splits: [] });
+    expect(statFiled(epsStat([year], quarter))).toEqual({ filed: true });
+    const split = { ...year, as_filed: "4.20", splits: [{ label: "2-for-1", reverse: false, first_filed: "2026-03-01", first_accession: null }] };
+    expect(statFiled(epsStat([split], quarter))).toMatchObject({ filed: false, how: expect.stringContaining("divided for the 2-for-1 split") });
+  });
+  it("loading, none on file, and an older API (the quarter, labelled a quarter)", () => {
+    expect(epsStat(undefined, quarter)).toMatchObject({ text: "…", value: null });
+    expect(epsStat([], quarter)).toMatchObject({ text: "—", period: "not reported", value: null });
+    expect(epsStat(null, quarter)).toMatchObject({ key: "eps_diluted_q", label: "EPS (diluted), quarter", text: "$1.08" });
   });
 });

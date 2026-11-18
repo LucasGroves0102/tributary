@@ -81,7 +81,11 @@ import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
 import { useWatches } from "./watches/useWatches";
 import { SavedScreens, WatchControl } from "./watches/WatchControl";
-import { UndoDeletes } from "./workspaces/Actions";
+import { ConfirmDelete, UndoDeletes } from "./workspaces/Actions";
+
+/** What ending a demo loses, asked first (Riley, test 10, finding 17: one click lost it all). */
+const END_DEMO_DETAIL = "You leave this sandbox and can't come back to it: the holdings, journal, analyses, models, theses, " +
+  "metrics and watched screens you made in it are lost (it is deleted when it resets). A new demo starts empty.";
 import { toast } from "./components/Toasts";
 
 const DRAWER_KEY = "tributary.assistant";
@@ -252,6 +256,8 @@ export function App(props: Props = {}) {
     setClock(Date.now());
   }, []);
 
+  // End demo asks first: the sandbox can't be come back to (finding 17)
+  const [endingDemo, setEndingDemo] = useState(false);
   const signOut = useCallback((notice: string | null) => {
     // the front door at the site's own address, not the page that was open (Riley 93: #/search?q=tariffs)
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -714,7 +720,8 @@ export function App(props: Props = {}) {
           connections={market?.enabled ?? false}
           sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} watched={watching.watched} /> : null}
-          onSignOut={(session?.kind === "github" || session?.kind === "account" || session?.kind === "sandbox") ? () => signOut(null) : undefined}
+          onSignOut={session?.kind === "sandbox" ? () => setEndingDemo(true)
+            : (session?.kind === "github" || session?.kind === "account") ? () => signOut(null) : undefined}
           signOutLabel={session?.kind === "sandbox" ? "End demo" : "Sign out"}
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
@@ -737,10 +744,17 @@ export function App(props: Props = {}) {
             onUser={setUser}
             onSearch={() => setPalette("")}
             onTheme={setTheme}
-            onEndDemo={session?.kind === "sandbox" ? () => signOut(null) : undefined}
+            onEndDemo={session?.kind === "sandbox" ? () => setEndingDemo(true) : undefined}
             onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
             alerts={alertCount}
           />
+          {endingDemo && session?.kind === "sandbox" && (
+            <ConfirmDelete text="End the demo?" detail={END_DEMO_DETAIL} yes="End demo" onNo={() => setEndingDemo(false)}
+              onYes={() => {
+                setEndingDemo(false);
+                signOut(null);
+              }} />
+          )}
           {session?.kind === "sandbox" && (
             <div className="sandbox-banner" role="note">
               <span>Demo sandbox: {open ? "every company" : `${session.companies.length} companies`}</span>
@@ -991,7 +1005,15 @@ export function App(props: Props = {}) {
                   go({ view: "chart" });
                 }}
               />
-            ) : route.view === "connect" ? null /* drawn without the shell, above */ : (
+            ) : route.view === "connect" ? null /* drawn without the shell, above */ : route.view === "notfound" ? (
+              <div className="page not-found">
+                <h1>No page here</h1>
+                <p className="empty">
+                  Tributary has no page at <code>#/{route.path}</code>. Find one from the menu on the left, search with Ctrl K,
+                  or go <a href={href({ view: "home" })}>Home</a>.
+                </p>
+              </div>
+            ) : (
               <Compare
                 key={user}
                 token={token}

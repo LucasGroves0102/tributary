@@ -218,6 +218,8 @@ export function pageContext(
       return { label: "Data status", suggestions: [] };
     case "api":
       return { label: "Using the API", suggestions: [] };
+    case "notfound":
+      return { label: "No page here", suggestions: [] };
     case "settings":
       return { label: "Settings", suggestions: [] };
     case "connect":

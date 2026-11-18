@@ -246,6 +246,9 @@ describe("Using the API", () => {
       .toBe("https://tributary.example/api/query/v1/openapi-keys.json");
     expect(container.querySelector(".status-home")).toBeNull();
     expect(container.querySelector<HTMLAnchorElement>(`a[href="${href({ view: "settings" })}"]`)).toBeTruthy();
+    // a demo sandbox's Settings has no API keys or Connected apps: the page says so (Riley, test 10, finding 12)
+    expect(text).toContain("A demo sandbox can't hold keys or connect apps, so its Settings has neither section");
+    expect(text).toContain("API keys is its last section once you're signed in");
   });
 
   it("says how to connect your own AI model to the site's MCP server, by its address or with a key", async () => {

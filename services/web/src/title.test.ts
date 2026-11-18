@@ -7,6 +7,7 @@ const company = (id: string) => (id === NVDA ? "Nvidia (NVDA)" : null);
 
 it("names the screen, and what's on it", () => {
   expect(screenTitle({ view: "home" }, { company })).toBe("Home · Tributary");
+  expect(screenTitle({ view: "notfound", path: "notebook" }, { company })).toBe("Page not found · Tributary");
   expect(screenTitle({ view: "companies" }, { company })).toBe("Companies · Tributary");
   expect(screenTitle({ view: "company", companyId: NVDA }, { company })).toBe("Nvidia (NVDA) · Tributary");
   expect(screenTitle({ view: "company", companyId: NVDA, tab: "statements" }, { company })).toBe("Nvidia (NVDA) · Statements · Tributary");

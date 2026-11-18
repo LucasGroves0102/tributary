@@ -26,6 +26,7 @@ it("round-trips every route", () => {
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "EX-99.1" },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "II-1A", at: 1234, q: "export \"controls\" & more?" },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null, q: "chips" },
+    { view: "notfound", path: "notebook" },
   ];
   for (const r of routes) expect(parse(href(r))).toEqual(r);
 });
@@ -33,7 +34,11 @@ it("round-trips every route", () => {
 it("falls back to Home for anything malformed", () => {
   expect(parse("")).toEqual({ view: "home" });
   expect(parse("#/")).toEqual({ view: "home" });
-  expect(parse("#/nope")).toEqual({ view: "home" });
+  // a page name this app doesn't have is not found, not Home under a wrong address (Riley, test 10, finding 11)
+  expect(parse("#/nope")).toEqual({ view: "notfound", path: "nope" });
+  expect(parse("#/notebook?q=1")).toEqual({ view: "notfound", path: "notebook" });
+  expect(parse("#/signed-in?error=denied")).toEqual({ view: "home" });
+  expect(parse("#/<script>")).toEqual({ view: "home" });
   expect(parse("#/company/NVDA")).toEqual({ view: "home" });
   expect(parse("#/filing/0001045810/not-an-accession")).toEqual({ view: "home" });
   expect(parse("#/filing/0001045810/0001045810-26-000075/..%2Fadmin?at=-1&q=")).toEqual({

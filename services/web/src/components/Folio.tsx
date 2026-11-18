@@ -1,4 +1,10 @@
-import { useId, type ReactNode } from "react";
+import { createContext, useContext, useId, type ReactNode } from "react";
+
+import { day } from "../format";
+
+/** As of a past day (`?asof=`), the sections that still show today's data sit inside this with the
+ * day: each such Folio says so at its top (Riley, test 10, finding 18). null: nothing to say. */
+export const TodaysView = createContext<string | null>(null);
 
 /** A section of a Seal page with its rubric in the margin (seal.css `.folio`): the red name (a
  * heading), an italic line saying what the section covers, and the section beside it. Below 1100px
@@ -15,6 +21,7 @@ export function Folio({ name, line, aside, lead = false, className, children }: 
   children: ReactNode;
 }) {
   const id = useId();
+  const asOf = useContext(TodaysView);
   return (
     <section className={["folio", lead && "lead", className].filter(Boolean).join(" ")} aria-labelledby={id}>
       <header className="rubric">
@@ -26,7 +33,10 @@ export function Folio({ name, line, aside, lead = false, className, children }: 
           </p>
         )}
       </header>
-      <div className="folio-body">{children}</div>
+      <div className="folio-body">
+        {asOf && <p className="asof-today" role="note">Today's, not as it stood on {day(asOf, true)}.</p>}
+        {children}
+      </div>
     </section>
   );
 }

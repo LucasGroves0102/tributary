@@ -32,7 +32,7 @@ export function AlertsPage({ token }: { token: string }) {
       </div>
       {(unread?.reviews_due ?? 0) > 0 && (
         <p className="review-due-note" role="status">
-          {unread!.reviews_due === 1 ? "A holding has" : `${unread!.reviews_due} holdings have`} a review due: a new 10-K or 10-Q
+          {unread!.reviews_due === 1 ? "A holding has" : `${unread!.reviews_due} holdings have`} a review due: a new 10-K or 10-Q, or results in an 8-K,
           landed since your last review. <a href={href({ view: "portfolio" })}>Review in your portfolio</a>
         </p>
       )}

@@ -531,6 +531,13 @@ export const perShare = (token: string, companyId: string, view: PerShare["view"
     view, basis, quarters, ...(asFiled ? { shares: "as_filed" } : {}), ...(asOf ? { as_of: asOf } : {}),
   }));
 
+/** Whether gold keeps the company's history of its figures yet (/restatements `history`, migration
+ * 086): without it nothing as of a past day reads from the history, and no figure can be marked
+ * restated. null from an older API (no such route). */
+export const historyKept = (token: string, companyId: string, asOf?: string) =>
+  orNullOn404(get<{ history: boolean }>(token, `/v1/companies/${companyId}/restatements`, asOf ? { as_of: asOf } : {}))
+    .then((r) => (r ? r.history : null));
+
 export const annualPerShare = (token: string, companyId: string, years = 10, asOf?: string) =>
   get<{ as_of: string; rows: FinancialRow[] }>(token, `/v1/companies/${companyId}/annual-per-share`,
     { years, ...(asOf ? { as_of: asOf } : {}) });
@@ -752,7 +759,7 @@ export const financialsView = (
   /** ask for each restated figure's first version (`original`); an older API ignores it */
   originals = false,
 ) =>
-  withinOlderCap((older) => get<{ as_of: string; known_on?: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; not_computed?: Record<string, string>; callouts?: Callout[]; currency?: string; cadence?: "annual" }>(token, `/v1/companies/${companyId}/financials`, {
+  withinOlderCap((older) => get<{ as_of: string; known_on?: string; rows: FinancialRow[]; not_meaningful_periods?: NotMeaningfulPeriod[]; not_computed?: Record<string, string>; callouts?: Callout[]; currency?: string; cadence?: "annual"; history?: boolean }>(token, `/v1/companies/${companyId}/financials`, {
     ...(readings ? { readings: "true" } : {}),
     ...(callouts ? { callouts: "true" } : {}),
     ...(asOf ? { as_of: asOf } : {}),

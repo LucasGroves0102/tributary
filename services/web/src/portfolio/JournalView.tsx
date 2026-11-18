@@ -38,7 +38,7 @@ function useJournal(token: string, subject: Subject | null, limit: number, attem
 }
 
 /** One holding's journal, with the form (the Review button opens it as a review). */
-export function JournalView({ token, subject, reviewDue, prompt, onWritten }: {
+export function JournalView({ token, subject, reviewDue, prompt, onWritten, monitor }: {
   token: string;
   subject: Subject;
   /** a review is due: the form offers to write it */
@@ -46,6 +46,8 @@ export function JournalView({ token, subject, reviewDue, prompt, onWritten }: {
   /** open the form now, as this kind (the holding page's "Write the review") */
   prompt?: JournalKind | null;
   onWritten: () => void;
+  /** where this company's red lines are set: its analysis's Monitor step, or New analysis */
+  monitor?: string;
 }) {
   const [attempt, setAttempt] = useState(0);
   const load = useJournal(token, subject, 100, attempt);
@@ -63,7 +65,7 @@ export function JournalView({ token, subject, reviewDue, prompt, onWritten }: {
   return (
     <div className="journal">
       {form ? (
-        <EntryForm token={token} subject={subject} start={form} onCancel={() => setForm(null)} onSaved={() => {
+        <EntryForm token={token} subject={subject} start={form} monitor={monitor} onCancel={() => setForm(null)} onSaved={() => {
           setForm(null);
           reload();
         }} />
@@ -160,9 +162,10 @@ function Entry({ token, e, correction = false, onCorrect, onEdit, onChanged }: {
 
 const KINDS: [JournalKind, string][] = (Object.keys(KIND_WORDS) as JournalKind[]).map((k) => [k, KIND_WORDS[k]]);
 
-function EntryForm({ token, subject, start, onCancel, onSaved }: {
+function EntryForm({ token, subject, start, onCancel, onSaved, monitor }: {
   token: string;
   subject: Subject;
+  monitor?: string;
   start: { kind: JournalKind; corrects?: JournalEntry; edit?: JournalEntry };
   onCancel: () => void;
   onSaved: () => void;
@@ -259,7 +262,11 @@ function EntryForm({ token, subject, start, onCancel, onSaved }: {
               </label>
             )) : (
               <p className="faint small">
-                No red lines on this company yet: set them in its analysis's Monitor step or in <a href={href({ view: "settings" })}>Settings</a>.
+                {/* red lines live only in an analysis's Monitor step: Settings has none (Riley, test 10, finding 12) */}
+                No red lines on this company yet: they're set in the Monitor step of its analysis.{" "}
+                <a href={monitor ?? (subject.companyId ? href({ view: "analysis", start: subject.companyId }) : href({ view: "analysis" }))}>
+                  {monitor?.includes("/monitor") ? "Open its Monitor step" : "Start an analysis"}
+                </a>
               </p>
             )}
           </fieldset>

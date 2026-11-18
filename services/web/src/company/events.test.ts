@@ -71,7 +71,10 @@ describe("earnings releases", () => {
     const q = firstQuarter(vrt.quarters)!;
     expect(q.period_end).toBe("2026-09-30");
     expect(quarterName(q)).toBe("Quarter ended Sep 30, 2026");
-    expect(quarterName({ ...q, estimated: true })).toBe("Quarter ended Sep 30, 2026 (expected)");
+    expect(quarterName({ ...q, estimated: true, release: null })).toBe("Quarter ended Sep 30, 2026 (expected)");
+    // results day: the release is out, the 10-Q isn't (Riley, test 10, finding 31)
+    expect(quarterName({ ...q, estimated: true, release: { ...q.release!, filed: "2026-10-22" } }))
+      .toBe("Quarter ended Sep 30, 2026 (results out Oct 22, 2026; its 10-Q or 10-K isn't filed yet)");
     expect(firstQuarter([{ ...q, release: null }, { ...q, period_end: "2026-06-30" }])!.period_end).toBe("2026-06-30");
     expect(firstQuarter([])).toBeNull();
     // a foreign filer's (migration 095): its 20-F year, a period its 6-K release reports

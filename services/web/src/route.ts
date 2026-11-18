@@ -31,6 +31,8 @@ const TABS = new Set<string>(COMPANY_TABS.map(([t]) => t));
 
 export type Route =
   | { view: "home" }
+  /** an address that names no page (Riley, test 10, finding 11: #/notebook silently showed Home) */
+  | { view: "notfound"; path: string }
   | { view: "companies"; screen?: ScreenFilters }
   | {
       view: "company";
@@ -197,13 +199,22 @@ export function parse(hash: string): Route {
       ...(q ? { q } : {}),
     };
   }
+  // a page name this app doesn't have: say so rather than show Home under a wrong address; the
+  // sign-in fragment and anything malformed under a known page still lead home
+  if (view && /^[a-z][a-z0-9-]{0,40}$/.test(view) && !KNOWN.has(view)) return { view: "notfound", path: view };
   return { view: "home" };
 }
+
+/** The page names parse knows (the rest are not found). */
+const KNOWN = new Set([...SIMPLE, "companies", "compare", "search", "explore", "connect", "portfolio", "analysis", "workspace",
+  "report", "thesis", "model", "screen", "company", "filing", "signed-in", "home"]);
 
 export function href(route: Route): string {
   switch (route.view) {
     case "home":
       return "#/";
+    case "notfound":
+      return `#/${route.path}`;
     case "companies": {
       const q = route.screen ? screenQuery(route.screen) : "";
       return q ? `#/companies?${q}` : "#/companies";

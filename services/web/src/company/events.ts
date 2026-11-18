@@ -130,10 +130,22 @@ export function foreignForm(form: string | null | undefined): boolean {
   return /^(20-F|40-F|6-K)/.test(form ?? "");
 }
 
+/** A quarter's name. One no 10-Q or 10-K covers yet is "expected", unless its results are out: then
+ * its release's day says so (Riley, test 10, finding 31: "(expected)" sat beside a release filed that
+ * day). */
 export const quarterName = (q: Pick<EarningsQuarter, "period_end" | "estimated"> & Partial<Pick<EarningsQuarter, "report" | "release">>): string =>
   foreignForm(q.report?.form) ? `Fiscal year ended ${day(q.period_end, true)}`
     : foreignForm(q.release?.form) ? `Period ended ${day(q.period_end, true)}`
-      : `Quarter ended ${day(q.period_end, true)}${q.estimated ? " (expected)" : ""}`;
+      : `Quarter ended ${day(q.period_end, true)}${!q.estimated ? "" : q.release ? ` (results out ${day(q.release.filed, true)}; its 10-Q or 10-K isn't filed yet)` : " (expected)"}`;
+
+/** Results day (Riley, test 10, finding 21): the newest 8-K reporting results (item 2.02) filed
+ * after the latest 10-Q or 10-K, so its figures are out before that report's are; else null. Words
+ * the API's events only. */
+export function resultsOut(r: EventsResponse | null | undefined): FilingEvent | null {
+  const last = r?.latest_report;
+  if (!r || !last) return null;
+  return r.events.find((e) => !e.amendment && e.items.some((i) => i.item === "2.02") && e.filed > last.filed) ?? null;
+}
 
 /** The quarter a page opens on: the newest with a release, else the newest. */
 export function firstQuarter(qs: EarningsQuarter[]): EarningsQuarter | null {

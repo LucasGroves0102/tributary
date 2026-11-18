@@ -9,7 +9,12 @@ import { href } from "../route";
 import type { HeldPosition } from "../types";
 import { heldSince, shares } from "./portfolio";
 
-export function HoldingLine({ token, companyId }: { token: string; companyId: string }) {
+export function HoldingLine({ token, companyId, today = false }: {
+  token: string;
+  companyId: string;
+  /** the page is as of a past day: the holding is today's, and says so (Riley, test 10, finding 18) */
+  today?: boolean;
+}) {
   const [held, setHeld] = useState<HeldPosition | null>(null);
   useEffect(() => {
     let live = true;
@@ -25,7 +30,7 @@ export function HoldingLine({ token, companyId }: { token: string; companyId: st
   return (
     <p className="meta co-meta co-held">
       <span>
-        You hold {shares(held.shares)} {Number(held.shares) === 1 ? "share" : "shares"}, since {heldSince(held.first_bought, held.added_at)}.{" "}
+        {today ? "Today you hold" : "You hold"} {shares(held.shares)} {Number(held.shares) === 1 ? "share" : "shares"}, since {heldSince(held.first_bought, held.added_at)}.{" "}
         <a href={href({ view: "portfolio", holdingId: held.holding_id })}>Your holding</a>
       </span>
     </p>

@@ -20,6 +20,15 @@ const VOCAB: Vocabulary = {
 };
 const labels = (text: string, cursor = text.length) => complete(text, cursor, VOCAB)?.items.map((i) => i.label) ?? null;
 
+it("completes the user's own fields after mine., and never offers metrics there (Riley, test 10, finding 9)", () => {
+  const own: Vocabulary = { ...VOCAB, own: [{ ref: "mine.stores.stores", detail: "Store counts" }, { ref: "mine.stores.sales" }] };
+  expect(complete("revenue / mine.st", 17, own)?.items.map((i) => [i.kind, i.label])).toEqual([
+    ["own", "mine.stores.stores"], ["own", "mine.stores.sales"]]);
+  expect(complete("mine.stores.sa", 14, own)?.items.map((i) => i.label)).toEqual(["mine.stores.sales"]);
+  expect(labels("revenue / mine.st")).toBeNull(); // a box without them offers nothing, not "TICKER.metric"
+  expect(labels("revenue / mine.stores.")).toBeNull();
+});
+
 it("completes metric names by prefix, then by label words", () => {
   expect(labels("net")).toEqual(["net_income"]);
   expect(labels("inc")).toEqual(["net_income"]); // in the name

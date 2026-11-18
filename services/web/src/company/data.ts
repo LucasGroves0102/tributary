@@ -136,6 +136,8 @@ export interface KeyStat {
   title: string;
   /** over 300 days older than the company's latest period (035): shown as not reported since then */
   old?: boolean;
+  /** how a figure no filing states was worked out, when its key alone can't say (TTM EPS): no seal */
+  how?: string;
 }
 
 function periodText(key: string, src: ValueSource): string {
@@ -229,6 +231,56 @@ export function howFiled(key: string, source: Pick<ValueSource, "form" | "period
     return { filed: false, how: "the fourth quarter, worked out as the 10-K's year less the first three quarters" };
   }
   return { filed: true };
+}
+
+/** Whether a key stat is stated in its filing as shown (a seal), or how it was worked out. */
+export function statFiled(s: Pick<KeyStat, "key" | "source" | "how">): { filed: true } | { filed: false; how: string } {
+  return s.how ? { filed: false, how: s.how } : howFiled(s.key, s.source);
+}
+
+/** The Overview's EPS beside the twelve months' flows (Riley, test 10, finding 1: under "twelve
+ * months" it showed the latest quarter's, sealed). From /per-share only (query_api/per_share.py, the
+ * one per-share pipeline; never computed here): TTM EPS is the four quarters' EPS added on today's
+ * share basis, a derived figure, so it has no seal; a company that reports once a year gets its latest
+ * year as the report states it (sealed unless a split was applied to it). `rows`: that route's rows
+ * (TTM, else the years) newest first; undefined while loading; null when the route isn't there (an
+ * older API) or failed: the quarter's own figure, labelled as a quarter. */
+export function epsStat(rows: FinancialRow[] | null | undefined, quarter: KeyStat, asOf?: string): KeyStat {
+  // as of a past day the splits are those a filing had restated by then (per_share.py, 2)
+  const basis = asOf ? `on the share basis of ${day(asOf, true)} (the stock splits filed by then)` : "on today's share basis (stock splits applied)";
+  if (rows === null) return { ...quarter, label: "EPS (diluted), quarter" };
+  const base = { ...quarter, key: "eps_diluted_ttm", label: "EPS (diluted)", old: false, status: null };
+  if (rows === undefined) {
+    return { ...base, value: null, source: null, periodEnd: null, text: "…", period: "twelve months", title: "EPS (diluted): loading" };
+  }
+  const r = rows.find((x) => x.metric === "eps_diluted");
+  const v = r ? Number(r.value) : NaN;
+  if (!r || !Number.isFinite(v)) {
+    return { ...base, value: null, source: null, periodEnd: null, text: NOT_REPORTED, period: "not reported",
+      title: "EPS (diluted): no twelve months' figure on file" };
+  }
+  const source: ValueSource = { period_end: r.period_end, accession_no: r.citation.accession_no, form: r.citation.form, filed: r.citation.filed };
+  const currency = r.unit.split("/")[0] || "USD";
+  const ttm = r.derivation?.method === "ttm_eps";
+  const splits = (r.splits ?? []).map((x) => x.label);
+  const how = ttm
+    ? `the four quarters' diluted EPS added, ${basis}`
+    : r.value_source === "derived"
+      ? "worked out from the filings"
+      : splits.length
+        ? `the ${r.citation.form}'s ${r.as_filed ?? ""} for the year, divided for the ${splits.join(" and ")} split${splits.length === 1 ? "" : "s"} since`
+        : undefined;
+  const parts = ttm
+    ? r.derivation!.inputs.map((i) => `${i.role} ${fmt("eps", Number(i.value), currency)}${i.derived ? " (derived)" : ""}`).join(", ")
+    : null;
+  return {
+    ...base, value: v, source, periodEnd: r.period_end, text: fmt("eps", v, currency),
+    period: ttm ? `TTM to ${day(r.period_end, true)}` : `year to ${day(r.period_end, true)}`,
+    title: `EPS (diluted), ${ttm ? "the twelve months" : "the year"} to ${day(r.period_end, true)}. ` +
+      (parts ? `Its quarters: ${parts}. ` : "") +
+      `Source: ${r.citation.form} filed ${day(r.citation.filed, true)}, ${r.citation.accession_no}.`,
+    ...(how ? { how } : {}),
+  };
 }
 
 /** An amount, not a rate: the ledger's first column. */

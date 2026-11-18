@@ -7,7 +7,7 @@
 
 import type { MetricInfo } from "./metrics";
 
-export type SuggestionKind = "metric" | "ticker" | "function";
+export type SuggestionKind = "metric" | "ticker" | "function" | "own";
 
 export interface Suggestion {
   kind: SuggestionKind;
@@ -28,6 +28,8 @@ export interface Vocabulary {
   metrics: MetricInfo[];
   /** tickers of companies whose financials the user can read */
   tickers: { ticker: string; name: string }[];
+  /** the user's own fields, `mine.<dataset>.<field>` (Your data), where the box knows them */
+  own?: { ref: string; detail?: string }[];
 }
 
 export const MAX_SUGGESTIONS = 6;
@@ -54,6 +56,15 @@ export function complete(text: string, cursor: number, vocab: Vocabulary, max = 
   const before = text.slice(0, cursor);
   const tail = /^[A-Za-z0-9_]*/.exec(text.slice(cursor))![0];
   const to = cursor + tail.length;
+
+  // mine.<dataset>.<field>: the user's own fields when the box knows them; never metrics after "mine."
+  const mine = /(?:^|[^A-Za-z0-9_.])(mine(?:\.[A-Za-z0-9_]*){1,2})$/.exec(before);
+  if (mine) {
+    const word = mine[1]!;
+    const items = (vocab.own ?? []).filter((o) => o.ref.startsWith(word) && o.ref !== word + tail)
+      .map((o): Suggestion => ({ kind: "own", label: o.ref, insert: o.ref, detail: o.detail }));
+    return items.length ? { from: cursor - word.length, to, items: items.slice(0, max) } : null;
+  }
 
   // TICKER.me|  → metrics
   const dotted = /([A-Za-z][A-Za-z0-9]{0,9})\.([a-z_]*)$/.exec(before);

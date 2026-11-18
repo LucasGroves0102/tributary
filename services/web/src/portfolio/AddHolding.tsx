@@ -3,7 +3,7 @@
  * share), the day, an optional account label (a name, never an account number), and why: the
  * journal's first entry, written with it. Buying a company already held adds a buy to it. */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { addHolding, addJournalEntry, failureReason } from "../api";
 import { Choices } from "../components/Choices";
@@ -25,6 +25,9 @@ export function AddHolding({ token, onAdded, onCancel }: { token: string; onAdde
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // a problem is about what was sent: any edit clears it (Riley, test 10, finding 16: it stayed on
+  // screen after the form was filled in)
+  useEffect(() => setError(null), [what, company, symbol, fundName, count, costMode, cost, bought, label, why]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
