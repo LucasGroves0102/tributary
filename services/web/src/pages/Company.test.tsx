@@ -503,6 +503,18 @@ it("results day: the Overview opens on the release when an 8-K with results foll
   expect(container.querySelector(".folios > .folio")).toBe(top);
 });
 
+it("names the company from the directory while its figures load (Riley, test 10, finding 15)", async () => {
+  // the header's figures take a while; the directory's identity-only request doesn't
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname === "/api/query/v1/screener" && u.searchParams.getAll("columns").length > 1) return new Promise<Response>(() => {});
+    return respond(url);
+  }));
+  await render();
+  expect($(".co-name-early")?.textContent).toBe("Nvidia");
+  expect($(".skeleton, [aria-busy]")).not.toBeNull();
+});
+
 it("today: no note, and the statements still ask for each restated figure's first version", async () => {
   await render("statements");
   expect($(".co-asof-note")).toBeNull();

@@ -15,6 +15,7 @@ import type { ChartState } from "../chart/model";
 import type { StatementView } from "../company/statementView";
 import { Ratios, Segments, Statements } from "../company/Tables";
 import { useLoad } from "../company/useLoad";
+import { useDirectory } from "../companies/directory";
 import { placeName } from "../companies/places";
 import { confidenceWords } from "../companies/rows";
 import { Folio } from "../components/Folio";
@@ -73,8 +74,19 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   // the Price tab exists only when the server offers "Connect your data"
   const market = useMarketData(token);
   const tabs = COMPANY_TABS.filter(([t]) => t !== "price" || market?.enabled);
+  // the name comes from the directory (identity only, one small request) while the figures load: a page
+  // never sits nameless for seconds (Riley, test 10, finding 15)
+  const directory = useDirectory(token);
+  const known = directory.name(companyId);
 
-  if (!meta || meta.state === "loading") return <div className="page"><Skeleton lines={6} label="Loading the company" /></div>;
+  if (!meta || meta.state === "loading") {
+    return (
+      <div className="page company-page">
+        {known && <h1 className="co-name co-name-early">{known}</h1>}
+        <Skeleton lines={6} label="Loading the company" />
+      </div>
+    );
+  }
   if (meta.state === "error") {
     return (
       <div className="page">
