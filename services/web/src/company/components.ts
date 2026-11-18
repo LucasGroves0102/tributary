@@ -89,6 +89,8 @@ export function factSource(f: ComponentFact): string {
 /** The tag a figure's own row cites, worded: a sum's parts, a computed line, else the tag. */
 export function tagText(tag: string | null): string {
   if (!tag) return "computed";
+  if (tag === "derived:no-debt") return "none on file: the filing tags no debt";
+  if (tag === "derived:net_sales-cost_of_revenue") return "computed: net sales less cost of revenue";
   if (tag.startsWith("derived:")) return "computed: revenue less cost of revenue";
   const [tax, name] = tag.includes(":") ? tag.split(/:(.*)/s) : ["", tag];
   return name!.includes("+") ? `${tax}: ${name!.split("+").join(" + ")} (added up)` : tag;

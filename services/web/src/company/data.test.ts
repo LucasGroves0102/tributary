@@ -32,6 +32,9 @@ import {
   recapRows,
   segmentTables,
   STATEMENTS,
+  BANK_STATEMENTS,
+  NO_DEBT_TAG,
+  opensIntoParts,
   listingLine,
   perShareTitle,
   withAnnualPerShare,
@@ -390,6 +393,43 @@ describe("banks on the tearsheet", () => {
     expect(t.rows[0]).toMatchObject({ cells: [null], blanks: [{ text: "n/a (bank)" }] });
     // not a bank: empty rows are dropped as before
     expect(metricTable(rows, RATIOS, "ttm").rows.map((r) => r.metric)).toEqual(["fcf_margin", "roe"]);
+  });
+});
+
+describe("Morgan, test 11: lines that say what they hold", () => {
+  it("a bank's cash line is what its cash tags hold: cash and deposits with banks, defined", () => {
+    const [metric, label, , opts] = BANK_STATEMENTS.bs.rows.find(([m]) => m === "cash")!;
+    expect(metric).toBe("cash");
+    expect(label).toBe("Cash and deposits with banks");
+    expect(opts?.define).toContain("JPMorgan's cash and due from banks is $21.7B of its $343.3B");
+  });
+
+  it("gross profit on net sales and a debt of none say how they were read", () => {
+    const rows = [
+      fin("net_sales", "2026-01-31", "190000000000", "FY2026 Q4"),
+      fin("gross_profit", "2026-01-31", "46000000000", "FY2026 Q4", {
+        value_source: "derived",
+        citation: { accession_no: ACC, form: "10-K", filed: "2026-03-13", xbrl_tag: "derived:net_sales-cost_of_revenue", source_accessions: [ACC], filing_url: null },
+      }),
+      fin("long_term_debt", "2026-01-31", "0", "FY2026 Q4", {
+        citation: { accession_no: ACC, form: "10-K", filed: "2026-03-13", xbrl_tag: NO_DEBT_TAG, source_accessions: [ACC], filing_url: null },
+      }),
+    ];
+    const t = metricTable(rows, [...STATEMENTS.is.rows, ["long_term_debt", "Long-term debt", "usd"]], "q");
+    const label = (m: string) => t.rows.find((r) => r.metric === m)!;
+    expect(label("net_sales").label).toBe("Net sales");
+    expect(label("gross_profit").cells[0]!.title).toContain("net sales less cost of revenue");
+    const none = label("long_term_debt").cells[0]!;
+    expect(none.text).toBe("$0");
+    expect(none.title).toContain("this filing tags no debt");
+    expect(opensIntoParts(rows[2]!)).toBe(false);
+  });
+
+  it("a blank interest expense says why it's often blank (Apple since FY2024)", () => {
+    const rows = [fin("revenue", "2026-09-26", "1", "FY2026 Q4"), fin("interest_expense", "2023-09-30", "1", "FY2023 Q4")];
+    const t = metricTable(rows, [["revenue", "Revenue", "usd"], ["interest_expense", "Interest expense", "usd"]], "q");
+    const interest = t.rows.find((r) => r.metric === "interest_expense")!;
+    expect(interest.blanks.at(-1)!.title).toContain("other income or expense, net");
   });
 });
 

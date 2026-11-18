@@ -795,7 +795,8 @@ A bank (#103; the API's `not_applicable` list): the Overview's figures show net 
 efficiency ratio, provision for credit losses, net income, EPS, loans, deposits, CET1 (where the bank
 tags it), ROE, revenue growth and net margin; Statements show a bank's income statement (net interest
 income, noninterest income, net revenue, noninterest expense, provision, pretax and net income) and
-balance sheet (cash and due from banks, loans net of the allowance, total assets, deposits, total
+balance sheet (cash and deposits with banks: what the cash tags hold, JPMorgan's $343.3B being cash and
+due from banks plus deposits with banks, Morgan 2; loans net of the allowance, total assets, deposits, total
 liabilities, equity, CET1); Ratios show `BANK_RATIOS` (efficiency ratio, CET1, net margin, ROE, revenue
 and net income growth, payout ratio; Riley 58: six of ten rows read n/a (bank)), the standard ratios
 again from an older API that refuses the bank lines (422). JPMorgan, Bank of America and Wells Fargo tag

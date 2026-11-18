@@ -430,6 +430,10 @@ export const DEFINITIONS: Record<string, string> = {
   change_in_cash: "Net change in cash, cash equivalents and restricted cash, after exchange-rate effects, as the cash flow statement totals it.",
   cash_and_restricted_cash:
     "Cash, cash equivalents and restricted cash at the period's end: where the cash flow statement ends. The balance sheet's cash can leave restricted cash out.",
+  bank_cash:
+    "A bank's cash and cash equivalents as it tags them: cash and due from banks plus interest-bearing deposits with other banks and the central bank (and, at some banks, federal funds sold), the total its cash flow statement ends with. Its balance sheet can print them as separate lines: JPMorgan's cash and due from banks is $21.7B of its $343.3B at Dec 31, 2025, deposits with banks the rest.",
+  net_sales:
+    "Sales of merchandise alone, without membership fees and other income (Walmart and Costco report them apart): the base of their gross profit and gross margin here.",
 };
 
 const OUTFLOW = "outflow: shown negative, as the cash flow statement prints it";
@@ -439,6 +443,8 @@ export const STATEMENTS: Record<Statement, { label: string; rows: Line[] }> = {
     label: "Income statement",
     rows: [
       ["revenue", "Revenue", "usd"],
+      // a company that reports net sales apart from total revenue (084: Walmart, Costco); no row elsewhere
+      ["net_sales", "Net sales", "usd", { sub: true, define: DEFINITIONS.net_sales }],
       ["cost_of_revenue", "Cost of revenue", "usd"],
       ["gross_profit", "Gross profit", "usd"],
       ["research_and_development", "Research and development", "usd"],
@@ -520,7 +526,9 @@ export const BANK_STATEMENTS: Record<Statement, { label: string; rows: Line[] }>
   bs: {
     label: "Balance sheet",
     rows: [
-      ["cash", "Cash and due from banks", "usd"],
+      // what the bank's cash tags hold (155: JPMorgan's $343.3B is cash and due from banks $21.7B plus
+      // deposits with banks $321.6B, as its cash flow statement totals them; Morgan, test 11, finding 2)
+      ["cash", "Cash and deposits with banks", "usd", { define: DEFINITIONS.bank_cash }],
       ["loans", "Loans, net of the allowance", "usd"],
       ["total_assets", "Total assets", "usd", { grand: true }],
       ["deposits", "Deposits", "usd"],
@@ -663,6 +671,11 @@ const Q4_PER_SHARE = "not reported, and not derived here. A 10-K gives the year'
 const TTM_PER_SHARE = "not derived here: the twelve months' EPS is the four quarters' added, and one of the four " +
   "isn't on file (or, as filed, a stock split falls inside them).";
 const BANK_TITLE = "not applicable. This is a bank: deposits are its debt and lending its operations, so the figure has no comparable meaning.";
+/** Why a statement line is blank in a period, where the reason is the filings' own habit. */
+const BLANK_WHY: Record<string, string> = {
+  interest_expense: "The filing gives no interest expense line: a company without interest-bearing debt has none, and some (Apple since FY2024) show interest only inside other income or expense, net, which isn't interest expense alone.",
+  capex: "The filing gives no capital expenditure line: some companies (Airbnb since 2023, Veeva since 2021) fold it into other investing activities once it is small, so free cash flow can't be computed either.",
+};
 
 function blankCell(metric: string, name: string, period: Period, column: string, notApplicable: string[],
   notComputed: Record<string, string> = {}): BlankCell {
@@ -672,6 +685,8 @@ function blankCell(metric: string, name: string, period: Period, column: string,
   if (why) return { text: NOT_APPLICABLE, title: `${name}: not computed for this company: ${why}.` };
   if (PER_SHARE.has(metric) && period === "ttm") return { text: NOT_APPLICABLE, title: `${name}: ${TTM_PER_SHARE}` };
   if (PER_SHARE.has(metric) && period === "q" && column.endsWith("Q4")) return { text: NOT_REPORTED, title: `${name}: ${Q4_PER_SHARE}` };
+  // why a line is often blank (Morgan, test 11, finding 34: Apple FY2024-26 and Napco read a bare "·")
+  if (BLANK_WHY[metric]) return { text: NO_DATA, title: `${name}: ${NO_DATA_TITLE.toLowerCase()}. ${BLANK_WHY[metric]}` };
   return { text: NO_DATA, title: `${name}: ${NO_DATA_TITLE.toLowerCase()}` };
 }
 
@@ -742,7 +757,7 @@ export function restatedText(o: NonNullable<FinancialRow["original"]>, kind: Par
 function cellTitle(label: string, r: FinancialRow): string {
   if (r.derivation || r.splits?.length) return perShareTitle(label, r);
   const src = r.citation.xbrl_tag?.startsWith("derived:")
-    ? "computed: revenue less cost of revenue, because the filing prints no gross profit"
+    ? computedText(r.citation.xbrl_tag)
     : r.value_source === "derived"
       ? `derived (${r.citation.source_accessions?.length ? `from ${r.citation.source_accessions.join(", ")}` : "computed"})`
       : `reported, ${r.citation.xbrl_tag}`;
@@ -750,11 +765,26 @@ function cellTitle(label: string, r: FinancialRow): string {
     `Source: ${r.citation.form} filed ${day(r.citation.filed, true)}, ${r.citation.accession_no}; ${src}`;
 }
 
+/** A long-term debt of zero where the filing says there is none (155): a reading, not a tagged line. */
+export const NO_DEBT_TAG = "derived:no-debt";
+
+/** What a figure Tributary computed, or read from a filing's silence, is (gold's `derived:` tags). */
+export function computedText(tag: string): string {
+  if (tag === NO_DEBT_TAG) {
+    return "none on file: this filing tags no debt, no filing in the year before did, and its interest expense is under 0.25% of total assets, so Tributary reads no long-term debt";
+  }
+  if (tag === "derived:net_sales-cost_of_revenue") {
+    return "computed: net sales less cost of revenue, without membership fees and other income, as the company states its gross margin; the filing prints no gross profit";
+  }
+  return "computed: revenue less cost of revenue, because the filing prints no gross profit";
+}
+
 /** Whether a row's figure opens into its parts (F5, /components): a derived figure (its `inputs`), gross
  * profit computed as revenue less cost, or a line the filing tags as parts (a sum). A TTM's quarters
- * don't count: every TTM is that. */
+ * don't count: every TTM is that; nor does a debt of none, which has no parts. */
 export function opensIntoParts(r: FinancialRow): boolean {
   const tag = r.citation.xbrl_tag ?? "";
+  if (tag === NO_DEBT_TAG) return false;
   return (!!r.inputs && !("quarters" in r.inputs)) || tag.startsWith("derived:") || tag.includes("+");
 }
 

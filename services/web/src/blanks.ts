@@ -40,12 +40,15 @@ const NEEDS: Record<string, string> = {
   gross_margin: "gross profit and revenue",
   operating_margin: "operating income and revenue",
   net_margin: "net income and revenue",
-  free_cash_flow: "operating cash flow and capital expenditure",
-  fcf_margin: "operating cash flow, capital expenditure and revenue",
+  // Morgan, test 11, finding 15: Airbnb and Veeva fold capex into other investing activities
+  free_cash_flow: "operating cash flow and capital expenditure (a company can stop showing capital expenditure on its own line, folding it into other investing activities once it is small)",
+  fcf_margin: "operating cash flow, capital expenditure and revenue (a company can stop showing capital expenditure on its own line, folding it into other investing activities once it is small)",
   revenue_growth: "revenue now and a year earlier",
   net_income_growth: "net income now and a year earlier",
-  debt_to_equity: "long-term debt and stockholders' equity",
-  net_debt: "long-term debt and cash",
+  // 155: no debt reads as none only on the filings' evidence (no debt tag in the year, little
+  // interest); a company whose debt sits in tags of its own has neither
+  debt_to_equity: "long-term debt (or evidence there is none) and stockholders' equity",
+  net_debt: "long-term debt (or evidence there is none) and cash",
   current_ratio: "current assets and current liabilities",
   roe: "net income and stockholders' equity",
   payout_ratio: "dividends and net income",
