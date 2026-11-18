@@ -734,8 +734,10 @@ class Store:
     def per_share_inputs(self, user_id: str, company_id: str, as_of: date | None = None) -> dict:
         """What query_api.per_share reads, in one session under RLS: gold's fiscal quarters of the
         per-share metrics and net income (newest 120 each), the 10-K's per-share facts by year
-        (gold.annual_per_share, 036: its own read rule) and the company's restatement findings on
-        share counts and EPS (ops.quality_findings, the split notes' source). One company.
+        (gold.annual_per_share, 036: its own read rule), the company's restatement findings on
+        share counts and EPS (ops.quality_findings, the split notes' source) and each period's
+        figures as first filed (`originals`, gold.per_share_originals, 140: a split's first filing
+        on the new basis, and `as_filed`). One company.
         as_of (087): gold's quarters and the 10-K figures as they stood at the end of that day,
         and only the restatements filed by then (a split first restated later isn't applied)."""
         from query_api.per_share import FINDING_METRICS, INPUT_METRICS
@@ -770,17 +772,11 @@ class Store:
                 ORDER BY metric, period_end
                 """, (company_id, list(FINDING_METRICS), as_of, as_of))
             findings = cur.fetchall()
-        return {"quarters": quarters, "annual": annual, "findings": findings}
-
-    def per_share_originals(self, user_id: str, company_id: str,
-                            as_of: date | None = None) -> list[dict]:
-        """Each period's EPS and weighted shares as the first periodic filing to state it filed
-        them, filed by the end of `as_of` (gold.per_share_originals, 140: its own read rule), for
-        per_share's `as_filed`. One company."""
-        with self._session(user_id, as_of) as cur:
             cur.execute("SELECT * FROM gold.per_share_originals(%s, %s)"
                         " ORDER BY metric, span, period_end", (company_id, as_of))
-            return cur.fetchall()
+            originals = cur.fetchall()
+        return {"quarters": quarters, "annual": annual, "findings": findings,
+                "originals": originals}
 
     def model_inputs(self, user_id: str, company_id: str, metrics: list[str], quarters: int,
                      recent: int, years: int, latest: list[str]) -> dict:

@@ -601,8 +601,6 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         known_on = point_in_time.check(as_of, (today or today_eastern)())
         require(user_id, "financials", company_id)
         inputs = store.per_share_inputs(user_id, company_id, known_on)
-        if shares == "as_filed":  # each period's first filing's own figure (per_share.py, 5; 140)
-            inputs["originals"] = store.per_share_originals(user_id, company_id, known_on)
         out = per_share.compute(inputs, view, shares)
         kept: dict[str, int] = {}
         rows = []
