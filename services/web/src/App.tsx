@@ -930,9 +930,9 @@ export function App(props: Props = {}) {
             ) : route.view === "about" ? (
               <About allowance={allowance} open={catalogOpen(me, "financials")} />
             ) : route.view === "settings" ? (
-              <Settings key={user} token={token} />
+              <Settings key={user} token={token} watches={watching.list} />
             ) : route.view === "alerts" ? (
-              <AlertsPage key={user} token={token} />
+              <AlertsPage key={user} token={token} watches={watching.list} />
             ) : route.view === "portfolio" ? (
               <PortfolioPage key={`${user}:${route.import ? "import" : "holdings"}`} token={token} holdingId={route.holdingId} importing={!!route.import} />
             ) : route.view === "data" ? (

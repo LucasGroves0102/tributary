@@ -1,6 +1,7 @@
 import { beforeEach, expect, it } from "vitest";
 
 import { NVDA } from "../fixtures";
+import { localDay } from "../format";
 import type { FormulaSeries } from "../types";
 import { apply, complete, type Vocabulary } from "./autocomplete";
 import { cached, clearChartCache, MAX_ENTRIES, remember } from "./cache";
@@ -123,6 +124,8 @@ it("deck subtitle and source footnote say what, when and from which filings", ()
     "Source: SEC filings via Tributary; 10-K, 10-Q for KO, PEP; latest KO 10-Q filed Jul 23, 2026; as of Oct 21, 2026.",
   );
   expect(sourceFootnote([], short, null)).toBe("Source: SEC filings via Tributary.");
+  // a moment, in the viewer's zone: 02:00 UTC on Nov 18 is Nov 17 in the Americas
+  expect(sourceFootnote([], short, "2026-11-18T02:00:00Z")).toBe(`Source: SEC filings via Tributary; as of ${localDay("2026-11-18T02:00:00Z", true)}.`);
   expect(methodNote("fiscal", "annual", new Set(["yoy"]))).toBe(
     "Fiscal years: flows are fiscal-year totals (TTM at Q4), balances year-end values; YoY over years.",
   );

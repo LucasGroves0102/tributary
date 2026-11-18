@@ -378,6 +378,8 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   const recap = [...container.querySelectorAll("table")].find((t) => t.textContent?.includes("QoQ"))!;
   expect([...recap.querySelectorAll("th")].map((t) => t.textContent)).toEqual(["Metric", "FY2027 Q2", "FY2027 Q1", "QoQ", "FY2026 Q2", "YoY"]);
   expect(recap.querySelector("tbody tr")?.textContent).toBe("Revenue$46.74B$44.06B+6.1%$30.04B+55.6%");
+  // a change has no colour: up isn't good for every line (debt, costs; Riley, test 10, finding 20)
+  expect(recap.querySelectorAll(".pos, .neg")).toHaveLength(0);
   expect($(".flags")?.textContent).toContain("a $184 million restructuring charge");
   expect($(".flags a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-2`);
   expect($(".excerpt")?.textContent).toBe("NVIDIA pioneered accelerated computing. We sell GPUs.");

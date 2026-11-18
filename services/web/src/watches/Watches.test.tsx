@@ -170,6 +170,23 @@ it("lists screen alerts with links, values as read and what isn't listed, and ma
   expect(posts).toEqual([{ ids: ["a1"] }]);
 });
 
+it("lists the screens the user watches, even before any alert (Riley, test 10, finding 14)", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const path = new URL(url, "http://x").pathname.replace(/^\/api\/query/, "");
+    if (path === "/v1/alerts/screens") return Response.json({ alerts: [], has_more: false, schedule: "" });
+    return Response.json({ detail: "Not Found" }, { status: 404 });
+  }));
+  await show(<ScreenAlertList token="t" watches={{ ...LIST, watches: [WATCH] }} />);
+  const list = container.querySelector(".watched-screens")!;
+  expect(list.textContent).toContain("You watch a screen, checked once a day after the night's figures");
+  expect(list.querySelector("a")?.getAttribute("href")).toBe(`#/screen/${ITEM}`);
+  expect(list.textContent).toContain("Cheap growers: companies entering, 1 line (Operating margin (TTM)).");
+  expect(list.textContent).toContain("First check done: 37 companies in it now.");
+  // not the "choose Watch" invitation: the user already did
+  expect(container.textContent).not.toContain("choose Watch");
+  expect(container.textContent).toContain("No alerts from them yet");
+});
+
 it("shows nothing from an API without screen alerts", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ detail: "Not Found" }, { status: 404 })));
   await show(<ScreenAlertList token="t" />);

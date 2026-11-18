@@ -6,7 +6,8 @@ import { useDirectory } from "../companies/directory";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { localTime } from "../format";
 import { href } from "../route";
-import type { ScreenAlert, ScreenAlerts } from "../types";
+import type { ScreenAlert, ScreenAlerts, ScreenWatches } from "../types";
+import { WatchedScreens } from "./WatchedScreens";
 import { alertHeadline, crossingFigure, moreWords } from "./watches";
 
 type Load = { state: "loading" } | { state: "ok"; data: ScreenAlerts } | { state: "off" } | { state: "error"; message: string };
@@ -15,9 +16,11 @@ type Load = { state: "loading" } | { state: "ok"; data: ScreenAlerts } | { state
  * newest first: the companies that crossed a line (with the value), entered or left, each a link,
  * and a link back to the screen. Only companies the user still reads are listed (`hidden` counts
  * the rest). Opening the list marks what it shows as read. Nothing from an older API. */
-export function ScreenAlertList({ token, onLoaded }: {
+export function ScreenAlertList({ token, onLoaded, watches }: {
   token: string;
   onLoaded?: (data: ScreenAlerts | null) => void;
+  /** the user's watched screens (useWatches), listed above their alerts */
+  watches?: ScreenWatches | null;
 }) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -51,14 +54,22 @@ export function ScreenAlertList({ token, onLoaded }: {
       <section className="card">
         {load.state === "loading" ? <Skeleton lines={2} label="Loading your screens' alerts" />
           : load.state === "error" ? <ErrorPanel what="your screens' alerts" detail={load.message} onRetry={() => setAttempt((n) => n + 1)} />
-            : <Alerts token={token} list={load.data.alerts} />}
+            : (
+              <>
+                <WatchedScreens list={watches} />
+                <Alerts token={token} list={load.data.alerts} watching={!!watches?.watches.length} />
+              </>
+            )}
       </section>
     </>
   );
 }
 
-function Alerts({ token, list }: { token: string; list: ScreenAlert[] }) {
+function Alerts({ token, list, watching = false }: { token: string; list: ScreenAlert[]; watching?: boolean }) {
   const directory = useDirectory(token);
+  if (!list.length && watching) {
+    return <p className="empty">No alerts from them yet: one comes when a company enters or leaves, or crosses a line you set.</p>;
+  }
   if (!list.length) {
     return (
       <p className="empty">

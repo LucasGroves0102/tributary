@@ -162,6 +162,9 @@ it("the bell counts new filing alerts; the list says what was filed, its figures
   expect(writes).toContainEqual({ method: "POST", path: "/v1/alerts/notifications/read", body: { ids: [TENQ.id, EIGHTK.id] } });
   await settle();
   expect(container.querySelector(".top .bell")?.getAttribute("aria-label")).toBe("Alerts: nothing new");
+  // the page says how many were new, so it and the bell agree (Riley, test 10, finding 30)
+  expect(container.querySelector(".alerts-new")?.textContent).toContain("2 alerts are new since you last looked");
+  expect(container.querySelector(".alerts-new")?.textContent).toContain("the bell now counts nothing new");
 });
 
 it("an API without alerts (the deploy window): no bell, and the page says so", async () => {
