@@ -23,6 +23,10 @@ export type SavedList =
 /** Where Save as puts the item: an existing workspace, or a new one by name. */
 export type Target = { workspaceId: string } | { newWorkspace: string };
 
+/** A saved item, and whether saving it made its workspace (a new one in the sidebar the save says it made:
+ * Riley, test 10, finding 43, "Your metrics" and "Screens" appeared unannounced). */
+export type SavedAs = SavedItemFull & { madeWorkspace: boolean };
+
 /** How long a deleted workspace or item can be brought back (#158). The delete is sent when this
  * runs out, or at once when the page is closed or the user changes, so nothing is ever deleted
  * that the user could still undo, and nothing confirmed is kept by closing the tab. */
@@ -58,13 +62,13 @@ export interface Saved {
   deleteFailure: string | null;
   dismissDeleteFailure: () => void;
   /** saves what's on screen as a new item, which becomes the page's open item */
-  saveAs: (current: Current, name: string, target: Target) => Promise<SavedItemFull>;
+  saveAs: (current: Current, name: string, target: Target) => Promise<SavedAs>;
   /** saves over the page's open item */
   save: (current: Current) => Promise<void>;
   /** a new thesis or model (its own page edits it), or a chart or comps set saved from
    * elsewhere than their page (the Revenue view, an analysis project): it doesn't become that
    * page's open item */
-  create: (kind: WrittenKind | "chart" | "comps" | "metric", name: string, state: object, target: Target) => Promise<SavedItemFull>;
+  create: (kind: WrittenKind | "chart" | "comps" | "metric", name: string, state: object, target: Target) => Promise<SavedAs>;
   /** saves a thesis or model over (state and/or name) */
   update: (id: string, patch: { name?: string; state?: object }) => Promise<SavedItemFull>;
   /** fetches an item's state (recorded as opened) and makes it the page's open item */
@@ -178,19 +182,19 @@ export function useSaved(token: string | null, user: string | null): Saved {
     return w;
   }, [refresh]);
 
-  const target = useCallback(async (t: Target): Promise<{ id: string; name: string }> => {
+  const target = useCallback(async (t: Target): Promise<{ id: string; name: string; made: boolean }> => {
     if ("workspaceId" in t) {
       const w = listRef.current.find((x) => x.workspace_id === t.workspaceId);
-      return { id: t.workspaceId, name: w?.name ?? "" };
+      return { id: t.workspaceId, name: w?.name ?? "", made: false };
     }
     // the latest list, so two saves by name don't create the workspace twice
     const fresh = await fetchWorkspaces(need());
     listRef.current = fresh;
     const found = findWorkspace(fresh, t.newWorkspace);
-    if (found) return { id: found.workspace_id, name: found.name };
+    if (found) return { id: found.workspace_id, name: found.name, made: false };
     const w = await createWorkspace(need(), t.newWorkspace.trim());
     listRef.current = [...fresh, w];
-    return { id: w.workspace_id, name: w.name };
+    return { id: w.workspace_id, name: w.name, made: true };
   }, []);
 
   const saveAs = useCallback(
@@ -209,7 +213,7 @@ export function useSaved(token: string | null, user: string | null): Saved {
         },
       }));
       refresh();
-      return item;
+      return { ...item, workspace_name: ws.name, madeWorkspace: ws.made };
     },
     [target, setOpenItems, refresh],
   );
@@ -268,7 +272,7 @@ export function useSaved(token: string | null, user: string | null): Saved {
       const ws = await target(t);
       const item = await addItem(need(), ws.id, kind, name.trim(), state);
       refresh();
-      return { ...item, workspace_name: ws.name };
+      return { ...item, workspace_name: ws.name, madeWorkspace: ws.made };
     },
     [target, refresh],
   );

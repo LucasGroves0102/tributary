@@ -363,7 +363,7 @@ export function DataTable({ series, title, onOpen }: { series: Series[]; title: 
   const yearly = ticks.length > 0 && !ticks.some(([key, period]) => !partial.has(key) && / Q[1-4]$/.test(period));
   return (
     <TableScroll label="Chart values">
-      <table className="t">
+      <table className="t chart-values">
         <caption className="visually-hidden">{title || "Chart"}: values by {yearly ? "year" : "quarter"}, newest first</caption>
         <thead>
           <tr>

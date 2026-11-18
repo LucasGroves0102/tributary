@@ -195,8 +195,10 @@ kbd,
   box-shadow: 0 0 0 3px var(--up-soft);
 }
 
-/* Buttons and tags: square corners. Primary is the red fill, one per view; the rest an ink
-   outline; ghost is the quiet one. A press sinks a little. */
+/* Buttons (one system, Riley, test 10, finding 105): square corners. Primary is the ink filled, one per
+   view; secondary an ink outline; quiet (ghost) is text that underlines on hover, never a grey pill;
+   destructive (danger) is the error ink, outlined in a confirm and in a menu after a rule. A press
+   sinks a little. */
 
 .btn {
   display: inline-flex;
@@ -269,6 +271,22 @@ a.btn:hover {
 
 .btn.ghost:hover:not(:disabled) {
   color: var(--ink);
+  background: transparent;
+  text-decoration: underline;
+  text-decoration-color: var(--link-rule);
+  text-underline-offset: 3px;
+}
+
+/* a quiet destructive action in a row (Delete this buy): the error ink */
+.btn.ghost.danger {
+  color: var(--error);
+  background: transparent;
+  border-color: transparent;
+}
+
+.btn.ghost.danger:hover:not(:disabled) {
+  color: var(--error);
+  text-decoration-color: currentColor;
 }
 
 .btn.primary .kbd {
@@ -721,11 +739,12 @@ a.btn:hover {
   background: var(--sheet-2);
 }
 
-/* where you are: the ink, and a red rule at its edge (the tabs' underline, turned on its side) */
+/* where you are: the ink, and an ink rule at its edge (the tabs' underline, turned on its side); red is
+   only the seal, rubrics, red-letter days and the "may have changed" mark (Riley, test 10, finding 104) */
 .nav a.on {
   color: var(--ink);
   font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--red);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .nav .cnt {
@@ -735,8 +754,8 @@ a.btn:hover {
 }
 
 .nav .cnt.new {
-  color: var(--red-ink);
-  background: var(--red);
+  color: var(--action-ink);
+  background: var(--action);
   font-weight: 600;
   padding: 0 5px;
 }
@@ -832,15 +851,15 @@ a.btn:hover {
 }
 
 .side .wl a.on {
-  box-shadow: inset 2px 0 0 var(--red);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
-/* a new filing since the last visit: a red point */
+/* a new filing since the last visit: an ink point (not the seal's red: Riley, test 10, finding 104) */
 .side .wl .d {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--red);
+  background: var(--ink);
 }
 
 .side .wl .d.off {
@@ -1340,7 +1359,7 @@ table.t {
   flex: 1 1 170px;
   padding: 14px 18px 16px;
   min-width: 0;
-  border-left: 1px solid var(--red-rule);
+  border-left: 1px solid var(--col-rule);
 }
 
 .status-strip > div:first-child {
@@ -1435,7 +1454,7 @@ table.t {
 
 .filter-band > summary::before {
   content: "▸";
-  color: var(--red);
+  color: var(--ink-3);
 }
 
 .filter-band[open] > summary::before {
@@ -1582,7 +1601,7 @@ button.link:hover {
 
 .t th[aria-sort="ascending"],
 .t th[aria-sort="descending"] {
-  box-shadow: inset 0 -2px 0 var(--red);
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 .t tr.masked td:not(.first):not(.actions) {
@@ -2830,7 +2849,7 @@ button.chip:disabled {
 .tabs a[aria-current="page"] {
   color: var(--ink);
   font-weight: 600;
-  box-shadow: inset 0 -2px 0 var(--red);
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 .tabs a:hover {
@@ -3649,14 +3668,13 @@ mark {
 }
 
 .btn.danger {
-  background: var(--neg-soft);
-  border-color: var(--neg);
-  color: var(--neg);
+  background: transparent;
+  border-color: var(--error);
+  color: var(--error);
 }
 
 .btn.danger:hover:not(:disabled) {
-  background: var(--neg-soft);
-  filter: brightness(1.1);
+  background: var(--error-soft);
 }
 
 .ws-actions {
@@ -4163,17 +4181,21 @@ button.link.num {
   font-size: 0.85em;
 }
 
-/* a finding's severity: form marks; only an error takes the red */
+/* a finding's severity: the form marks' family, by weight and ink, never a colour (Riley, test 10, findings 99 and
+   104: red and amber tags were another style, and red is the seal's) */
 .tag.sev-error {
-  color: var(--error);
+  color: var(--ink);
+  border-color: var(--ink);
+  font-weight: 650;
 }
 
 .tag.sev-warning {
-  color: var(--warn);
+  color: var(--ink-2);
 }
 
 .tag.sev-info {
   color: var(--ink-3);
+  border-color: var(--rule-2);
 }
 
 /* What Tributary covers (#/about) */
@@ -4648,6 +4670,7 @@ button.link.num {
     --warn-soft: #f6ece2;
     --red-rule: rgb(179 17 30 / 0.36);
     --red-wash: rgb(179 17 30 / 0.05);
+    --col-rule: rgb(179 17 30 / 0.36);
     --action: #161314;
     --action-ink: #ffffff;
     --error: #b3111e;
@@ -5769,11 +5792,11 @@ button.chip.on {
   outline-offset: -2px;
 }
 
-/* where you are: the ink, and a red rule at its edge, as in the sidebar */
+/* where you are: the ink, and an ink rule at its edge, as in the sidebar */
 .step-rail a[aria-current="step"] {
   color: var(--ink);
   font-weight: 650;
-  box-shadow: inset 2px 0 0 var(--red);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .step-rail .n {
@@ -6115,7 +6138,7 @@ button.chip.on {
   }
 
   .step-rail a[aria-current="step"] {
-    box-shadow: inset 0 -2px 0 var(--red);
+    box-shadow: inset 0 -2px 0 var(--ink);
   }
 
   .project-progress {
@@ -6266,7 +6289,9 @@ button.chip.on {
 }
 
 /* a statement's long row names wrap where the table is tight, and the room goes to the periods; with
-   room (1440 beside the sidebar) a name stays on one line */
+   room (1440 beside the sidebar) a name keeps one line up to about 280px and a longer one wraps there, so
+   one long line ("Remaining performance obligations (backlog; ...)") never pushes periods behind
+   "‹ 3 columns" (Riley, test 10, finding 78) */
 .t.statement .first {
   white-space: normal;
   min-width: 150px;
@@ -6279,8 +6304,9 @@ button.chip.on {
 
 @container tw (min-width: 900px) {
   .t.statement .first {
-    white-space: nowrap;
-    max-width: none;
+    min-width: 0;
+    width: 280px;
+    max-width: 280px;
   }
 }
 
@@ -6933,8 +6959,8 @@ table.t.release-grid {
 .bell .count {
   min-width: 18px;
   padding: 0 5px;
-  background: var(--red);
-  color: var(--red-ink);
+  background: var(--action);
+  color: var(--action-ink);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
@@ -6944,7 +6970,7 @@ table.t.release-grid {
 
 .bell[aria-current="page"] {
   color: var(--ink);
-  box-shadow: inset 0 -2px 0 var(--red);
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 .alert-list {
@@ -7391,7 +7417,7 @@ table.t.release-grid {
   overflow-x: auto;
   background: var(--sheet-2);
   border: 1px solid var(--rule);
-  border-left: 2px solid var(--red-rule);
+  border-left: 2px solid var(--rule-2);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -7625,10 +7651,23 @@ table.t.release-grid {
   white-space: nowrap;
 }
 
+/* an empty state: one line and one action, how it works folded (Riley, test 10, finding 106) */
 .portfolio-empty {
   display: grid;
-  gap: var(--sp-6);
+  justify-items: start;
+  gap: var(--sp-5);
   max-width: 72ch;
+}
+
+.empty-line {
+  margin: 0;
+  font-size: var(--fs-lg);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.entry-window {
+  color: var(--ink-3);
 }
 
 .portfolio-empty .story,
@@ -7953,6 +7992,21 @@ label.check {
   margin-bottom: var(--sp-2);
 }
 
+/* a formula's words inside prose: a quiet recessed chip, not developer docs' type (Riley, test 10, finding 87) */
+.data-page code,
+.api-page p code,
+.api-page li code {
+  padding: 0 4px;
+  background: var(--sheet-2);
+  font-size: 0.84em;
+  white-space: nowrap;
+}
+
+.data-howto-lead {
+  margin: 0 0 var(--sp-3);
+  max-width: 70ch;
+}
+
 .data-metric-form {
   margin-top: var(--sp-6);
 }
@@ -8014,7 +8068,7 @@ label.check {
 
 .screen-chip.on {
   border-color: var(--ink);
-  box-shadow: inset 0 -2px 0 var(--red);
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 .watched-mark {
@@ -8042,6 +8096,19 @@ label.check {
 .watch-glyph {
   color: var(--ink-2);
   flex: none;
+}
+
+/* the unsaved screener's hint that a saved screen can alert: one quiet line, no box (Riley, test 10, finding 39) */
+.watch-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: 0 0 var(--sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
 }
 
 .watch-what {
@@ -8381,4 +8448,94 @@ label.check {
 /* Compare: a latest quarter older than the others (finding 33) */
 .comps td .unit.older {
   display: block;
+}
+
+/* A term with its reason a tap away (components/Why; Riley, test 10, findings 40 and 47): quiet, a dotted
+   underline like a definition, the reason on its own line under it when open. Never a colour. */
+.why-term {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted var(--ink-3);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.why-term:hover,
+.why.open .why-term {
+  color: var(--ink);
+}
+
+.why-text {
+  display: block;
+  max-width: 62ch;
+  margin-top: 2px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.co-meta .why.open {
+  flex-basis: 100%;
+}
+
+.t.screen .co-conf {
+  color: var(--ink-3);
+  white-space: normal;
+}
+
+/* the Filings tab's filters: a row of their own under its heading, in one place whatever is chosen
+   (Riley, test 10, finding 83) */
+.filings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3) var(--sp-5);
+  padding: 0 0 var(--sp-5);
+}
+
+.filings-bar label.row {
+  gap: var(--sp-3);
+}
+
+.insider-filing {
+  white-space: nowrap;
+}
+
+/* a chart's values as a table: the ledger's serif figures, like every other table (Riley, test 10, finding 77) */
+.chart-values tbody th.first {
+  font-family: var(--serif);
+  font-weight: 400;
+}
+
+.chart-values td.n,
+.chart-values td.n button.link {
+  font-family: var(--serif);
+  font-size: var(--fs-md);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* Using the API: its contents up front (Riley, test 10, finding 71), and a code block's copy button on the block
+   (finding 102) */
+.api-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2) var(--sp-6);
+  margin-top: var(--sp-4);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+}
+
+.api-code-wrap {
+  position: relative;
+}
+
+.api-code-wrap .api-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--sheet);
 }

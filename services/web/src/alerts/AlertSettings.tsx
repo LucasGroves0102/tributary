@@ -23,6 +23,7 @@ import {
 } from "../api";
 import { useDirectory } from "../companies/directory";
 import { ErrorPanel, Skeleton } from "../components/States";
+import { toast } from "../components/Toasts";
 import { TableScroll } from "../components/TableScroll";
 import { day, localClock, localDay, localTime } from "../format";
 import { href } from "../route";
@@ -30,6 +31,11 @@ import type { AlertForm, AlertSettings, Webhook, WebhookDelivery, WebhookFormat 
 import { deliveryText, FORM_WORDS, FORMS, SOURCE_WORDS, stallNote } from "./alerts";
 
 type Load = { state: "loading" } | { state: "ok"; data: AlertSettings } | { state: "off" } | { state: "error"; message: string };
+
+/** "10-K, 10-Q and 8-K" */
+function formsWords(forms: string[]): string {
+  return forms.length <= 1 ? forms.join("") : `${forms.slice(0, -1).join(", ")} and ${forms.at(-1)}`;
+}
 
 const FORMAT_WORDS: Record<WebhookFormat, string> = {
   json: "JSON (signed event)",
@@ -108,7 +114,12 @@ function Companies({ token, settings }: { token: string; settings: AlertSettings
     setForms((m) => ({ ...m, [companyId]: next }));
     setOther((m) => ({ ...m, [companyId]: nextOther }));
     setError(null);
-    putAlertForms(token, companyId, next, offersOther ? nextOther : undefined).catch((e) => {
+    putAlertForms(token, companyId, next, offersOther ? nextOther : undefined).then(() => {
+      // a tick saves at once: say so (Riley, test 10, finding 48: it was silent); the latest per company replaces the last
+      const name = directory.label(companyId);
+      toast({ text: next.length ? `Saved: ${name} alerts on ${formsWords(next)}${offersOther && nextOther && next.includes("8-K") ? ", 7.01 and 8.01 included" : ""}.`
+        : `Saved: no alerts for ${name}.`, topic: `alert-forms-${companyId}` });
+    }, (e) => {
       setForms((m) => ({ ...m, [companyId]: before.forms }));
       setOther((m) => ({ ...m, [companyId]: before.other }));
       setError(`Couldn't save that: ${failureReason(e)}.`);

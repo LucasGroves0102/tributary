@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
-import { ApiError, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
+import { ApiError, apiKeys, connectedApps, demoUsers, login, me as fetchMe, watchlistCsv } from "./api";
 import { useAlertsUnread } from "./alerts/useAlerts";
 import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
@@ -14,7 +14,7 @@ import { useAssistant } from "./assistant/useAssistant";
 import { useUiActions } from "./assistant/useUiActions";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { NotInDemo } from "./components/NotInDemo";
-import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany } from "./components/Palette";
+import { Palette, WATCH_PREFIX, type PaletteActions, type PaletteCompany, type PalettePlace } from "./components/Palette";
 import { ShortcutSheet } from "./components/ShortcutSheet";
 import { Sidebar } from "./components/Sidebar";
 import { Skeleton } from "./components/States";
@@ -50,7 +50,7 @@ import {
 } from "./pages/lazy";
 import { readableCount, Welcome } from "./pages/Welcome";
 import { loadPending, savePending } from "./connect/connect";
-import { go, href, pageOf, parse, useRoute } from "./route";
+import { go, href, pageOf, parse, useRoute, type Route } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
 import { inScope, ScopeContext, scopeOf } from "./scope";
@@ -80,7 +80,7 @@ import { SaveBar } from "./workspaces/SaveBar";
 import { useSaved } from "./workspaces/useSaved";
 import { WorkspaceTree } from "./workspaces/WorkspaceTree";
 import { useWatches } from "./watches/useWatches";
-import { SavedScreens, WatchControl } from "./watches/WatchControl";
+import { SavedScreens, WatchControl, WatchHint } from "./watches/WatchControl";
 import { ConfirmDelete, UndoDeletes } from "./workspaces/Actions";
 
 /** What ending a demo loses, asked first (Riley, test 10, finding 17: one click lost it all). */
@@ -457,7 +457,10 @@ export function App(props: Props = {}) {
   const exportWatchlist = useCallback(() => {
     if (!token) return;
     watchlistCsv(token, views.watchlistColumns)
-      .then((blob) => download("watchlist.csv", blob))
+      .then((blob) => {
+        download("watchlist.csv", blob);
+        toast({ text: "Exported your watchlist to watchlist.csv.", topic: "watchlist-csv" });
+      })
       .catch(() => setError("Couldn't export the watchlist. Try again."));
   }, [token, views.watchlistColumns]);
 
@@ -605,6 +608,48 @@ export function App(props: Props = {}) {
     [workspace, focusAssistant, assistant, toggleTheme, exportWatchlist, token, chartMany, scope],
   );
 
+  // the account's API keys and connected apps, as the palette offers them: asked once the palette first
+  // opens, and only offered where the API allows them (it decides who may hold keys, never the session kind)
+  const [account, setAccount] = useState<{ token: string; keys: boolean; apps: boolean } | null>(null);
+  useEffect(() => {
+    if (palette === null || !token || account?.token === token) return;
+    let live = true;
+    void Promise.all([
+      apiKeys(token).then((k) => !!k?.allowed, () => false),
+      connectedApps(token).then((c) => !!c?.allowed, () => false),
+    ]).then(([keys, apps]) => live && setAccount({ token, keys, apps }));
+    return () => {
+      live = false;
+    };
+  }, [palette, token, account]);
+  // pages beyond the nav's screens, saved screens and the account's sections, found by what they do
+  // (Riley, test 10, finding 37: "alert", "screen", "watch" and "api" found none of them)
+  const places = useMemo((): PalettePlace[] => {
+    const at = (r: Route) => () => go(r);
+    const settingsAt = (id: string) => () => {
+      go({ view: "settings" });
+      scrollWhenShown(id);
+    };
+    const screens = saved.list.state === "ok"
+      ? saved.list.workspaces.flatMap((w) => w.items.filter((i) => i.kind === "screen"))
+      : [];
+    return [
+      { key: "alerts", label: "Alerts", sub: "page: new filings and screen alerts", words: "alert notifications bell", run: at({ view: "alerts" }) },
+      { key: "settings", label: "Settings", sub: "page: filing alerts, webhooks", words: "alerts webhook webhooks preferences email", run: at({ view: "settings" }) },
+      { key: "api", label: "Using the API", sub: "page: keys, spreadsheets, your AI model", words: "api keys excel google sheets spreadsheet connect ai claude chatgpt mcp script developer", run: at({ view: "api" }) },
+      ...(account?.token === token && account.keys ? [{ key: "keys", label: "API keys", sub: "Settings", words: "api key token", run: settingsAt("api-keys") }] : []),
+      ...(account?.token === token && account.apps ? [{ key: "apps", label: "Connected apps", sub: "Settings", words: "connect ai claude chatgpt mcp oauth", run: settingsAt("connected-apps") }] : []),
+      { key: "status", label: "Data status", sub: "page: freshness and checks", words: "freshness quality checks", run: at({ view: "status" }) },
+      { key: "about", label: "What Tributary covers", sub: "page", words: "about coverage prices", run: at({ view: "about" }) },
+      { key: "search", label: "Search filings", sub: "page: full text", words: "full text", run: at({ view: "search" }) },
+      ...(watching.list ? [{ key: "watch", label: "Watch a screen", sub: "Companies: save a screen, then Watch", words: "alerts screener watched", run: at({ view: "companies" }) }] : []),
+      ...screens.map((i) => ({
+        key: `screen-${i.item_id}`, label: `Screen: ${i.name}`, sub: watching.of(i.item_id) ? "saved screen, watched" : "saved screen",
+        words: "screens saved watch", run: at({ view: "screen", itemId: i.item_id }),
+      })),
+    ];
+  }, [saved.list, watching, account, token]);
+
   // "New chart" empties the builder (and detaches it from a saved chart, so Save can't overwrite
   // it), keeping the draft for one Restore; "Chart builder" in the nav still reopens the draft
   const newChart = () => {
@@ -678,6 +723,7 @@ export function App(props: Props = {}) {
   if (!picker && !token && frontDoor) {
     const connecting = route.view === "connect" || !!loadPending();
     return (
+      <>
       <Welcome
         notice={frontDoor.notice ?? (connecting ? "Sign in to Tributary to connect your app: you'll see what it asks for, and approve it, next." : null)}
         github={frontDoor.github}
@@ -688,6 +734,9 @@ export function App(props: Props = {}) {
           go(pending ? { view: "connect", request: pending } : { view: "home" });
         }}
       />
+      {/* the toasts (End demo's) at the front door's foot too */}
+      <UndoDeletes saved={null} />
+      </>
     );
   }
 
@@ -753,6 +802,8 @@ export function App(props: Props = {}) {
               onYes={() => {
                 setEndingDemo(false);
                 signOut(null);
+                // the front door says it's done (Riley, test 10, finding 107: End demo gave no word)
+                toast({ text: "The demo has ended: its sandbox and what you saved in it are deleted.", topic: "end-demo" });
               }} />
           )}
           {session?.kind === "sandbox" && (
@@ -833,7 +884,7 @@ export function App(props: Props = {}) {
                   <WatchControl token={token} itemId={saved.open.screen!.itemId} name={saved.open.screen!.name}
                     watching={watching} columns={columns} shown={screenCols.map((c) => c.key)}
                     dirty={currentFingerprint({ kind: "screen", screen: route.screen ?? {} }) !== saved.open.screen!.saved} />
-                ) : undefined}
+                ) : !saved.open.screen && watching.list ? () => <WatchHint /> : undefined}
                 columns={screenCols}
                 ownMetrics={ownMetrics}
                 columnPicker={views.editable ? (
@@ -1041,6 +1092,7 @@ export function App(props: Props = {}) {
           watched={watched}
           actions={actions}
           catalogOpen={catalogOpen(me, "financials")}
+          places={places}
           onClose={() => setPalette(null)}
         />
       )}
@@ -1048,6 +1100,13 @@ export function App(props: Props = {}) {
       </DirectoryContext.Provider>
     </ScopeContext.Provider>
   );
+}
+
+/** Scrolls to a section once the page that holds it has drawn it (a Settings section loads its own data). */
+function scrollWhenShown(id: string, tries = 40) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ block: "start" });
+  else if (tries > 0) window.setTimeout(() => scrollWhenShown(id, tries - 1), 100);
 }
 
 /** A palette command's tickers that resolved to nothing (in a sandbox: to none of its own). */

@@ -72,9 +72,9 @@ it("shows Vertiv's backlog with its passages, labelled as read from the text", a
 it("says plainly when the filings state none of it", async () => {
   await render(<TextKpisCard token="t" companyId={NVDA} name="NVIDIA" canRead />);
   const none = container.querySelector(".text-kpis-none")!;
-  expect(none.textContent).toMatch(/^NVIDIA's filings since Nov 22, 2021 don't state a backlog or orders in words/);
+  expect(none.textContent).toBe("NVIDIA's filings since Nov 22, 2021 don't state a backlog or orders in words Tributary reads.");
   // the tagged figure nearest a backlog is on the balance sheet's page (Riley, test 10, finding 27)
-  expect(container.querySelector(".text-kpis-rpo")?.textContent).toContain("remaining performance obligations");
+  expect(container.querySelector(".text-kpis-rpo")?.textContent).toContain("remaining performance obligations, a different measure");
   expect(container.querySelector(".text-kpis-rpo a")?.getAttribute("href")).toBe(`#/company/${NVDA}/statements?kind=bs`);
   expect(container.querySelector("svg")).toBeNull();
 });

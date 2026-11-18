@@ -187,7 +187,7 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
                     {texts.map((t, i) => (
                       <td key={table.columns[i]!.periodEnd} className={t === null ? "n faint" : "n"}
                         title={t === null ? `${partName(k)}: not in this period's figure` : `${partName(k)}, ${table.columns[i]!.label}: ${t}, as ${r.label.toLowerCase()} read it`}>
-                        {t === null ? "·" : paren(t)}
+                        {t === null ? NO_DATA : paren(t)}
                       </td>
                     ))}
                   </tr>
@@ -246,6 +246,7 @@ interface TableProps {
 }
 
 const BALANCE_NOT_TTM = "A balance is a point in time, so it has no trailing twelve months. Quarterly shows every quarter end.";
+const ANNUAL_RANGE = "Annual shows the last ten years; the range is for Quarterly and TTM.";
 
 /** The figures stop before the newest 10-K/10-Q on EDGAR (H9): how far behind, in periods and days,
  * and where to read it meanwhile. No promise of when it catches up: the SEC's data keeps none. */
@@ -363,17 +364,21 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
     load?.state === "ok" && table &&
     download(`${ticker.toLowerCase()}-${kind}-${period}${period !== "a" && range !== "8q" ? `-${range}` : ""}${basis === "calendar" ? "-calendar" : ""}.csv`, new Blob([financialsCsv(load.data.rows, table, req.view)], { type: "text/csv" }));
 
-  const periodWord = period === "a" ? "by year" : period === "ttm" ? "twelve months to each quarter end" : "by quarter";
+  // a balance sheet says why it has no TTM in its margin, not only in a disabled option's hover (Riley, test 10, finding 61)
+  const periodWord = period === "a" ? "by year" : period === "ttm" ? "twelve months to each quarter end"
+    : kind === "bs" ? "at each quarter end (a balance has no twelve months)" : "by quarter";
   return (
     <Folio name="Statement" className="statements"
       line={`${STATEMENTS[kind].label}, ${periodWord}`}
-      aside={`${basis === "calendar" ? "Calendar quarters" : "Fiscal periods"}; ${table?.currency ?? "US dollars"}; derived figures in italic`}>
+      aside={`${basis === "calendar" ? "Calendar" : "Fiscal"} ${period === "a" ? "years" : "quarters"}; ${table?.currency ?? "US dollars"}; derived figures in italic`}>
       <div className="statement-bar">
         <Choices label="Statement" value={kind} set={(k) => set({ kind: k })}
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
         <Choices label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
-        {period !== "a" && <Choices label="Range" value={range} set={(r) => set({ range: r })} options={RANGES} />}
+        {/* Annual keeps the range in place, off, so the bar doesn't move between views (Riley, test 10, finding 79) */}
+        <Choices label="Range" value={range} set={(r) => set({ range: r })} options={RANGES}
+          off={period === "a" ? Object.fromEntries(RANGES.map(([r]) => [r, ANNUAL_RANGE])) : undefined} />
         {/* what the switch does, said where it is (Riley 80: the figures didn't change, only the labels) */}
         <span className="basis-choice" title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change.">
           <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
@@ -414,7 +419,8 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         </p>
       )}
       {bank && load?.state === "ok" && metrics !== STATEMENTS[kind].rows && (
-        <p className="foot bank-note">{name} is a bank, so it is shown with a bank's own lines. {BANK_NOT_SHOWN}</p>
+        // the Overview says what isn't shown; here one sentence, the rest under How to read (Riley, test 10, finding 61)
+        <p className="foot bank-note">{name} is a bank, so it is shown with a bank's own lines.</p>
       )}
       {kind === "bs" && load?.state === "ok" && financeArmNote(companyId, name) && (
         <p className="foot debt-note" role="note">{financeArmNote(companyId, name)}</p>
@@ -439,7 +445,8 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           )
         }
       </Gate>
-      <p className="foot read-first">A figure opens its filing; italic ones are derived, and a negative amount is in parentheses.</p>
+      {/* the period table's blank said in the line under it, not only in the legend (Riley, test 10, finding 57) */}
+      <p className="foot read-first">A figure opens its filing; italic ones are derived, a negative amount is in parentheses, and {NO_DATA} marks a period with no figure.</p>
       <details className="how-to-read">
         <summary>How to read these figures</summary>
         <div className="foot">
@@ -460,6 +467,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           {kind === "cf" && "Outflows (capex, dividends, buybacks) are shown negative, as the cash flow statement prints them; the CSV too. Their XBRL tags carry the amount paid, so the chart builder and screener list them as positive amounts. "}
           {kind === "cf" && "Cash at the start of a period is the end of the period before; the reconciliation checks start + change = end. "}
           {period === "q" && "A marked quarter is far from the quarters beside it, or of the other sign (listed under the table). "}
+          {bank && `${BANK_NOT_SHOWN} `}
           {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
           Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date), the rest are reported. A
           value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. A negative amount is in

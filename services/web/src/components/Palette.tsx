@@ -9,6 +9,11 @@ import { resultTicker } from "./CompanySearch";
 import type { SearchResult } from "../types";
 
 export const WATCH_PREFIX = "watch:";
+/** What else finds a nav screen in the palette ("screener" finds Companies). */
+const NAV_WORDS: Partial<Record<string, string>> = {
+  companies: "screener screen filter", portfolio: "holdings journal positions", data: "datasets upload csv metrics",
+  analysis: "projects thesis model", chart: "charts", compare: "comps peers", ask: "assistant question",
+};
 const MAX_ITEMS = 9;
 const SEARCH_DELAY_MS = 200;
 /** Companies asked of the API: enough to fill the list, it ranks them. */
@@ -40,10 +45,23 @@ export interface PaletteActions {
   openAssistant: () => void;
 }
 
+/** A place the palette can open beyond the left nav's screens (Riley, test 10, finding 37: "alert",
+ * "screen", "watch", "api" found nothing): Alerts, Settings, Using the API, Data status, saved screens,
+ * and the account's API keys and connected apps where the API offers them. `words` are what else
+ * finds it ("bell" finds Alerts, "excel" Using the API). */
+export interface PalettePlace {
+  key: string;
+  label: string;
+  sub: string;
+  words?: string;
+  run: () => void;
+}
+
 interface Item {
   key: string;
   label: string;
   sub: string;
+  words?: string;
   /** "watch:" on a company already on the watchlist: shown, marked, does nothing */
   already?: boolean;
   run: () => void;
@@ -61,11 +79,13 @@ interface Props {
   /** every company in the catalog is readable: one that isn't has no financials or stored
    * documents here, which isn't a matter of access */
   catalogOpen?: boolean;
+  /** pages and saved work beyond the nav's screens (App builds them) */
+  places?: PalettePlace[];
 }
 
 /** Ctrl/Cmd-K: jump to a company or screen, run an action, or ask the assistant. Prefix the
  * query with "watch:" to add a company to the watchlist instead of opening it. */
-export function Palette({ token, initial, companies, watched, actions, onClose, catalogOpen = false }: Props) {
+export function Palette({ token, initial, companies, watched, actions, onClose, catalogOpen = false, places = [] }: Props) {
   const [q, setQ] = useState(initial);
   const [active, setActive] = useState(0);
   const [remote, setRemote] = useState<SearchResult[]>([]);
@@ -132,12 +152,16 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
       };
     });
     if (watchMode) return [...companyItems.filter((i) => !i.already), ...companyItems.filter((i) => i.already)];
-    const pages: Item[] = NAV.map((n) => ({
-      key: `p-${n.view}`,
-      label: n.label,
-      sub: `page · press g then ${n.key}`,
-      run: () => actions.go(n.view),
-    }));
+    const pages: Item[] = [
+      ...NAV.map((n) => ({
+        key: `p-${n.view}`,
+        label: n.label,
+        sub: `page, g then ${n.key}`,
+        words: NAV_WORDS[n.view],
+        run: () => actions.go(n.view),
+      })),
+      ...places.map((p) => ({ ...p, key: `p-${p.key}` })),
+    ];
     const commands: Item[] = [
       { key: "a-assistant", label: "Open the assistant", sub: "action · Ctrl J", run: actions.openAssistant },
       { key: "a-watch", label: "Add a company to the watchlist", sub: "action", run: () => setQ(WATCH_PREFIX) },
@@ -159,12 +183,12 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
         ? [{ key: "cmd", label: `Compare ${command.tickers.join(", ")}`, sub: `action · ${command.tickers[0]} vs peers`, run: () => actions.compareTickers(command.tickers) }]
         : [{ key: "cmd", label: `Chart ${command.ticker} ${metricLabel(command.metric).toLowerCase()}`, sub: "action · chart builder", run: () => actions.chartTicker(command.ticker, command.metric) }];
     return [...commandItem, ...companyItems, ...pages, ...commands, ...searchItem, ...askItem];
-  }, [companies, remote, watchMode, watched, text, actions, catalogOpen]);
+  }, [companies, remote, watchMode, watched, text, actions, catalogOpen, places]);
 
   const shown = useMemo(() => {
     const needle = text.toLowerCase();
     const match = items.filter(
-      (i) => FIXED.has(i.key) || found.has(i.key) || `${i.label} ${i.sub}`.toLowerCase().includes(needle),
+      (i) => FIXED.has(i.key) || found.has(i.key) || `${i.label} ${i.sub} ${i.words ?? ""}`.toLowerCase().includes(needle),
     );
     // keep "Search filings" and "Ask the assistant" reachable even when other matches fill the
     // list, and a page or action that matches beside a full page of companies; with nothing else

@@ -120,7 +120,7 @@ it("refuses a line without a number or a company it names, before asking the API
 it("shows a watched screen's last check, edits it as saved and stops it", async () => {
   await show(<WatchControl token="t" itemId={ITEM} name="Cheap growers" watching={watching(WATCH)} columns={COLUMNS} shown={[]} dirty />);
   const row = container.querySelector(".watch-row")!.textContent!;
-  expect(row).toContain("Watching companies entering, 1 line");
+  expect(row).toContain("Watching companies entering and Operating margin (TTM) below 20.0%");
   expect(row).toContain("First check done: 37 companies in it now.");
   await click(button("Change…"));
   expect(container.querySelector("[role=note]")?.textContent).toMatch(/unsaved changes/);

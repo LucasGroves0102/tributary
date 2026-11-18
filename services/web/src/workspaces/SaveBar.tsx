@@ -162,7 +162,11 @@ function SaveForm({
     setBusy(true);
     setError(null);
     try {
-      await saved.saveAs(current, name, target);
+      const item = await saved.saveAs(current, name, target);
+      // a workspace the save made says so (Riley, test 10, finding 43: "Screens" appeared in the sidebar unannounced)
+      if (item.madeWorkspace) {
+        toast({ text: `Saved “${item.name}” in a new workspace, ${item.workspace_name}: it's in the sidebar.`, topic: `saved-${current.kind}` });
+      }
       onDone();
     } catch (err) {
       setError(`Couldn't save: ${message(err)}.`);
@@ -174,7 +178,9 @@ function SaveForm({
   return (
     <form className="save-form card" onSubmit={(e) => void submit(e)} aria-label={`Save ${KIND_LABELS[current.kind].toLowerCase()}`}>
       <label htmlFor={`${id}-name`}>Name</label>
-      <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus />
+      {/* the suggestion is selected, so typing replaces it (Riley, test 10, finding 45) */}
+      <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus
+        onFocus={(e) => e.currentTarget.select()} />
       <label htmlFor={`${id}-ws`}>Workspace</label>
       <select id={`${id}-ws`} className="field" value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
         {list.map((w) => (
@@ -186,7 +192,7 @@ function SaveForm({
       </select>
       {workspace === NEW && (
         <>
-          <label htmlFor={`${id}-new`}>New workspace</label>
+          <label htmlFor={`${id}-new`}>The new workspace's name</label>
           <input
             id={`${id}-new`}
             className="field"

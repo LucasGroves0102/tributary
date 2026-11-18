@@ -5,13 +5,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { failureReason, portfolio as fetchPortfolio } from "../api";
+import { failureReason, portfolio as fetchPortfolio, putHoldingLink } from "../api";
 import { useDirectory } from "../companies/directory";
 import { Folio } from "../components/Folio";
 import { FormMark } from "../components/FormMark";
 import { MenuButton } from "../components/MenuButton";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
+import { toast } from "../components/Toasts";
 import { day, pct } from "../format";
 import { go, href } from "../route";
 import type { Holding, Portfolio } from "../types";
@@ -93,7 +94,7 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
         }} />
       )}
       {!data.holdings.length ? (
-        <Empty onAdd={() => setAdding(true)} />
+        <Empty />
       ) : (
         <>
           <Folio name="Holdings" lead
@@ -119,7 +120,7 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
                 {data.reviews_due === 1 ? "One holding has" : `${data.reviews_due} holdings have`} a new report since your last review (a 10-K or 10-Q, or results in an 8-K).
               </p>
             )}
-            <HoldingsTable token={token} rows={open} data={data} name={name} />
+            <HoldingsTable token={token} rows={open} data={data} name={name} onChanged={onChanged} />
           </Folio>
           {closed.length > 0 && (
             <Folio name="Closed" line="Sold in full">
@@ -149,28 +150,47 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
   );
 }
 
-function Empty({ onAdd }: { onAdd: () => void }) {
+/** An empty portfolio: one line and one action, how it works folded (Riley, test 10, findings 97 and 106: the
+ * heading and Add a holding twice, and 90 words before the first action). Add a holding is the page bar's. */
+function Empty() {
   return (
-    <Folio name="Portfolio" lead line="What you own, and why">
-      <div className="portfolio-empty">
-        <p className="story">Track what you own against the research behind it, and keep a journal that holds you to your reasons.</p>
-        <ul className="portfolio-how">
+    <div className="portfolio-empty">
+      <p className="empty-line">No holdings yet. Track what you own against the research behind it: add one, or import Fidelity's positions file.</p>
+      <a className="btn" href={href({ view: "portfolio", import: true })}>Import from Fidelity</a>
+      <details className="how-to-read">
+        <summary>How the portfolio works</summary>
+        <ul className="portfolio-how foot">
           <li><b>Add a holding</b> by hand: a company, the shares, what you paid and when.</li>
           <li><b>Import from Fidelity</b>: its Portfolio Positions CSV. You see every row before anything is saved; account numbers are dropped as the file is read.</li>
           <li><b>Write down why</b>, and what would make you sell. After 24 hours an entry is kept as written; a change is a correction beside it.</li>
           <li><b>Review after each report</b>: when a company you hold files a 10-K or 10-Q, or reports results in an 8-K, a review falls due on the Alerts bell.</li>
         </ul>
-        <p className="faint small">{NOT_ADVICE} Funds and ETFs are kept by symbol and cost: Tributary covers companies' filings.</p>
-        <div className="row">
-          <button className="btn primary" onClick={onAdd}>Add a holding</button>
-          <a className="btn" href={href({ view: "portfolio", import: true })}>Import from Fidelity</a>
-        </div>
-      </div>
-    </Folio>
+        <p className="foot">{NOT_ADVICE} Funds and ETFs are kept by symbol and cost: Tributary covers companies' filings.</p>
+      </details>
+    </div>
   );
 }
 
-function HoldingsTable({ rows, data, name }: { token: string; rows: Holding[]; data: Portfolio; name: (h: Holding) => string }) {
+/** The Research cell of a holding with nothing linked: a picker of the user's analyses and theses of the
+ * company, or a way to start one (Riley, test 10, finding 51: "Link a thesis" only opened the holding). */
+function LinkResearch({ token, h, onChanged }: { token: string; h: Holding; onChanged: () => void }) {
+  if (!h.candidates.length) {
+    return h.company_id ? <a className="faint" href={href({ view: "analysis", start: h.company_id })}>Start an analysis</a> : <span className="faint">—</span>;
+  }
+  const link = (c: Holding["candidates"][number]) => {
+    putHoldingLink(token, h.id, c.kind === "project" ? { project_id: c.id } : { thesis_item_id: c.id })
+      .then(() => {
+        toast({ text: `Linked ${c.kind === "project" ? "the analysis" : "the thesis"} “${c.name}”.`, topic: `link-${h.id}` });
+        onChanged();
+      }, (e) => toast({ text: `Couldn't link it: ${failureReason(e)}.`, error: true, topic: `link-${h.id}` }));
+  };
+  return (
+    <MenuButton label="Link…" className="btn sm more-btn" count={false} align="start" title="The analysis or thesis this holding rests on"
+      items={h.candidates.map((c) => ({ label: `${c.kind === "project" ? "Analysis" : "Thesis"}: ${c.name}`, onSelect: () => link(c) }))} />
+  );
+}
+
+function HoldingsTable({ token, rows, data, name, onChanged }: { token: string; rows: Holding[]; data: Portfolio; name: (h: Holding) => string; onChanged: () => void }) {
   if (!rows.length) return <p className="empty">Nothing open: every holding has been sold.</p>;
   return (
     <TableScroll label="Your holdings">
@@ -228,7 +248,7 @@ function HoldingsTable({ rows, data, name }: { token: string; rows: Holding[]; d
                   <a href={h.link.kind === "project" ? href({ view: "analysis", projectId: h.link.id }) : href({ view: "thesis", itemId: h.link.id })}>
                     {h.link.name}
                   </a>
-                ) : h.covered ? <a className="faint" href={href({ view: "portfolio", holdingId: h.id })}>Link a thesis</a> : <span className="faint">—</span>}
+                ) : h.covered ? <LinkResearch token={token} h={h} onChanged={onChanged} /> : <span className="faint">—</span>}
               </td>
             </tr>
           ))}

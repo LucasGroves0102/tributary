@@ -269,9 +269,15 @@ export function suggestName(c: Current, label: (companyId: string) => string): s
     const s = cleanCompare(c.compare);
     return s.target ? `${label(s.target)} comps`.slice(0, ITEM_NAME_MAX) : "Comps";
   }
-  // a name, not the whole filter sentence (Riley 66): the first few words of it, cut at a word
+  // a name, not the whole filter sentence (Riley 66): its first whole filters, never cut mid-filter with "…"
+  // (Riley, test 10, finding 45: "Sector Technology, revenue $10B to…")
   const what = isEmpty(c.screen) ? "All companies" : describe(c.screen);
-  const short = what.length <= SCREEN_NAME ? what : `${what.slice(0, what.lastIndexOf(" ", SCREEN_NAME)).replace(/[,;:]$/, "")}…`;
+  const clauses = what.split(", ");
+  let short = clauses[0]!;
+  for (const next of clauses.slice(1)) {
+    if (`${short}, ${next}`.length > SCREEN_NAME) break;
+    short = `${short}, ${next}`;
+  }
   return (short.charAt(0).toUpperCase() + short.slice(1)).slice(0, ITEM_NAME_MAX);
 }
 

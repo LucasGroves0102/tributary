@@ -179,7 +179,7 @@ function PriceForm({ token, h, portfolio, onChanged }: { token: string; h: Holdi
       </label>
       <label className="pf-field">
         <span>On</span>
-        <input type="date" value={on} max={today()} onChange={(e) => setOn(e.target.value)} />
+        <input type="date" className="field" value={on} max={today()} onChange={(e) => setOn(e.target.value)} />
       </label>
       <button className="btn" type="submit" disabled={busy}>Save price</button>
       {h.price && h.price.source !== "provider" && (
@@ -226,7 +226,7 @@ function ResearchLink({ token, h, onChanged }: { token: string; h: Holding; onCh
         <label className="pf-field">
           <span>Linked to</span>
           <select value={value} onChange={(e) => void change(e.target.value)}>
-            <option value="">Nothing</option>
+            <option value="">Not linked yet: choose one</option>
             {options.map((c) => (
               <option key={`${c.kind}:${c.id}`} value={`${c.kind}:${c.id}`}>{c.kind === "project" ? "Analysis" : "Thesis"}: {c.name}</option>
             ))}
@@ -374,7 +374,7 @@ function TradeForm({ kind, token, h, onDone, onCancel }: { kind: "buy" | "sell";
       </label>
       <label className="pf-field">
         <span>{kind === "buy" ? "Bought on" : "Sold on"}</span>
-        <input type="date" value={on} max={today()} onChange={(e) => setOn(e.target.value)} />
+        <input type="date" className="field" value={on} max={today()} onChange={(e) => setOn(e.target.value)} />
       </label>
       {kind === "buy" && (
         <label className="pf-field">

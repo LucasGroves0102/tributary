@@ -226,7 +226,7 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
           <p>
             <Seal />
             <span>
-              Sealed: taken from the {[...sources].slice(0, 2).join(" and the ")}
+              Sealed: stated as shown in the {[...sources].slice(0, 2).join(" and the ")}
               {sources.size > 2 ? ` and ${sources.size - 2} more` : ""}. A seal opens the filing at its statements.
             </span>
           </p>
@@ -234,7 +234,7 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
         {computed && (
           <p className="computed-note">
             <span className="seal-slot" aria-hidden="true" />
-            <span>No seal: worked out from the filings (a ratio, a difference, or four quarters added up). Hover a figure for how.</span>
+            <span>No seal: worked out from the filings (four quarters added up, a ratio or a difference). Hover or tap one for how.</span>
           </p>
         )}
         {flagged.map((f) => (
@@ -268,7 +268,8 @@ function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: Sta
         {s.label}
         {differs && <span className="when">{s.period}</span>}
       </dt>
-      <dd className={classes} title={link ? undefined : title}>
+      {/* a computed figure's how opens on focus too (a tap, Tab), not only a mouse's hover (Riley, test 10, finding 55) */}
+      <dd className={classes} title={link ? undefined : title} tabIndex={how ? 0 : undefined}>
         <span className="figure">{isAmount(s) ? paren(s.text) : s.text}</span>
         {link ? (
           <SealLink href={link} label={`${s.label}: taken from ${taken}`} source={title} />

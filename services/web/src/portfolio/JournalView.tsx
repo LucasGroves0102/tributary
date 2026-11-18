@@ -141,7 +141,9 @@ function Entry({ token, e, correction = false, onCorrect, onEdit, onChanged }: {
         </div>
       )}
       <footer className="entry-foot faint small">
-        <span title={editWords(e)}>Written {localTime(e.created_at, true)}{e.edited_at ? ", edited" : ""}{e.kept ? "; kept as written" : ""}</span>
+        <span>Written {localTime(e.created_at, true)}{e.edited_at ? ", edited" : ""}{e.kept ? "; kept as written" : ""}</span>
+        {/* the edit window in view, not only a hover (Riley, test 10, finding 49) */}
+        {!e.kept && <span className="entry-window">{editWords(e)}</span>}
         {e.kept ? (
           !correction && <button className="btn sm ghost" onClick={onCorrect}>Correct</button>
         ) : (
@@ -230,7 +232,7 @@ function EntryForm({ token, subject, start, onCancel, onSaved, monitor }: {
         </label>
         <label className="pf-field">
           <span>Decided on</span>
-          <input type="date" value={decided} max={today()} onChange={(e) => setDecided(e.target.value)} />
+          <input type="date" className="field" value={decided} max={today()} onChange={(e) => setDecided(e.target.value)} />
         </label>
         <div className="pf-field">
           <span id="pf-conf">Confidence</span>
@@ -281,6 +283,14 @@ function EntryForm({ token, subject, start, onCancel, onSaved, monitor }: {
   );
 }
 
+/** A long entry cut at a word, never mid-word ("gross margin f…": Riley, test 10, finding 49). */
+export function snip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max + 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > max * 0.6 ? cut.slice(0, at) : text.slice(0, max)).replace(/[\s,;:.]+$/, "")}…`;
+}
+
 /** The portfolio page's latest entries across holdings, each linking to its holding. */
 export function RecentEntries({ token, holdings, name, label }: {
   token: string;
@@ -303,7 +313,7 @@ export function RecentEntries({ token, holdings, name, label }: {
             <span className="entry-day">{day(e.decided_on, true)}</span>
             <b>{e.corrects ? "Correction" : KIND_WORDS[e.kind]}</b>
             {h ? <a href={href({ view: "portfolio", holdingId: h.id })}>{name(h)}</a> : <span>{e.company_id ? label(e.company_id) : e.symbol}</span>}
-            <span className="journal-snip">{e.why.length > 140 ? `${e.why.slice(0, 140)}…` : e.why}</span>
+            <span className="journal-snip">{snip(e.why, 140)}</span>
           </li>
         );
       })}

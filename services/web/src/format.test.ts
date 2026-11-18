@@ -3,10 +3,21 @@ import { describe, expect, it } from "vitest";
 import { ago, change, companyName, day, displayNames, duration, inWords, localClock, localTime, money, moneyRow, paren, pct, quarter } from "./format";
 
 describe("moneyRow", () => {
-  it("reads a row in the largest value's unit", () => {
-    expect(moneyRow([54740, 963570, 2430000])).toEqual(["$0.05M", "$0.96M", "$2.43M"]);
-    expect(moneyRow([897e6, 1.04e9, null])).toEqual(["$0.90B", "$1.04B", null]);
-    expect(moneyRow([-198360, 2430000])).toEqual(["-$0.20M", "$2.43M"]);
+  it("reads a row in one unit: the largest value's, or the next smaller one when a value would read under one", () => {
+    expect(moneyRow([2.1e6, 4.1e6])).toEqual(["$2.10M", "$4.10M"]);
+    expect(moneyRow([46.7e9, 215.9e9])).toEqual(["$46.7B", "$215.9B"]);
+    // Riley, test 10, finding 80: CrowdStrike's early years read $0.12B beside $3.96B
+    expect(moneyRow([119e6, 249.8e6, 3.955e9])).toEqual(["$119M", "$250M", "$3,955M"]);
+    expect(moneyRow([54740, 963570, 2430000])).toEqual(["$55K", "$964K", "$2,430K"]);
+    expect(moneyRow([897e6, 1.04e9, null])).toEqual(["$897M", "$1,040M", null]);
+    expect(moneyRow([-198360, 2430000])).toEqual(["-$198K", "$2,430K"]);
+    // the largest wouldn't fit four digits of the smaller unit: the larger stays
+    expect(moneyRow([0.5e9, 12.3e9])).toEqual(["$0.50B", "$12.30B"]);
+  });
+
+  it("groups thousands (Riley, test 10, finding 85)", () => {
+    expect(money(1743.84, "USD/shares")).toBe("$1,743.84");
+    expect(money(4.2e15, "USD")).toBe("$4,200T");
   });
 
   it("never rounds a real figure to nothing", () => {

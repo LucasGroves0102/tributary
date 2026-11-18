@@ -107,12 +107,14 @@ describe("callouts (F5, #106, #112)", () => {
 
   it("say what the figure is next to, in the statement's sign, and where to read why", () => {
     expect(calloutText(DIVIDENDS, "Dividends paid", "FY2027 Q2", -1)).toBe(
-      "Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it (-$242.0M and -$243.0M). The filing says why.");
+      "Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it, -$242.0M and -$243.0M. The filing says why.");
     const seasonal = { ...DIVIDENDS, edge: false, seasonal: true, factor: 6.4 };
     expect(calloutText(seasonal, "Operating cash flow", "FY2026 Q3")).toContain("6.4 times the quarters either side");
     expect(calloutText(seasonal, "Operating cash flow", "FY2026 Q3")).toContain("it's the company's pattern");
     const lines = calloutLines(table(cashflow(), [DIVIDENDS]));
     expect(lines).toHaveLength(1);
+    // the list writes a negative as the table does (Riley, test 10, finding 81); the hover keeps the sign
+    expect(lines[0]!.text).toContain("($6.05B), 25 times the two quarters before it, ($242.0M) and ($243.0M).");
     expect(lines[0]!.cells[0]!.cell.source).toMatchObject({ form: "10-Q" });
   });
 
@@ -128,7 +130,7 @@ describe("callouts (F5, #106, #112)", () => {
     const lines = calloutLines(t);
     expect(lines).toHaveLength(1);
     expect(flips.length).toBeGreaterThanOrEqual(SWING);
-    expect(lines[0]!.text).toBe("Net cash from operating activities changes sign in 4 of these 6 quarters, from -$211.8B to $119.7B: read any one quarter with the ones beside it.");
+    expect(lines[0]!.text).toBe("Net cash from operating activities changes sign in 4 of these 6 quarters, from ($211.8B) to $119.7B: read any one quarter with the ones beside it.");
     expect(lines[0]!.cells).toHaveLength(4);
   });
 });

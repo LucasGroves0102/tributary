@@ -9,6 +9,7 @@ import { failureReason, insiderFilings } from "../api";
 import { day } from "../format";
 import type { Load } from "./useLoad";
 import { TableScroll } from "../components/TableScroll";
+import { FormMark } from "../components/FormMark";
 import type { InsiderFiling, InsiderFilings } from "../types";
 import { ownersFiled, ownersText, priceText, sharesText, signedShares, transactions, valueText } from "./insiders";
 
@@ -54,8 +55,8 @@ export function InsiderTable({ load, token, companyId }: { load: Load<InsiderFil
       <div className="card-h wrap">
         <h2>Insider transactions</h2>
         <span className="sub">
-          Forms 3, 4 and 5 as filed with the SEC · {filings.length}
-          {hasMore ? " most recent" : ""} {filings.length === 1 ? "filing" : "filings"} · newest trade first
+          Forms 3, 4 and 5 as filed with the SEC: the {filings.length}
+          {hasMore ? " most recent" : ""} {filings.length === 1 ? "filing" : "filings"}, newest trade first
         </span>
       </div>
       {rows.length === 0 ? (
@@ -86,17 +87,18 @@ export function InsiderTable({ load, token, companyId }: { load: Load<InsiderFil
                   <td className="muted">{l.transaction_date ? day(l.transaction_date, true) : "—"}</td>
                   <td title={l.code ? `Code ${l.code}${l.derivative ? ", a derivative security" : ""}` : undefined}>
                     {l.code_label ?? l.code ?? "—"}
-                    {l.derivative && <span className="faint small"> · {l.security_title ?? "derivative"}</span>}
-                    {l.direct_indirect === "I" && <span className="faint small"> · {l.nature ?? "indirect"}</span>}
-                    {f.aff10b5_one && l.code === "S" && <span className="faint small" title="The filing says the trade was under a Rule 10b5-1 plan"> · 10b5-1 plan</span>}
+                    {l.derivative && <span className="faint small">, {l.security_title ?? "derivative"}</span>}
+                    {l.direct_indirect === "I" && <span className="faint small">, {(l.nature ?? "indirect").replace(/^By /, "by ")}</span>}
+                    {f.aff10b5_one && l.code === "S" && <span className="faint small" title="The filing says the trade was under a Rule 10b5-1 plan">, 10b5-1 plan</span>}
                   </td>
                   <td className={`n ${l.acquired_disposed === "D" ? "neg" : l.acquired_disposed === "A" ? "pos" : ""}`}>{signedShares(l)}</td>
                   <td className="n">{priceText(l.price)}</td>
                   <td className="n">{valueText(l.value)}</td>
                   <td className="n muted">{sharesText(l.shares_after)}</td>
                   <td>
-                    <a href={f.citation.filing_url} target="_blank" rel="noopener noreferrer" title={f.accession_no}>
-                      {f.form} {day(f.filed, true)} ↗
+                    {/* the form as a form mark, not a number glued to the date (Riley, test 10, finding 83: "4 Nov 6, 2026") */}
+                    <a className="insider-filing" href={f.citation.filing_url} target="_blank" rel="noopener noreferrer" title={`Form ${f.form} on EDGAR, accession ${f.accession_no}`}>
+                      <FormMark form={f.form} title={null} /> {day(f.filed, true)} ↗
                     </a>
                   </td>
                 </tr>

@@ -217,7 +217,7 @@ test("a saved screen watched: entering, leaving and a line; marked; its alerts l
   await expect(strip.locator(".watch-reads")).toHaveText("Alerts when a company's Operating margin (TTM) falls below 15.0%");
   await page.screenshot({ path: test.info().outputPath("watch-form.png") });
   await strip.getByRole("button", { name: "Start watching" }).click();
-  await expect(strip.locator(".watch-row")).toContainText("Watching companies entering, companies leaving, 1 line");
+  await expect(strip.locator(".watch-row")).toContainText("Watching companies entering, companies leaving and Operating margin (TTM) below 15.0%");
   const watch = fake.watches.get(String(item.item_id))!;
   expect(watch.lines).toEqual([{ column: "operating_margin_ttm", label: "Operating margin (TTM)", direction: "below", threshold: "0.15", company_id: null }]);
   expect(watch.columns).toEqual(expect.arrayContaining(["revenue_ttm", "operating_margin_ttm"]));
@@ -719,7 +719,7 @@ test("portfolio: a Fidelity export previewed then added, a holding by hand, and 
   const fake = await mockApi(page);
   await startDemo(page);
   await page.goto("/#/portfolio");
-  await expect(page.locator(".portfolio-empty")).toContainText("Track what you own against the research behind it");
+  await expect(page.locator(".portfolio-empty")).toContainText("No holdings yet. Track what you own against the research behind it");
 
   // the import: a preview first, nothing saved until Add; a missing cost is typed
   await page.getByRole("link", { name: "Import from Fidelity" }).click();
@@ -746,8 +746,8 @@ test("portfolio: a Fidelity export previewed then added, a holding by hand, and 
   await page.getByRole("button", { name: "Add a holding" }).click();
   await page.getByRole("radio", { name: "A fund or ETF" }).click();
   await page.getByPlaceholder("VOO").fill("SCHD");
-  await page.getByPlaceholder("2.5").fill("3");
-  await page.getByPlaceholder("250.00").fill("81.00");
+  await page.getByPlaceholder("e.g. 10").fill("3");
+  await page.getByPlaceholder("e.g. 1,250.00").fill("81.00");
   await page.getByPlaceholder("What you expect, and why now").fill("Dividend income while I learn.");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(table).toHaveCount(4);

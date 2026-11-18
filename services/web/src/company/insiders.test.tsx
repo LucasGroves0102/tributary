@@ -39,7 +39,7 @@ it("#117: the insider table, and an older API's 404 says so instead of failing",
   const first = [...container.querySelectorAll("tbody tr")].find((r) => r.textContent?.includes("Kress Colette"))!;
   const cells = [...first.querySelectorAll("td")].map((td) => td.textContent);
   // the day's first sale in filing order: 4,681 shares at $218.0144
-  expect(cells.slice(1, 7)).toEqual(["Sep 17, 2026", "Open-market sale · 10b5-1 plan", "-4,681", "$218.01", "$1.02M", "795,340"]);
+  expect(cells.slice(1, 7)).toEqual(["Sep 17, 2026", "Open-market sale, 10b5-1 plan", "-4,681", "$218.01", "$1.02M", "795,340"]);
   expect(first.querySelector("a")?.getAttribute("href")).toBe("https://www.sec.gov/Archives/edgar/data/1045810/000158867026000014/");
   await act(async () => root.render(<InsiderTable load={{ state: "ok", data: null }} />));
   expect(container.textContent).toContain("aren't available on this server yet");

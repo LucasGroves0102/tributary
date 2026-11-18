@@ -458,6 +458,13 @@ describe("navigation", () => {
     await key("g");
     await key("h");
     expect(window.location.hash).toBe("#/");
+    // g p is Portfolio, g n Analysis (Riley, test 10, finding 70)
+    await key("g");
+    await key("p");
+    expect(window.location.hash).toBe("#/portfolio");
+    await key("g");
+    await key("n");
+    expect(window.location.hash).toBe("#/analysis");
   });
 
   it("opens the palette with Ctrl K, filters it and runs the chosen item", async () => {

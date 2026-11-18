@@ -383,6 +383,16 @@ h1.co-name {
   background: var(--rule);
 }
 
+/* a destructive choice (Delete…): after a rule, in the error ink (Riley, test 10, finding 105) */
+.menu-item.danger {
+  color: var(--error);
+}
+
+.menu-item.danger[data-highlighted] {
+  background: var(--error-soft);
+  box-shadow: inset 2px 0 0 var(--error);
+}
+
 /* an option in a menu that stays on or off (components/MenuButton MenuCheck): a square box, ticked */
 .menu-check {
   display: flex;
@@ -426,6 +436,36 @@ h1.co-name {
 @container main (max-width: 600px) {
   h1.co-name {
     font-size: 36px;
+  }
+
+  /* a phone's first screen: the name, its listing and the figures, not the filer category or the CIK
+     (Riley, test 10, finding 94); the tabs stay one row that scrolls sideways instead of wrapping to two */
+  .co-meta .co-minor {
+    display: none;
+  }
+
+  .co-meta {
+    gap: 2px 14px;
+    font-size: var(--fs-sm);
+  }
+
+  .co-acts {
+    margin-top: 12px;
+  }
+
+  .tabs.co-tabs {
+    margin-top: 14px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tabs.co-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabs.co-tabs a {
+    flex: none;
   }
 }
 
@@ -496,7 +536,7 @@ h1.co-name {
   margin: 0;
   min-width: 136px;
   padding-left: 14px;
-  border-left: 1px solid var(--red-rule);
+  border-left: 1px solid var(--col-rule);
   display: flex;
   justify-content: flex-end;
   align-items: center;
@@ -663,7 +703,7 @@ li.event:first-child {
 /* a ledger's column rules, the bottom line double-ruled, the newest period washed */
 .t.ruled td + td,
 .t.ruled th + th {
-  border-left: 1px solid var(--red-rule);
+  border-left: 1px solid var(--col-rule);
 }
 
 .t.ruled td.first {
@@ -820,7 +860,7 @@ li.event:first-child {
 /* the screener: column rules between its figures only, not between the name and the industry */
 .t.ruled-n td.n + td.n,
 .t.ruled-n th.n + th.n {
-  border-left: 1px solid var(--red-rule);
+  border-left: 1px solid var(--col-rule);
 }
 
 /* "How to read these figures": the long notes under a table, folded; one sentence stays in view */
@@ -851,7 +891,7 @@ li.event:first-child {
 
 .how-to-read > summary::before {
   content: "▸";
-  color: var(--red);
+  color: var(--ink-3);
 }
 
 .how-to-read[open] > summary::before {
@@ -920,5 +960,113 @@ li.event:first-child {
   .tip,
   .ws-confirm {
     animation: none;
+  }
+}
+
+/* a computed figure's how, on focus (a tap or Tab) as well as the hover: the dd's own title, drawn by CSS so
+   the cell's text stays the figure (Riley, test 10, finding 55) */
+.ledger dd[tabindex] {
+  position: relative;
+  cursor: help;
+}
+
+.ledger dd[tabindex]:focus {
+  outline: none;
+}
+
+.ledger dd[tabindex]:focus .figure {
+  text-decoration: underline dotted var(--ink-3);
+  text-underline-offset: 3px;
+}
+
+.ledger dd[tabindex]:focus::after {
+  content: attr(title);
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: 36ch;
+  padding: 8px 10px;
+  background: var(--sheet);
+  border: 1px solid var(--rule-2);
+  box-shadow: var(--lift);
+  color: var(--ink-2);
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-line;
+}
+
+/* --- a company tab's sections as the ledger reads them (Riley, test 10, finding 90) ------------------
+
+   Filings, Ratios, Segments, Revenue, Data notes, Peers and Price were bordered cards beside the
+   Overview's and Statements' margin rubrics: two layout systems on one page. A tab's own sections (a
+   card straight under the page) now read as a folio: ruled off, no box, the heading a rubric in the
+   margin with its line under it, the section beside it. A style only: the markup stays the card's. */
+.company-page > section.card {
+  position: relative;
+  min-height: 132px;
+  padding: var(--sp-9) 0 30px calc(var(--rubric-w) + 36px);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.company-page > section.card > .card-h {
+  min-height: 0;
+  padding: 0 0 var(--sp-4);
+  border-bottom: 0;
+}
+
+.company-page > section.card > .card-h:not(:has(> :not(h2, .sub))) {
+  padding: 0;
+}
+
+.company-page > section.card > .card-h > h2 {
+  position: absolute;
+  top: calc(var(--sp-9) + 5px);
+  left: 0;
+  width: var(--rubric-w);
+  text-align: right;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+}
+
+.company-page > section.card > .card-h > .sub {
+  position: absolute;
+  top: calc(var(--sp-9) + 26px);
+  left: 0;
+  width: var(--rubric-w);
+  text-align: right;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--ink-3);
+}
+
+.company-page > section.card > .card-b,
+.company-page > section.card > .foot,
+.company-page > section.card > .empty {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+@container main (max-width: 1100px) {
+  .company-page > section.card {
+    min-height: 0;
+    padding-left: 0;
+  }
+
+  .company-page > section.card > .card-h > h2,
+  .company-page > section.card > .card-h > .sub {
+    position: static;
+    width: auto;
+    text-align: left;
   }
 }

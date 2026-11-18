@@ -6,6 +6,7 @@ import { Choices } from "../components/Choices";
 import { CompanySearch } from "../components/CompanySearch";
 import { toast } from "../components/Toasts";
 import { localTime } from "../format";
+import { href } from "../route";
 import type { ColumnSpec } from "../views/model";
 import type { ScreenWatch } from "../types";
 import type { Watching } from "./useWatches";
@@ -133,16 +134,17 @@ export function WatchControl({ token, itemId, name, watching, columns, shown, di
   return (
     <section className="watch-strip" aria-label={`Alerts for the saved screen ${name}`}>
       <div className="watch-row">
-        <svg className="watch-glyph" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M8 1.5a4 4 0 0 0-4 4v2.6L2.6 11h10.8L12 8.1V5.5a4 4 0 0 0-4-4zM6.3 12.5a1.8 1.8 0 0 0 3.4 0"
-            fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
+        <BellGlyph />
         {watch ? (
           <span className="watch-what">
             <b>Watching</b>{" "}
-            {[watch.entering && "companies entering", watch.leaving && "companies leaving",
-              watch.lines.length > 0 && `${watch.lines.length} ${watch.lines.length === 1 ? "line" : "lines"}`]
-              .filter(Boolean).join(", ")}
+            {/* each line said, not "1 line" (Riley, test 10, finding 46) */}
+            {listWords([watch.entering && "companies entering", watch.leaving && "companies leaving",
+              ...watch.lines.map((l) => {
+                const s = spec(l.column);
+                const who = l.company_id ? `${directory.label(l.company_id)}'s ` : "";
+                return s ? `${who}${lineWords(l, s.kind)}` : `${who}${l.label} ${l.direction} a line`;
+              })].filter((x): x is string => !!x))}
             <span className="faint small">
               {" "}{status}{watch.checked_at ? ` Last checked ${localTime(watch.checked_at)}.` : ""}
             </span>
@@ -160,7 +162,8 @@ export function WatchControl({ token, itemId, name, watching, columns, shown, di
         <div className="watch-form card" id={formId}>
           <p className="muted small">
             Checked once a day, after the nightly figures land, with your access: only companies whose figures you can
-            read count. You hear about it under Alerts and at your webhooks. A value that reads as not meaningful, old or
+            read count. You hear about it under <a href={href({ view: "alerts" })}>Alerts</a> and at your{" "}
+            <a href={href({ view: "settings" })}>webhooks (Settings)</a>. A value that reads as not meaningful, old or
             in another currency never crosses a line.
           </p>
           {dirty && (
@@ -232,6 +235,31 @@ export function WatchControl({ token, itemId, name, watching, columns, shown, di
         </div>
       )}
     </section>
+  );
+}
+
+/** "a, b and c" */
+function listWords(parts: string[]): string {
+  return parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
+/** The unsaved screener's quiet line that a saved screen can be watched (Riley, test 10, finding 39: Watch
+ * appeared only after a save, and nothing hinted that screens alert). Save is the page bar's. */
+export function WatchHint() {
+  return (
+    <p className="watch-strip watch-hint">
+      <BellGlyph />
+      <span className="muted">Save this screen to watch it: you hear when companies enter or leave it, or a value crosses a line.</span>
+    </p>
+  );
+}
+
+function BellGlyph() {
+  return (
+    <svg className="watch-glyph" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1.5a4 4 0 0 0-4 4v2.6L2.6 11h10.8L12 8.1V5.5a4 4 0 0 0-4-4zM6.3 12.5a1.8 1.8 0 0 0 3.4 0"
+        fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }
 
