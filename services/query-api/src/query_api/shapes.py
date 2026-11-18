@@ -37,6 +37,10 @@ PCT_TO_NEGATIVE = "the figure went from positive to negative"
 PCT_SMALL_BASE = "growth of over 1,000% from under $10M earlier"
 # 035's revenue growth bound, the same numbers: over 1,000% from a dollar base under $10M
 SMALL_BASE, SMALL_BASE_GROWTH = Decimal("10000000"), Decimal("10")
+# 155's growth bound, gold.not_meaningful's for revenue, net income and EPS growth: an earlier
+# figure under a fifth of the current one (growth over 400%) is too small a base
+PCT_TINY_BASE = "the earlier figure is under a fifth of this one, too small a base for a percentage"
+TINY_BASE = Decimal("5")
 
 
 def percent_change(current: Decimal, earlier: Decimal, unit: str,
@@ -54,6 +58,9 @@ def percent_change(current: Decimal, earlier: Decimal, unit: str,
       over 1,000% from under $10M (dollar amounts only, 057)  PCT_SMALL_BASE: 035's revenue growth
                               bound for any amount (Riley 45: Pro-Dex's cash +35,533.3%, $33K to
                               $11.76M)
+      earlier under a fifth of current (over +400%), any unit  PCT_TINY_BASE: 155's growth bound
+                              (Avery's review; Morgan, test 11, finding 18: Kennametal's operating
+                              income +909.7%, $37.6M to $379.3M)
 
     A zero now from a positive base stays -100%: a real fall to nothing."""
     if unit in ("ratio", "pure"):
@@ -66,6 +73,8 @@ def percent_change(current: Decimal, earlier: Decimal, unit: str,
         return None, PCT_TO_NEGATIVE
     if unit == "USD" and earlier < SMALL_BASE and current - earlier > SMALL_BASE_GROWTH * earlier:
         return None, PCT_SMALL_BASE
+    if earlier * TINY_BASE < current:
+        return None, PCT_TINY_BASE
     with localcontext() as ctx:
         ctx.prec = 60
         try:

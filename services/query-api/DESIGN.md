@@ -285,8 +285,9 @@ list empty rather than failing the screener.
 **How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
 and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
 margin over 100%, any margin over ±1,000%, growth of over 1,000% from under $10M or from a base under
-$100K, debt over 100 times equity, debt or equity below zero, ROE or payout over ten times, a current
-ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
+$100K, growth over 400% (a year-earlier figure under a fifth of this one, migration 155), a lender's
+gross margin (SIC 6111, 6141, 6153, 6159, 6162: `gold.not_meaningful_for`, 155), debt over 100 times
+equity, debt or equity below zero, ROE or payout over ten times, a current ratio over 100x. `not_applicable` (with `reason`): a bank's gross and operating margin, FCF, FCF margin,
 net debt, cash and investments, debt to equity and current ratio, whether or not a value exists. `old`: more than 300 days
 before the company's `latest_period` (the newest of its revenue, net income and total assets, never a
 future date). `behind`: more than 45. `stale` (migration 069, with `reason`): the company's latest
@@ -357,8 +358,12 @@ the 10-K's per-share facts (036) and its restatement findings, under RLS after `
 
 - **Split-adjusted by default.** A stock split is what the data notes call one (restated shares at a
   clean ratio, EPS at its reciprocal, in one filing); it applies to every figure filed before its first
-  restating filing. Where the company restated a period itself, gold already holds that figure and only
-  later splits apply. NVIDIA's FY2019 EPS $6.63 (filed before the 2021 4-for-1 and the 2024 10-for-1)
+  restating filing. The findings compare quarters, so a 10-K counts too: a year whose weighted shares a
+  later 10-K states at the splits' ratio to its first filing's (`originals`) puts that 10-K on the new
+  basis when it is within 200 days before the findings' first (Morgan, test 11, finding 1: Walmart's
+  FY2022 read $0.54 on 25.25B shares, its 3-for-1 applied twice; the FY2024 10-K of 2024-03-15 already
+  says $1.62 on 8,415M; on hermes 57 of 1,071 splitting companies, 240 annual figures). Where the
+  company restated a period itself, gold already holds that figure and only later splits apply. NVIDIA's FY2019 EPS $6.63 (filed before the 2021 4-for-1 and the 2024 10-for-1)
   reads $0.17; each row keeps `as_filed` and the `splits` applied. `shares=as_filed` gives the filings'
   own figures: each period as the FIRST periodic filing to state it stated it (`gold.per_share_originals`,
   140; Riley, test 10: gold holds the latest filing's figure, so NVIDIA's Jul 2023 quarter read $0.25, the
@@ -422,7 +427,8 @@ report), `prior_quarter` (80-120 days earlier) and `year_ago` (350-380 days), ea
 citation and freshness, and `change` / `pct_change` (6 decimals; null for ratios, where
 `change` is in ratio points). `shapes.percent_change` is the one rule for a percentage change (the
 recap's and alerts'): none from a zero or negative base, nor into a negative figure, nor over 1,000% from
-a dollar base under $10M (035's revenue growth bound: Pro-Dex's cash +35,533.3%, Riley 45), and the recap
+a dollar base under $10M (035's revenue growth bound: Pro-Dex's cash +35,533.3%, Riley 45), nor over
+400% from any base (155: Kennametal's operating income +909.7%, Morgan 18), and the recap
 says why in `pct_not_meaningful` (additive; JPMorgan's operating cash flow from -$25.28B to $33.16B
 read "+231%" by |earlier|, analyst test 4). Values are as currently in gold, so a restated value
 cites the restating filing. With `filings` access, `flags` lists one-time-item keyword matches

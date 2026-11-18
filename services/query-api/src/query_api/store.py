@@ -550,8 +550,11 @@ class Store:
                        calendar_year, calendar_quarter, value, unit, value_source,
                        source_tag, inputs, accession_no, form, filed, source_accessions,
                        ingested_at,
-                       -- 057: the dollar bases only for a company whose amounts are dollars
-                       gold.not_meaningful(metric, value, inputs, NULL, cu.currency)
+                       -- 057: the dollar bases only for a company whose amounts are dollars;
+                       -- 155: first what its kind of company's figures don't make (a lender's
+                       -- gross margin), as gold.reading reads it
+                       coalesce(gold.not_meaningful_for(metric, co.sic),
+                                gold.not_meaningful(metric, value, inputs, NULL, cu.currency))
                            AS not_meaningful,
                        (SELECT f.cik FROM silver.financial_facts f
                         WHERE f.accession_no = q.accession_no LIMIT 1) AS filer_cik
@@ -562,6 +565,7 @@ class Store:
                 ) q
                 CROSS JOIN (SELECT c.unit AS currency
                             FROM gold.amount_currency_of(%(c)s, %(as_of)s) c) cu
+                LEFT JOIN silver.companies co ON co.company_id = %(c)s
                 WHERE row_number <= %(quarters)s
                 ORDER BY metric, period_end DESC
                 """, {"c": company_id, "span": view, "metrics": metrics, "basis": basis,
@@ -644,6 +648,8 @@ class Store:
                 want.add("short_term_investments")
             if "gross_profit" in want or row["source_tag"] == "derived:revenue-cost_of_revenue":
                 want |= {"revenue", "cost_of_revenue"}
+            if row["source_tag"] == "derived:net_sales-cost_of_revenue":  # 155: on net sales
+                want |= {"net_sales", "cost_of_revenue"}
             rows: dict[str, dict] = {}
             if want:
                 cur.execute(self.FIGURE, (company_id, span, sorted(want), period_end))
@@ -1439,7 +1445,10 @@ class Store:
                            max(period_end) AS latest_period_end,
                            (array_agg(accession_no ORDER BY period_end DESC))[1]
                                AS latest_accession,
-                           bool_and(source_tag LIKE 'derived:%%') AS computed
+                           bool_and(source_tag LIKE 'derived:%%') AS computed,
+                           -- 155: gross profit on net sales (Walmart, Costco)
+                           bool_and(source_tag = 'derived:net_sales-cost_of_revenue')
+                               AS on_net_sales
                     FROM gold.quarterly_financials
                     WHERE company_id = ANY(%s) AND value_source = 'derived'
                     GROUP BY company_id, metric

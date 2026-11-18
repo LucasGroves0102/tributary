@@ -600,8 +600,17 @@ def test_financials_say_where_equity_makes_a_ratio_meaningless(conn, token):
         ("net_margin", "1.36", {"revenue": 664e6}, None, None),  # TriMas, a sale
         ("net_margin", "11.6", {"revenue": 72e6}, None, "ten times revenue"),
         ("fcf_margin", "-11", {"revenue": 1e7}, None, "ten times revenue"),
-        ("revenue_growth", "22", {"revenue_year_ago": 803e6}, None, None),  # Moderna
-        ("revenue_growth", "22.3", {"revenue_year_ago": 19e6}, None, None),  # Liquidia
+        # 155 (Avery's review; Morgan 18): over 400%, a year-earlier figure under a fifth of this
+        # one, is n/m on any base: Moderna's 2021 and Liquidia's, figures before
+        ("revenue_growth", "22", {"revenue_year_ago": 803e6}, None, "a fifth"),  # Moderna
+        ("revenue_growth", "22.3", {"revenue_year_ago": 19e6}, None, "a fifth"),  # Liquidia
+        ("revenue_growth", "4", {"revenue_year_ago": 1e9}, None, None),  # 400% exactly: a figure
+        # Kennametal's TTM to Sep 30, 2026 (hermes): revenue +32.5%; net income $590.7M against
+        # $94.3M a year earlier, +526%
+        ("revenue_growth", "0.324805", {"revenue_year_ago": 1982871000}, None, None),
+        ("net_income_growth", "5.263796",
+         {"net_income": 590676000, "net_income_year_ago": 94300000}, None, "under a fifth"),
+        ("eps_growth", "4.5", {}, None, "under a fifth"),
         ("revenue_growth", "22.7", {"revenue_year_ago": 4.9e6}, None, "under $10M"),
         ("revenue_growth", "0.5", {"revenue_year_ago": 5e4}, None, "under $100K"),
         ("revenue_growth", "-1.4", {"revenue_year_ago": 5e8}, None, "negative"),
@@ -1331,3 +1340,49 @@ def test_stale_reads_today_from_the_clock_unless_a_session_pins_it(conn):
     conn.execute("RESET tributary.today")
     want = "stale" if (date.today() - date(2026, 3, 31)).days > 270 else None
     assert conn.execute(sql, (QUARTERS_STOPPED, QUARTERS_STOPPED)).fetchone()[0] == want
+
+
+LENDER, BEHIND_20F = "9200000051", "9200000052"
+
+
+def test_a_lenders_gross_margin_is_not_meaningful(conn, token):
+    """Morgan, test 11, finding 18: Enova (SIC 6141) tags revenue less its credit losses as gross
+    profit, 60.6% (hermes, TTM to Sep 30, 2026): not a gross margin to compare (155,
+    gold.not_meaningful_for). A software company's stays a figure; the statements say the same."""
+    listed(conn, LENDER, "Consumer Lender Co")
+    conn.execute("UPDATE silver.companies SET sic = '6141' WHERE company_id = %s", (LENDER,))
+    reported(conn, LENDER, "revenue", LATEST, 1009172000)
+    derived(conn, LENDER, "gross_margin", LATEST, Decimal("0.605941"),
+            {"revenue": 3652632000, "gross_profit": 2213278000})
+    body = screen(conn, token, columns=["gross_margin_ttm", "revenue_q"], sort="-gross_margin_ttm",
+                  limit=50)
+    lender = row_of(body, "Consumer Lender Co")["readings"]["gross_margin_ttm"]
+    assert lender["status"] == "not_meaningful" and "lender" in lender["reason"]
+    assert conn.execute("SELECT gold.not_meaningful_for('gross_margin', '7372')").fetchone()[0] \
+        is None
+    r = api(conn).get(f"/v1/companies/{LENDER}/financials", headers=token(USER),
+                      params={"view": "ttm", "metrics": ["gross_margin"], "readings": "true"})
+    assert r.status_code == 200, r.text
+    assert "lender" in r.json()["rows"][0]["not_meaningful"]
+
+
+def test_no_report_since_names_the_report_the_figures_lack(conn):
+    """Morgan, test 11, finding 8: TSMC's figures end at Dec 31, 2024 though its 20-F of Apr 16,
+    2026 is on EDGAR (ops.coverage 'figures_behind' on hermes, 2026-11-18): the low mark's reason
+    is Tributary's gap, not "no report since"."""
+    conn.execute("SET LOCAL tributary.today = '2026-11-18'")
+    listed(conn, BEHIND_20F, "Behind Twenty-F Co")
+    sql = "SELECT level, reasons FROM gold.company_confidence(%s, '3674', '2024-12-31')"
+    level, reasons = conn.execute(sql, (BEHIND_20F,)).fetchone()
+    assert level == "low" and "no report since the period ended Dec 31, 2024" in reasons
+    conn.execute(
+        "INSERT INTO ops.coverage (company_id, kind, cause, reason, detail) VALUES"
+        " (%s, 'figures_behind', 'foreign', 'fixable', %s)",
+        (BEHIND_20F, json.dumps({"form": "20-F", "filed": "2026-04-16", "figures_to": "2024-12-31",
+                                 "period_end": "2025-12-31", "in_companyfacts": False,
+                                 "accession_no": "0001628280-26-025362"})))
+    level, reasons = conn.execute(sql, (BEHIND_20F,)).fetchone()
+    assert level == "low"
+    assert not any("no report since" in r for r in reasons)
+    assert ("its figures end with the period ended Dec 31, 2024: its 20-F filed Apr 16, 2026"
+            " isn't in them yet (Tributary's gap, not the company's)") in reasons

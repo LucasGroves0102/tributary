@@ -1149,3 +1149,34 @@ companies in `authz.public_access` (0 while the catalog is closed), aggregate-on
 `ops.public_*`, DEFINER because public_access's policy lets query_api read it only with a user; one count,
 search_path pinned, EXECUTE only `query_api`; the primary key serves it (2 ms on hermes). The status
 route adds it as `coverage.catalog_companies`. CREATE FUNCTION only.
+
+### 155_analyst_fixes_1.sql
+
+Part 1 of the analyst audit (Morgan, test 11): the wrong numbers and the readings around them. Gold
+rules (rules_version 155: the hourly catch-up rebuilds every company in about 14 hours, then the
+'known' history replays):
+- Debt due within a year (`long_term_debt_current`) is what the filing says is due: the filer's own
+  DebtCurrent where it is larger than the current portion of long-term debt; else the portion plus
+  short-term borrowings, else plus commercial paper (Apple's $1,997M of paper was left out of its debt);
+  never a part equal to the portion or up to 10% above it (one line tagged twice, a total holding it).
+  Convertible notes' standard tags are debt lines (Alnylam read no debt). Sample of the 410 largest
+  companies: 105 change at their latest date, total debt a median 5.3%.
+- No debt is evidence, not a missing tag: a long-term debt of zero (`derived:no-debt`) where a periodic
+  filing's balance sheet gives no long-term debt fact (a line, or one of 12 evidence tags: notes
+  payable, senior notes, lines of credit, carrying and fair values, maturities, secured or unsecured
+  debt), no filing in the year before did, no debt cash flow ran in that year, its interest expense or
+  interest paid is at most 0.25% of total assets a year, and the SIC is set and outside 60-67. Interest
+  alone gave 10 false zeros in 25 (Caterpillar, PACCAR and Textron tag debt by segment; Lennar
+  capitalises interest; insurers); the evidence and the year's window leave 13 true ones. Rapid7 and
+  Alnylam (the tester's suspected false positives) tag their convertibles with the standard tags now
+  read as debt; Rapid7's interest (0.6% of assets) would have kept it from a zero anyway.
+- A periodic report's citation over an 8-K or 6-K stating the same value for the same tag and period
+  (17,019 quarters at 806 companies); a recast with another value still wins as the latest (3,654).
+- Gross profit at a SIC 5331 company with net sales (084: Walmart, Costco) is net sales less cost of
+  revenue (`derived:net_sales-cost_of_revenue`), from 2019 under 043's tests: the statements show what
+  Ratios' gross margin is computed from.
+Readings (no bump): `gold.not_meaningful_for(metric, sic)` (a lender's gross margin: SIC 6111, 6141,
+6153, 6159, 6162), read first by `gold.reading` and the Query API's statements; growth over 400% (a
+year-earlier figure under a fifth of this one) is n/m for revenue, net income and EPS growth, as
+`shapes.percent_change` reads any change; `gold.company_confidence`'s "no report since" names the later
+report the figures lack (076's `figures_behind`) as Tributary's gap. Backout: `analyst_fixes_155.sql`.

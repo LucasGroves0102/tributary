@@ -385,7 +385,9 @@ def shape(findings: list[dict], derived: list[dict], behind: list[dict],
                        "first_period_end": _iso(r["first_period_end"]),
                        "latest_period_end": _iso(r["latest_period_end"]),
                        # gross profit that is revenue less cost, not a year-to-date difference (039)
-                       **({"computed": True} if r.get("computed") else {})},
+                       **({"computed": True} if r.get("computed") else {}),
+                       # 155: on net sales (Walmart, Costco)
+                       **({"net_sales": True} if r.get("on_net_sales") else {})},
             "checked_at": None,
             "filings": [cite("source", r["latest_accession"])],
         })

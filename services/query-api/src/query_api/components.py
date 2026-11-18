@@ -12,7 +12,8 @@ What "made of" means, by how gold built the figure (`how`):
 - `ttm`: a trailing twelve months, the four quarters it sums (or the year a 10-K states, 040).
 - `sum`: a reported line a filing tags only as parts (038's silver.metric_sums: a bank's net
   revenue, NVIDIA's marketable securities, contract liabilities current + noncurrent): the parts.
-- `computed`: gross profit where the filing prints none (039): revenue less cost of revenue.
+- `computed`: gross profit where the filing prints none (039): revenue less cost of revenue; at
+  Walmart and Costco net sales less cost of revenue (155).
 - `ytd`: a quarter derived from year-to-date figures (a fiscal Q4 = the 10-K's year less nine
   months): the two facts.
 - `reported`: a figure as tagged.
@@ -58,6 +59,9 @@ ROLES: dict[str, list[tuple[str, str]]] = {
 INVESTMENTS_RULE = frozenset({"net_debt", "cash_and_investments"})
 SAME_PERIOD_DAYS = 7  # a fact starting within a week of gold's start is the same quarter (031)
 COMPUTED = "derived:revenue-cost_of_revenue"
+# 155: gross profit on net sales (Walmart, Costco): its parts, by the computed tag
+COMPUTED_PARTS = {COMPUTED: ("revenue", "cost_of_revenue"),
+                  "derived:net_sales-cost_of_revenue": ("net_sales", "cost_of_revenue")}
 
 
 def how_built(row: dict) -> str:
@@ -66,7 +70,7 @@ def how_built(row: dict) -> str:
         return "ttm"
     if row.get("inputs"):
         return "derived"
-    if tag == COMPUTED:
+    if tag in COMPUTED_PARTS:
         return "computed"
     if "+" in tag:
         return "sum"
@@ -146,8 +150,9 @@ def shape(company_id: str, metric: str, span: str, row: dict, rows: dict[str, di
 
     def parts_of(r: dict) -> list[dict]:
         if how_built(r) == "computed":
+            plus, minus = COMPUTED_PARTS[r.get("source_tag") or COMPUTED]
             return [{**_figure(rows[m]), "role": role} for m, role in
-                    (("revenue", "+"), ("cost_of_revenue", "-")) if m in rows]
+                    ((plus, "+"), (minus, "-")) if m in rows]
         if how_built(r) == "ttm":
             return [{"period_start": q.get("period_start"), "period_end": q.get("period_end"),
                      "value": _num(q.get("value")), "accession_no": q.get("accession_no"),

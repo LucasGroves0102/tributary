@@ -486,8 +486,9 @@ def test_costcos_net_sales_come_from_its_pick_and_its_gross_margin_reads_them(co
 @db
 def test_walmarts_net_sales_are_its_own_tag_and_other_retailers_stay_without_a_gross_margin(conn):
     """084: Walmart's quarter to Jul 31, 2026 (companyfacts, values from hermes): net sales
-    $186,100M of total revenues $187,937M, cost of sales $138,804M: 25.4%. A variety store
-    without net sales read apart keeps 039's rule: no gross profit, no gross margin."""
+    $186,100M of total revenues $187,937M, cost of sales $138,804M: 25.4%, and (155) a gross
+    profit of $47,296M on net sales. A variety store without net sales read apart keeps 039's
+    rule: no gross profit, no gross margin."""
     start, end = "2026-05-01", "2026-07-31"
     other = "0000027419"  # Target's CIK, SIC 5331
     for cid, name in ((WMT, "Walmart Inc."), (other, "Target")):
@@ -504,7 +505,11 @@ def test_walmarts_net_sales_are_its_own_tag_and_other_retailers_stay_without_a_g
     conn.execute("SELECT gold.refresh_financials(%s)", ([WMT, other],))
     assert gold(conn, "revenue", end, WMT)[:2] == (187937 * 10**6, "us-gaap:Revenues")
     assert gold(conn, "net_sales", end, WMT)[:2] == (186100 * 10**6, f"us-gaap:{CONTRACT}")
-    assert gold(conn, "gross_profit", end, WMT) is None  # 039: not computed at 5331
+    # 155: gross profit on net sales where the company reports them (Morgan, test 11, finding 9);
+    # the variety store without them stays without one (039)
+    assert gold(conn, "gross_profit", end, WMT)[:2] == (47296 * 10**6,
+                                                       "derived:net_sales-cost_of_revenue")
+    assert gold(conn, "gross_profit", end, other) is None
     assert margins(conn, WMT, "quarter", end) == [
         ("gross_margin", Decimal("0.254143"), {"net_sales": 186100 * 10**6,
                                                "cost_of_revenue": 138804 * 10**6})]

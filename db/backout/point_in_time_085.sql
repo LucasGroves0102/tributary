@@ -22,7 +22,7 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: none, this is the newest) and this one
+-- nothing, unless every newer backout has run (newest first: analyst_fixes_155.sql) and this one
 -- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
@@ -60,9 +60,11 @@ BEGIN
         ('gold.not_computed(text,text)', 'a1d6b45f36a10d029335de6f30893f96'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '9f4c2cd4aeaefa663263efb806700f5d'),
+        ('gold.not_meaningful_for(text,text)', NULL),
         ('gold.quarterly_recent(text,date)', NULL),
         ('gold.quarterly_recent(text,date,date)', 'b7e20593a6dc7b936c9a138a15fb0951'),
         ('gold.quarterly_rows(text[],date)', '58f05bc5ff7d5f1f6bce48ec05d1201a'),
+        ('gold.reading(text,text,text,date,date,numeric,jsonb,text,text,numeric,text,boolean)', '419a0e26e3d341c59e38aa3b5be6dbc7'),
         ('gold.rebuild_known(text[])', '7c0e1472047486fb812194cfe5b5919b'),
         ('gold.refresh_derived_financials(text[])', '6e9debd1c4fec0936d3498b7a9e4c147'),
         ('gold.refresh_financials(text[])', 'b3f53c9f634d1d1383ec72d363982a61'),
@@ -92,7 +94,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'none, this is the newest');
+                'changed.', w.fn, 'analyst_fixes_155.sql');
         END IF;
     END LOOP;
 END

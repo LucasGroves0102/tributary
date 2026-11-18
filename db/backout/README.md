@@ -8,6 +8,7 @@ in the order they run ([Order](#order)), the two independent ones last.
 
 | File | Undoes | Then |
 |---|---|---|
+| [`analyst_fixes_155.sql`](analyst_fixes_155.sql) | 155: `gold.usable_facts`, `best_facts` and `quarterly_rows` back to 085's bodies (debt due within a year the current portion alone; no long-term debt of zero where a filing tags none; an 8-K cited over a 10-K stating the same value; no gross profit on net sales), `gold.not_meaningful` to 083's, `gold.reading` to 078's, `gold.company_confidence` to 087's, `gold.not_meaningful_for` dropped, 155's tags and their silver facts removed. Deploy the previous query-api image first (it calls `gold.not_meaningful_for`). Tested: 155 then this, every function equal to the migration's before | `financials-rebuild` job |
 | [`point_in_time_085.sql`](point_in_time_085.sql) | 085-087, point in time, newest first: 087's reads (`gold.financials_at`, `company_financials_at`, `restatements` dropped; the readings' probes back to one signature each: `gold.latest_row`, `latest_equity` and `quarterly_recent` 078's, `amount_currency_of` 061's, `latest_period` 035's, `latest_reading` 083's; `gold.annual_per_share` 056's; `gold.company_confidence` 074's), 086's history (`gold.financials_known`, `gold.known_companies` and their functions dropped, the 'known' catch-up kind and its stamps removed; `gold.refresh_financials` back to 078's body, `ops.company_rule_version`, `ops.company_backlog` and `ops.rebuild_soon` to 071's, 074's and 076's), then 085's pipeline (`gold.usable_facts` and `gold.best_facts` with one argument, 056's and 080's; the writers 043's and 084's; `gold.quarterly_rows`, `gold.derived_rows` and their types dropped). Deploy the previous query-api image first (it calls the as-of forms). Gold's rows are the same either way. Tested: 087 then this, every function equal to the migration's before | none |
 | [`revenue_fallbacks_080.sql`](revenue_fallbacks_080.sql) | 080: `gold.best_facts` back to 077's body (a revenue tag under a fifth of an industry total believed again: Conagra's FY2012-2016 Revenues of $1.6-1.7B), revenue's industry tags (`RealEstateRevenueNet`, `SalesRevenueGoodsNet`, `SalesRevenueServicesNet`) and total assets' `LiabilitiesAndStockholdersEquity` removed with their silver facts (revenue history starting late again at those companies). Tested: 080 then this, the function equal to 077's | `financials-rebuild` job |
 | [`screener_figures_078.sql`](screener_figures_078.sql) | 078: `gold.latest_reading` back to 069's body (the same readings, its rules inline again), `gold.refresh_financials` to 071's, `gold.financials_coverage` to 017's view; the screener reads live (`gold.screen_company`/`screen_reading` live only, the backlog empty, both tables emptied: the cold first request as slow as before). Same signatures: no other image needed. Tested: 078 then this, both functions equal to 069's and 071's | none |
@@ -35,24 +36,25 @@ in the order they run ([Order](#order)), the two independent ones last.
 Newest first, always. To undo a migration, run every file above it in this list first, then it, and
 the rebuild its row names once, after the last file:
 
-1. `point_in_time_085.sql`
-2. `revenue_fallbacks_080.sql`
-3. `screener_figures_078.sql`
-4. `net_income_077.sql`
-5. `readings_069.sql`
-6. `revenue_part_064.sql`
-7. `rebuild_speed_063.sql`
-8. `currency_speed_061.sql`
-9. `annual_currency_060.sql`
-10. `banks_058.sql`
-11. `currency_readings_057.sql`
-12. `ifrs_currencies_056.sql`
-13. `filing_xbrl_facts_055.sql`
-14. `filers_debt_050.sql`
-15. `kpis_049.sql`
-16. `bank_metrics_048.sql`
-17. `interest_expense_043.sql`
-18. `gold_rules_038_041.sql`
+1. `analyst_fixes_155.sql`
+2. `point_in_time_085.sql`
+3. `revenue_fallbacks_080.sql`
+4. `screener_figures_078.sql`
+5. `net_income_077.sql`
+6. `readings_069.sql`
+7. `revenue_part_064.sql`
+8. `rebuild_speed_063.sql`
+9. `currency_speed_061.sql`
+10. `annual_currency_060.sql`
+11. `banks_058.sql`
+12. `currency_readings_057.sql`
+13. `ifrs_currencies_056.sql`
+14. `filing_xbrl_facts_055.sql`
+15. `filers_debt_050.sql`
+16. `kpis_049.sql`
+17. `bank_metrics_048.sql`
+18. `interest_expense_043.sql`
+19. `gold_rules_038_041.sql`
 
 072's and 074's checks (`ops.check_financials`, `ops.check_segments`) and 073's
 `silver.refresh_filing_facts` have no file: the guards expect 074's, 072's and 073's bodies,
@@ -71,7 +73,9 @@ it has once the files above have run and this one hasn't. Run out of order, a fi
 older function over a newer rule: 048's, 049's or 050's alone on a database at 056 or 057 brought back
 pre-056 functions and dropped the currency rule. Run twice, it refuses too. Why each pair is ordered:
 
-- 085 first (point in time, 085-087 in one file, newest first): it drops the reads, the history and
+- 155 first: it puts back 085's `gold.usable_facts`, `best_facts` and `quarterly_rows` and 087's
+  `gold.company_confidence`, which 085's file then drops or replaces.
+- 085 next (point in time, 085-087 in one file, newest first): it drops the reads, the history and
   the as-of forms and puts back 083's `gold.latest_reading`, 078's `gold.refresh_financials` and the
   one-argument `gold.usable_facts` and `gold.best_facts` (080's body) that 080's and 078's files then
   replace.

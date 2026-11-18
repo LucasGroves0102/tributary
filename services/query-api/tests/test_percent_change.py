@@ -41,8 +41,20 @@ def test_ratios_change_in_points_with_no_reason():
 def test_a_huge_change_from_a_small_dollar_base_says_why():
     """Riley 45: Pro-Dex's cash from $33K to $11.76M read +35,533.3%. 035's revenue growth bound,
     for any dollar amount; another currency's base isn't dollars (057)."""
-    from query_api.shapes import PCT_SMALL_BASE
+    from query_api.shapes import PCT_SMALL_BASE, PCT_TINY_BASE
     assert percent_change(D("11760000"), D("33000"), "USD") == (None, PCT_SMALL_BASE)
-    assert percent_change(D("90000000"), D("9000000"), "USD") == (D("9.000000"), None)  # 900%
-    assert percent_change(D("11760000"), D("33000"), "JPY")[1] is None
-    assert percent_change(D("11760000"), D("33000"), "shares")[1] is None
+    # another currency's base isn't dollars: the tiny-base bound (155) still applies
+    assert percent_change(D("11760000"), D("33000"), "JPY") == (None, PCT_TINY_BASE)
+    assert percent_change(D("11760000"), D("33000"), "shares") == (None, PCT_TINY_BASE)
+
+
+def test_growth_off_a_base_under_a_fifth_of_the_figure_says_why():
+    """Morgan, test 11, finding 18 (Avery's review): Kennametal's operating income, $37.559M in
+    the quarter to Sep 30, 2025 and $379.251M a year later (its 10-Q: tungsten pricing), read
+    +909.7%. Over 400% (the earlier figure under a fifth of this one) reads n/m; 400% exactly is a
+    figure."""
+    from query_api.shapes import PCT_TINY_BASE
+    assert percent_change(D("379251000"), D("37559000"), "USD") == (None, PCT_TINY_BASE)
+    assert percent_change(D("90000000"), D("9000000"), "USD") == (None, PCT_TINY_BASE)  # 900%
+    assert percent_change(D("50000000"), D("10000000"), "USD") == (D("4.000000"), None)
+    assert percent_change(D("768193000"), D("497974000"), "USD") == (D("0.542637"), None)

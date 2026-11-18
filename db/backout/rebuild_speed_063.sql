@@ -13,10 +13,10 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: point_in_time_085.sql,
--- revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql,
--- revenue_part_064.sql) and this one hasn't, and unless the login owns the functions (the migrate
--- login; header).
+-- nothing, unless every newer backout has run (newest first: analyst_fixes_155.sql,
+-- point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql,
+-- readings_069.sql, revenue_part_064.sql) and this one hasn't, and unless the login owns the
+-- functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -53,9 +53,11 @@ BEGIN
         ('gold.not_computed(text,text)', NULL),
         ('gold.not_meaningful(text,numeric,jsonb,numeric)', '472cb5abb2f6cb3ad0cbf64734468ee4'),
         ('gold.not_meaningful(text,numeric,jsonb,numeric,text)', '9f4c2cd4aeaefa663263efb806700f5d'),
+        ('gold.not_meaningful_for(text,text)', NULL),
         ('gold.quarterly_recent(text,date)', '91ece4790c2b876518c6d2a4cf060286'),
         ('gold.quarterly_recent(text,date,date)', NULL),
         ('gold.quarterly_rows(text[],date)', NULL),
+        ('gold.reading(text,text,text,date,date,numeric,jsonb,text,text,numeric,text,boolean)', '419a0e26e3d341c59e38aa3b5be6dbc7'),
         ('gold.rebuild_known(text[])', NULL),
         ('gold.refresh_derived_financials(text[])', '6e52ee6444dc46cca8bbd52de1a6983e'),
         ('gold.refresh_financials(text[])', '127cb472ccd41e6cc6d6768bfb1935a0'),
@@ -85,7 +87,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql');
+                'changed.', w.fn, 'analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql');
         END IF;
     END LOOP;
 END
