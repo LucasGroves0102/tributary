@@ -7,10 +7,10 @@ import type { MentionCite, PeerCheck, PeerFallback, PeerMatch, Peers, ScreenerRo
 
 const SIC_LEVEL: Record<number, string> = { 4: "same SIC", 3: "same 3-digit SIC group", 2: "same 2-digit SIC group" };
 
-/** One reason, and the sentence it rests on when there is one (a 10-K's Item 1). */
+/** One reason, and the sentence it rests on when there is one (a 10-K's Item 1, a 20-F's Item 4). */
 export interface Reason {
   text: string;
-  /** the company whose 10-K the sentence is in, and where */
+  /** the company whose annual report the sentence is in, and where */
   cite?: { companyId: string; mention: MentionCite };
   /** the longer sentence, for a hover */
   title?: string;
@@ -19,9 +19,9 @@ export interface Reason {
 /** Why there is no business text to rank by, short, after "by SIC and size" in each row. */
 const FALLBACK_SHORT: Record<PeerFallback, (name: string) => string> = {
   filings_access: (n) => `${possessive(n)} filings text isn't in your plan`,
-  no_annual_report: (n) => `${n} has no 10-K from the last three years`,
-  no_business_section: (n) => `no Business section found in ${possessive(n)} 10-K`,
-  cross_reference: (n) => `${possessive(n)} 10-K Business section is a cross-reference`,
+  no_annual_report: (n) => `${n} has no 10-K or 20-F from the last three years`,
+  no_business_section: (n) => `no Business section found in ${possessive(n)} annual report`,
+  cross_reference: (n) => `${possessive(n)} Business section is a cross-reference`,
   not_profiled: (n) => `${possessive(n)} newest Business section isn't compared yet`,
   no_close_peers: () => "no close business match",
 };
@@ -29,12 +29,12 @@ const FALLBACK_SHORT: Record<PeerFallback, (name: string) => string> = {
 /** The same, as a sentence: the line above the table and the hover. */
 const FALLBACK_SENTENCE: Record<PeerFallback, (name: string) => string> = {
   filings_access: (n) => `Business sections are filing text, which your plan doesn't include for ${n}.`,
-  no_annual_report: (n) => `${n} has no 10-K on file from the last three years, so there is no Business section to compare.`,
-  no_business_section: (n) => `${possessive(n)} latest 10-K has no Business section (Item 1) to compare: the report follows its own layout, with the form's items only in a cross-reference index.`,
+  no_annual_report: (n) => `${n} has no 10-K or 20-F on file from the last three years, so there is no Business section to compare.`,
+  no_business_section: (n) => `${possessive(n)} latest annual report has no Business section (a 10-K's Item 1, a 20-F's Item 4) to compare: the report follows its own layout, with the form's items only in a cross-reference index.`,
   // no quoted line: it would be one company's words (Intel's "Pages 3-5") under every other name
-  cross_reference: (n) => `${possessive(n)} latest 10-K gives its Business section (Item 1) only as a cross-reference to pages elsewhere in the report, so there is no business text to compare.`,
-  not_profiled: (n) => `${possessive(n)} latest 10-K Business section hasn't been compared with other companies' yet (new 10-Ks are read weekly).`,
-  no_close_peers: (n) => `No other company's 10-K Business section reads close to ${possessive(n)}, and none names it as a competitor.`,
+  cross_reference: (n) => `${possessive(n)} latest annual report gives its Business section only as a cross-reference to pages elsewhere in the report, so there is no business text to compare.`,
+  not_profiled: (n) => `${possessive(n)} latest Business section hasn't been compared with other companies' yet (new annual reports are read weekly).`,
+  no_close_peers: (n) => `No other company's Business section reads close to ${possessive(n)}, and none names it as a competitor.`,
 };
 
 /** Why these peers are by SIC code and size, in a sentence ending in what they are instead; null
@@ -53,6 +53,11 @@ export function fallbackPart(data: Pick<Peers, "basis" | "basis_reason" | "metho
 }
 
 const short = (name: string | null | undefined): string => name ?? "this company";
+
+/** The annual report a business section comes from, by its key (query_api/peers.py: a 10-K's
+ * Item 1, a 20-F's Item 4). */
+export const reportForm = (sectionKey: string | null | undefined): "10-K" | "20-F" =>
+  sectionKey === "4" ? "20-F" : "10-K";
 
 /** "Vertiv Holdings'", "Nvidia's": a name's possessive. */
 export const possessive = (name: string | null | undefined): string => {
@@ -77,10 +82,10 @@ export function whyParts(match: PeerMatch | undefined, peer: ScreenerRow, target
   if (!match) return [];
   const out: Reason[] = [];
   if (match.named_by_target) {
-    out.push({ text: `named as a competitor in ${possessive(target.name)} 10-K`, cite: { companyId: target.companyId, mention: match.named_by_target } });
+    out.push({ text: `named as a competitor in ${possessive(target.name)} ${reportForm(match.named_by_target.section_key)}`, cite: { companyId: target.companyId, mention: match.named_by_target } });
   }
   if (match.names_target) {
-    out.push({ text: `its 10-K names ${short(target.name)} as a competitor`, cite: { companyId: peer.company_id, mention: match.names_target } });
+    out.push({ text: `its ${reportForm(match.names_target.section_key)} names ${short(target.name)} as a competitor`, cite: { companyId: peer.company_id, mention: match.names_target } });
   }
   if (match.similarity !== undefined) {
     if (match.terms?.length) out.push({ text: `business: ${distinctTerms(match.terms).slice(0, 3).join(", ")}` });

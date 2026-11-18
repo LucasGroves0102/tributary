@@ -754,7 +754,7 @@ it("peers: by SIC and size, the Why column says there is no business text and wh
   await render("peers");
   const body = [...container.querySelectorAll("tbody tr:not(.agg)")];
   const why = body[1]!.querySelector("td.why .why-basis")!;
-  expect(why.textContent).toBe("by SIC and size (Nvidia's 10-K Business section is a cross-reference)");
+  expect(why.textContent).toBe("by SIC and size (Nvidia's Business section is a cross-reference)");
   expect(why.getAttribute("title")).toContain("only as a cross-reference to pages elsewhere in the report");
   expect(body[1]!.querySelector("td.why")!.textContent).toContain("same 3-digit SIC group");
   expect(body[0]!.querySelector("td.why")!.textContent).toBe("this company");

@@ -447,7 +447,7 @@ explains a plan without `filings`).
 ## Peers
 
 `GET /v1/companies/{id}/peers` (F4, H6): `require(financials)` on the company first, like every
-company route, then by business when its 10-K has a Business section on file (`basis: "business"`),
+company route, then by business when its 10-K or 20-F has a Business section on file (`basis: "business"`),
 else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/peers.py`'s docstring:
 
 - **Candidates**: the 60 companies whose latest 10-K Item 1 is most similar to this one's (cosine of
@@ -459,8 +459,15 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
 - **Score** = similarity x SIC division (same SIC x1.15, same group x1.10, same division x1.0,
   another division x0.80: a maker vs its customers) x size (1 / (1 + 0.3 x |log10 revenue ratio|), only
   when the caller reads both revenues; no current revenue counts as $10M; a revenue in another
-  currency or not meaningful (083: gross sales) is an unknown size, x1, 057) + 0.05 if this company's
-  10-K names it + 0.03 if it names this company. Blank checks (SIC 6770) are never suggested for an operating company.
+  currency or not meaningful (083: gross sales), or one the caller can't read, is an unknown size,
+  read since business-2 from the SEC filer categories: the same as the target's x0.83, a typical
+  ranked peer's; each category apart as a 10x gap) + 0.08 (0.05 before business-2) if this company's
+  annual report names it as a competitor + 0.03 if it names this company. Blank checks (SIC 6770)
+  are never suggested for an operating company.
+- **Relations** (business-2, Morgan 11-14; `gold.business_relations`, 160, RLS like the mentions): a
+  company either text names outside competition (a customer, supplier, partner, distributor or
+  owner) is no peer unless one names the other as a competitor or they share a 4-digit SIC; one
+  that holds a majority of the other never is, by business, size or SIC.
 - **Size floor** (Riley 27): where both sizes count, a candidate needs revenue of at least 2% of the
   target's (no current revenue counts as $10M), else it is no peer. On 38 targets from hermes'
   profiles (2026-11-17): 13 top tens change, all over $40B; NVIDIA loses GSI Technology ($25M) and
@@ -484,7 +491,7 @@ else by SIC and size (`basis: "sic"`). The ranking is specified in `query_api/pe
   Ally) without `columns` gets bank columns: revenue, net interest income, efficiency ratio, provision
   for credit losses, loans, deposits, ROE, net margin (migration 048).
 - **`basis_reason`** (pre-ship; null by business) says why there was no business text to rank by,
-  from the company's latest 10-K stored in the last three years and its Item 1 as parsed
+  from the company's latest 10-K or 20-F stored in the last three years and its Item 1 or 4 as parsed
   (`Store.business_text`: silver.filings by its CIKs, a primary-key probe of the document, the
   section under RLS at `filings`; 2.4 ms for Intel on hermes): `filings_access` (your plan),
   `no_annual_report`, `no_business_section` (Citigroup: its 10-K follows the annual report's own
@@ -505,6 +512,21 @@ Gaps: a 10-K whose Item 1 is a cross-reference (Intel, General Electric, McDonal
 (Citigroup) has no profile, so it is never suggested by business (NVIDIA's list loses Intel, TI and
 ADI; JPMorgan's loses Citigroup), and its own peers are by SIC and size, with `basis_reason` saying
 which (owner's decision, 2026-11-09: no parser change for them).
+
+Business-2 (Morgan 11-14; 20-F Item 4, competitor lists, relations, NAMED 0.08, unknown size x0.83),
+hermes' texts of 2026-11-18 run locally through this ranking, 45 targets (lists in
+[services/parser DESIGN.md](../parser/DESIGN.md#peers-by-business)): against hand-written competitor
+sets for 18 of them the top 10 holds 106 of 180 (82 before). NVIDIA: AMD, Qualcomm, Marvell, HPE,
+Broadcom, Arista, Cisco, Micron, IBM, Intel (Super Micro, a customer, and CoreWeave gone). Exxon:
+Chevron, YPF, Marathon, Eni, Air Products, PBF, CVR, Linde, SLB, ONEOK, then BP, Phillips 66,
+Valero (Imperial Oil, 69.6% Exxon's, gone). Booking: MakeMyTrip, Marriott, Trip.com, Tuniu, Yatra,
+Alaska Air, trivago, Sabre, TripAdvisor, Viking, then Expedia (Southwest, which sells through
+Priceline, gone; Airbnb 15th). Coca-Cola: PepsiCo, Keurig Dr Pepper, Coca-Cola Consolidated,
+FEMSA, AB InBev, Ambev, National Beverage, CCU, Primo Brands, Celsius (Ball gone; Monster and
+the bottlers that don't name Coca-Cola as a competitor, partners, gone). JPMorgan unchanged
+(Goldman still outside the 10). Still missing: ConocoPhillips ("Items 1 and 2" isn't parsed as
+Item 1), Shell and TotalEnergies (their 20-F Item 4 is a cross-reference or unparsed), Expedia
+(its stored Item 1 is the table of contents): the parser batch.
 
 `GET /v1/companies/{id}/peers/check/{candidate}`: `require(financials)` on the comps' company, then
 public filing-index metadata about the candidate: `ok`, `reason` (`null`; `metadata_only`: it has

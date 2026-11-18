@@ -352,16 +352,17 @@ class Store:
             return cur.fetchall()
 
     def business_peers(self, user_id: str, company_id: str) -> dict:
-        """Peers by business (migration 047) for one company, under RLS (`filings` on both
-        sides): its profile (None: no usable Item 1, or the caller can't read its filings), its
-        stored neighbours, and competitor mentions both ways with the sentence to cite. Primary-
-        key and index reads of one company only."""
+        """Peers by business (migrations 047, 160) for one company, under RLS (`filings` on both
+        sides): its profile (None: no usable business section, or the caller can't read its
+        filings), its stored neighbours, competitor mentions both ways with the sentence to cite,
+        and business relations both ways (which pairs, and whether one holds a majority of the
+        other). Primary-key and index reads of one company only."""
         with self._session(user_id) as cur:
             cur.execute("SELECT accession_no, section_key, filed, terms, computed_at"
                         " FROM gold.business_profiles WHERE company_id = %s", (company_id,))
             profile = cur.fetchone()
             if profile is None:
-                return {"profile": None, "peers": [], "mentions": []}
+                return {"profile": None, "peers": [], "mentions": [], "relations": []}
             cur.execute("SELECT peer_id, similarity, terms FROM gold.business_peers"
                         " WHERE company_id = %s", (company_id,))
             peers = cur.fetchall()
@@ -369,28 +370,37 @@ class Store:
                 "SELECT company_id, named_id, accession_no, section_key, char_start, char_end"
                 " FROM gold.business_mentions WHERE company_id = %(c)s OR named_id = %(c)s"
                 " ORDER BY company_id, named_id, char_start", {"c": company_id})
-            return {"profile": profile, "peers": peers, "mentions": cur.fetchall()}
+            mentions = cur.fetchall()
+            cur.execute(
+                "SELECT company_id, named_id, bool_or(ownership) AS ownership"
+                " FROM gold.business_relations WHERE company_id = %(c)s OR named_id = %(c)s"
+                " GROUP BY company_id, named_id ORDER BY company_id, named_id", {"c": company_id})
+            return {"profile": profile, "peers": peers, "mentions": mentions,
+                    "relations": cur.fetchall()}
 
     def business_text(self, user_id: str, company_id: str, days: int) -> dict | None:
-        """The company's latest stored 10-K filed in the last `days` and its Item 1 as parsed
-        (the longest parse: `chars`, `title`; both None without one), to say why it has no
-        business profile (query_api/peers.py). None: no 10-K stored. The 10-Ks come from the
-        filing index by the company's CIKs (= ANY(ARRAY(...)) reaches both branches of the UNION
-        view), each probed by primary key; the section reads under RLS (filings tier)."""
+        """The company's latest stored annual report (10-K or 20-F) filed in the last `days` and
+        its business section as parsed (a 10-K's Item 1, a 20-F's Item 4; the longest parse:
+        `chars`, `title`; both None without one), to say why it has no business profile
+        (query_api/peers.py). None: no annual report stored. They come from the filing index by
+        the company's CIKs (= ANY(ARRAY(...)) reaches both branches of the UNION view), each
+        probed by primary key; the section reads under RLS (filings tier)."""
         with self._session(user_id) as cur:
             cur.execute(
                 """
-                SELECT f.accession_no, f.filing_date AS filed, s.chars, s.title
+                SELECT f.accession_no, f.form, f.filing_date AS filed, s.chars, s.title
                 FROM silver.filings f
                 JOIN bronze.filing_documents d ON d.accession_no = f.accession_no
                 LEFT JOIN LATERAL (
                     SELECT x.char_end - x.char_start AS chars, x.title
                     FROM silver.filing_sections x
-                    WHERE x.accession_no = f.accession_no AND x.section_key = '1'
+                    WHERE x.accession_no = f.accession_no
+                      AND x.section_key = CASE f.form WHEN '10-K' THEN '1' ELSE '4' END
                     ORDER BY x.char_end - x.char_start DESC LIMIT 1) s ON true
                 WHERE f.cik = ANY(ARRAY(SELECT k.cik FROM silver.company_ciks k
                                         WHERE k.company_id = %(c)s))
-                  AND f.form = '10-K' AND f.filing_date > current_date - %(days)s::int
+                  AND f.form IN ('10-K', '20-F')
+                  AND f.filing_date > current_date - %(days)s::int
                 ORDER BY f.filing_date DESC, f.accession_no DESC
                 LIMIT 1
                 """, {"c": company_id, "days": days})

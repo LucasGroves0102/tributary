@@ -37,7 +37,9 @@ def test_size_counts_only_where_both_revenues_are_readable():
     big, small = Decimal("13e9"), Decimal("13e6")
     assert P.size_factor(big, big, True) == 1.0
     assert round(P.size_factor(big, Decimal("1.3e9"), True), 3) == round(1 / 1.3, 3)
-    assert P.size_factor(big, small, False) == 1.0          # unreadable: no oracle
+    # unreadable: no oracle, its size counts as a typical peer's whatever the revenue
+    assert P.size_factor(big, small, False) == P.size_factor(big, big * 1000, False) \
+        == P.SIZE_UNKNOWN
     assert P.size_factor(None, small, True) == 1.0          # target's own size unknown
     # readable with no current revenue: the floor (a pre-revenue company)
     assert P.size_factor(big, None, True) == P.size_factor(big, P.SIZE_FLOOR, True)
@@ -47,16 +49,37 @@ def test_size_counts_only_where_both_revenues_are_readable():
 
 def test_a_revenue_in_another_currency_is_an_unknown_size_not_a_small_one():
     """057: Store.peer_facts gives no value for a yuan revenue (056: never compared with
-    dollars); it was read as the $10M floor, a 38% cut beside a $100B target. Unknown is x1."""
+    dollars); it was read as the $10M floor, a 38% cut beside a $100B target. Unknown counts as a
+    typical peer's size (business-2: at x1 every 20-F filer outranked same-sized dollar peers)."""
     mid = Decimal("4e8")  # 2% of it is under the $10M floor: no candidate is under the size floor
     yuan = cand(OTHER, sim=0.14, revenue=None, readable=True, size_unknown=True)
     tiny = cand(TINY, sim=0.14, revenue=None, readable=True)
-    ranked = P.rank("3674", mid, [yuan, tiny])
-    assert [c.company_id for c in ranked] == [OTHER, TINY]
-    assert ranked[0].score == pytest.approx(0.14 * 1.15)
-    assert ranked[1].score == pytest.approx(0.14 * 1.15 / (1 + 0.3 * 1.60206), 1e-4)
+    same = cand(AMD, sim=0.14, revenue=mid, readable=True)
+    ranked = P.rank("3674", mid, [yuan, tiny, same])
+    assert [c.company_id for c in ranked] == [AMD, OTHER, TINY]
+    assert ranked[1].score == pytest.approx(0.14 * 1.15 * P.SIZE_UNKNOWN)
+    assert ranked[2].score == pytest.approx(0.14 * 1.15 / (1 + 0.3 * 1.60206), 1e-4)
+    # the target's own size unknown: every candidate alike, x1
+    assert P.rank("3674", None, [yuan])[0].score == pytest.approx(0.14 * 1.15)
     # beside a $100B target the $10M floor is under 2% of it: the unknown size stays
     assert [c.company_id for c in P.rank("3674", Decimal("1e11"), [yuan, tiny])] == [OTHER]
+
+
+def test_an_unknown_size_reads_the_sec_filer_categories():
+    """Tuniu and Yatra (non-accelerated, yuan and rupees) topped Booking's list at x1."""
+    assert P.unknown_size("large_accelerated", "large_accelerated") == P.SIZE_UNKNOWN
+    assert P.unknown_size("large_accelerated", None) == P.SIZE_UNKNOWN
+    assert P.unknown_size("large_accelerated", "accelerated") == pytest.approx(1 / 1.3)
+    assert P.unknown_size("large_accelerated", "non_accelerated") == pytest.approx(1 / 1.6)
+    bkng = Decimal("2.6e10")
+    tour = cand("TOUR", sim=0.14, revenue=None, readable=True, size_unknown=True,
+                filer_category="non_accelerated")
+    tcom = cand("TCOM", sim=0.12, revenue=None, readable=True, size_unknown=True,
+                filer_category="large_accelerated")
+    assert [c.company_id for c in P.rank("4700", bkng, [tour, tcom], "large_accelerated")] == [
+        "TCOM", "TOUR"]
+    # without the target's category, both are the typical peer's size
+    assert [c.company_id for c in P.rank("4700", bkng, [tour, tcom])] == ["TOUR", "TCOM"]
 
 
 def test_peers_under_two_percent_of_the_targets_revenue_are_no_peers():
@@ -92,6 +115,29 @@ def test_competitors_named_lift_a_peer_and_shells_never_appear():
     assert tiny[0].score == pytest.approx(0.12 * 1.15 / (1 + 0.3 * 1.477121), 1e-4)  # $10M floor
     # a shell's peers may be shells
     assert [c.company_id for c in P.rank("6770", None, [cand(SHELL, sic="6770")])] == [SHELL]
+
+
+def test_customers_suppliers_and_owners_are_no_peers():
+    """Morgan 11-14 (business-2): a company either text names outside competition is a business
+    relation (Super Micro builds on NVIDIA's platforms; Southwest sells through Priceline), not a
+    peer, unless one names the other as a competitor or they share a 4-digit SIC (TSMC, NVIDIA's
+    foundry, is a semiconductor company too); one that holds a majority of the other (Imperial
+    Oil, 69.6% Exxon's) never is."""
+    nvda = Decimal("2e11")
+    smci = cand("SMCI", sic="3571", sim=0.19, revenue=Decimal("2.5e10"), readable=True,
+                related=True)
+    hpe = cand("HPE", sic="3570", sim=0.12, revenue=Decimal("3e10"), readable=True,
+               related=True, named_by_target=True)
+    back = cand("BACK", sic="3570", sim=0.12, revenue=Decimal("3e10"), readable=True,
+                related=True, names_target=True)
+    tsm = cand("TSM", sic="3674", sim=0.1, revenue=None, readable=True, size_unknown=True,
+               related=True)
+    imo = cand("IMO", sic="3674", sim=0.3, revenue=Decimal("4e10"), readable=True, related=True,
+               owned=True, named_by_target=True)
+    ranked = P.rank("3674", nvda, [smci, hpe, back, tsm, imo])
+    assert [c.company_id for c in ranked] == ["HPE", "BACK", "TSM"]
+    assert P.not_a_peer(smci, P.sic_match("3674", "3571"))
+    assert not P.not_a_peer(tsm, 4) and P.not_a_peer(imo, 4)
 
 
 class BusinessStore(PeerStore):
@@ -215,6 +261,37 @@ def test_business_peers_rank_say_why_and_cite(token):
     assert "Business sections" in body["method"]
 
 
+class RelationStore(SizeStore):
+    """NVDA's Item 1 names TSLA as a customer and BIG (a size peer) as its majority owner."""
+
+    def business_peers(self, user_id, company_id):
+        out = super().business_peers(user_id, company_id)
+        return {**out, "relations": [
+            {"company_id": NVDA, "named_id": TSLA, "ownership": False},
+            {"company_id": BIG, "named_id": NVDA, "ownership": True}]}
+
+
+def test_customers_and_owners_leave_the_list(token):
+    """Morgan 11-14: NVDA's text names TSLA (another SIC) as a customer; TSLA stays while its own
+    text names NVDA as a competitor, and goes once it doesn't. An owner (BIG, a same-SIC size
+    peer) never is a peer."""
+    c = client({"alice": {NVDA: {"financials", "filings"}, AMD: {"financials"},
+                          BIG: {"financials"}}}, RelationStore())
+    body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert [p["company_id"] for p in body["peers"]] == [AMD, TSLA]  # TSLA names NVDA: stays
+    assert "customer, supplier, partner or owner" in body["method"]
+
+    class Customer(RelationStore):
+        def business_peers(self, user_id, company_id):
+            out = super().business_peers(user_id, company_id)
+            return {**out, "mentions": [m for m in out["mentions"] if m["company_id"] != TSLA]}
+
+    c = client({"alice": {NVDA: {"financials", "filings"}, AMD: {"financials"},
+                          BIG: {"financials"}}}, Customer())
+    body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()
+    assert [p["company_id"] for p in body["peers"]] == [AMD]
+
+
 def test_peers_need_financials_on_the_company_first(token):
     c = client({"alice": {TSLA: {"financials"}}})
     assert c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).status_code == 403
@@ -280,8 +357,8 @@ class TextStore(PeerStore):
 
 @pytest.mark.parametrize("text,reason,words", [
     (INTEL, "cross_reference", "cross-reference to pages elsewhere"),
-    (CITI, "no_business_section", "no Business section (Item 1)"),
-    (None, "no_annual_report", "no 10-K on file")])
+    (CITI, "no_business_section", "no Business section (a 10-K's Item 1"),
+    (None, "no_annual_report", "no 10-K or 20-F on file")])
 def test_peers_by_sic_and_size_say_why_there_is_no_business_text(token, text, reason, words):
     c = client({"alice": {NVDA: {"financials", "filings"}}}, TextStore(text))
     body = c.get(f"/v1/companies/{NVDA}/peers", headers=token("alice")).json()

@@ -1221,13 +1221,13 @@ export interface PeerMatch {
   revenue_band: string | null;
   same_revenue_band: boolean;
   score?: number;
-  /** cosine similarity of the two 10-Ks' Business sections, 0-1 */
+  /** cosine similarity of the two annual reports' Business sections (10-K Item 1, 20-F Item 4), 0-1 */
   similarity?: number;
   /** the shared terms that add the most */
   terms?: string[];
-  /** this company's 10-K names the peer as a competitor */
+  /** this company's annual report names the peer as a competitor */
   named_by_target?: MentionCite | null;
-  /** the peer's 10-K names this company */
+  /** the peer's annual report names this company */
   names_target?: MentionCite | null;
   same_sector?: boolean;
   same_industry?: boolean;

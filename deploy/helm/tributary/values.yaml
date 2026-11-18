@@ -556,10 +556,11 @@ jobs:
         memory: 192Mi
       limits:
         memory: 768Mi
-  # Peers by business (parser-peers, migration 047): reads each company's latest 10-K Item 1
-  # twice (~250 MB of text, ~6 s each on hermes), compares them as term vectors and replaces
-  # gold.business_profiles / business_peers / business_mentions in one transaction (60 MB). No
-  # SEC requests. 79 s and 406 MB peak on hermes' 4,888 usable Item 1s of 2026-11-09. Weekly:
+  # Peers by business (parser-peers, migrations 047, 160): reads each company's latest 10-K Item 1
+  # or 20-F Item 4 twice (~320 MB of text), compares them as term vectors and replaces
+  # gold.business_profiles / business_peers / business_mentions / business_relations in one
+  # transaction. No SEC requests. business-2: 142 s and 382 MB peak on hermes' 5,915 texts of
+  # 2026-11-18 run locally. Weekly:
   # a new 10-K changes one company's vector; until the first run the Query API ranks peers by SIC
   # and size. First run after the deploy: kubectl -n tributary create job
   # --from=cronjob/business-peers business-peers-1 (docs/analyst-test/b6-runbook.md, F4).

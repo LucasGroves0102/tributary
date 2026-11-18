@@ -322,10 +322,11 @@ recap. Details: [DESIGN.md](DESIGN.md#filing-recap).
 ## Peers
 
 `GET /v1/companies/{id}/peers` (`peers.py`, its docstring is the spec): `require(financials)`
-first, then peers by business (10-K Item 1 similarity and competitors named, built weekly by
-parser-peers, [services/parser](../parser/README.md#peers-by-business)) when the company has a
-profile, else by SIC and size. Each peer says why (`match`); `basis_reason` says why there was no
-business text; a bank gets bank columns. `/peers/check/{candidate}` says whether a company can join
+first, then peers by business (the similarity of a 10-K's Item 1 or a 20-F's Item 4 and
+competitors named, built weekly by parser-peers,
+[services/parser](../parser/README.md#peers-by-business)) when the company has a profile, else by
+SIC and size. A customer, supplier, partner or owner either text names is left out (160). Each peer
+says why (`match`); `basis_reason` says why there was no business text; a bank gets bank columns. `/peers/check/{candidate}` says whether a company can join
 the comps. Scoring, the fallback and what was measured: [DESIGN.md](DESIGN.md#peers).
 
 ## Workspaces (saved work)

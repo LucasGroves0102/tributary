@@ -15,7 +15,7 @@ import {
   statText,
   type CompareSort,
 } from "../compare/state";
-import { fallbackPart, fallbackSentence, possessive, similarityWord, whyParts, whyText } from "../compare/peers";
+import { fallbackPart, fallbackSentence, possessive, reportForm, similarityWord, whyParts, whyText } from "../compare/peers";
 import { FigureText } from "../components/FigureText";
 import { NOT_APPLICABLE } from "../blanks";
 import { day } from "../format";
@@ -85,7 +85,7 @@ export function Peers({
       <div className="card-h wrap">
         <h2>Peers</h2>
         <span className="sub" title={data?.method}>
-          {!data ? "by what they do" : business ? "by what they do: their 10-K Business sections, competitors named, then size" : "by SIC code and size"}
+          {!data ? "by what they do" : business ? "by what they do: their annual reports' Business sections, competitors named, then size" : "by SIC code and size"}
         </span>
         <span className="grow" />
         <button className="btn sm" disabled={!peerIds.length} onClick={() => go({ view: "compare", compare: { target: companyId, peers: peerIds } })}>
@@ -113,9 +113,9 @@ export function Peers({
             <>
               {business && data?.business && (
                 <p className="peers-basis small">
-                  <span className="faint">{possessive(name)} 10-K Business section (filed {day(data.business.filed, true)}) is most distinctive for </span>
+                  <span className="faint">{possessive(name)} {reportForm(data.business.section_key)} Business section{data.business.section_key === "4" ? " (Item 4)" : ""} (filed {day(data.business.filed, true)}) is most distinctive for </span>
                   {data.business.terms.slice(0, 6).join(", ")}
-                  <span className="faint">. Peers are the companies whose 10-Ks read most alike, or that either names as a competitor.</span>
+                  <span className="faint">. Peers are the companies whose annual reports read most alike, or that either names as a competitor; a customer, supplier, partner or owner either one names is left out.</span>
                 </p>
               )}
               {fallbackLine && <p className="peers-basis small faint">{fallbackLine}</p>}

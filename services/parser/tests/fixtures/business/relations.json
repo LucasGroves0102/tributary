@@ -1,0 +1,63 @@
+{
+ "nvda": {
+  "company_id": "0001045810",
+  "accession_no": "0001045810-26-000021",
+  "form": "10-K",
+  "text": "Competition\nThe market for our products is intensely competitive and is characterized by rapid technological change and evolving industry standards. We believe that the principal competitive factors in this market are performance, breadth of product offerings, access to customers and partners and distribution channels, software support, conformity to industry standard APIs, manufacturing capabilities, processor pricing, and total system costs. We believe that our ability to remain competitive will depend on how well we are able to anticipate the features and functions that customers and partners will\n8\nTable of Contents\ndemand and whether we are able to deliver consistent volumes of our products at acceptable levels of quality and at competitive prices. We expect competition to increase from both existing competitors and new market entrants with products that may be lower priced than ours or may provide better performance or additional features not provided by our products. In addition, it is possible that new competitors or alliances among competitors could emerge and acquire significant market share.\nA significant source of competition comes from companies that provide or intend to provide GPUs, CPUs, DPUs, embedded SoCs, and other accelerated, AI computing processor products, and providers of semiconductor-based high-performance interconnect products based on InfiniBand, Ethernet, Fibre Channel, and proprietary technologies. Some of our competitors may have greater marketing, financial, distribution and manufacturing resources than we do and may be more able to adapt to customers or technological changes. We expect an increasingly competitive environment in the future.\nOur current competitors include:\n•suppliers and licensors of hardware and software for discrete and integrated GPUs, custom chips and other accelerated computing solutions, including solutions offered for AI, such as Advanced Micro Devices, Inc., or AMD, Huawei Technologies Co. Ltd., or Huawei, and Intel Corporation, or Intel;\n•large cloud services companies with internal teams designing hardware and software that incorporate accelerated or AI computing functionality as part of their internal solutions or platforms, such as Alibaba Group, Alphabet Inc., Amazon, Inc., or Amazon, Baidu, Inc., Huawei, and Microsoft Corporation, or Microsoft;\n•suppliers of Arm-based CPUs and companies that incorporate hardware and software for CPUs as part of their internal solutions or platforms, such as Amazon, Huawei, and Microsoft;\n•suppliers of hardware and software for SoC products that are used in servers or embedded into automobiles, autonomous machines, and gaming devices, such as Ambarella, Inc., AMD, Broadcom, Intel, Qualcomm Incorporated, Renesas Electronics Corporation, and Samsung, or companies with internal teams designing SoC products for their own products and services, such as Tesla, Inc.; and\n•networking products consisting of switches, network adapters (including DPUs), and cable solutions (including optical modules) include such as AMD, Arista Networks, Broadcom, Cisco Systems, Inc., Hewlett Packard Enterprise Company, Huawei, Intel, Lumentum Holdings Inc., and Marvell Technology, Inc, as well as internal teams of system vendors and large cloud services companies.\nPatents and Proprietary Rights"
+ },
+ "nvda_suppliers": {
+  "company_id": "0001045810",
+  "accession_no": "0001045810-26-000021",
+  "form": "10-K",
+  "text": "We utilize foundries, such as Taiwan Semiconductor Manufacturing Company Limited, or TSMC, and Samsung Electronics Co., Ltd., or Samsung, to produce our semiconductor wafers."
+ },
+ "imo": {
+  "company_id": "0000049938",
+  "accession_no": "0000049938-26-000009",
+  "form": "10-K",
+  "text": "Exxon Mobil Corporation (\"ExxonMobil\") owns approximately 69.6 percent of the outstanding shares of the company."
+ },
+ "luv": {
+  "company_id": "0000092380",
+  "accession_no": "0000092380-26-000004",
+  "form": "10-K",
+  "text": "•Marketing & Distribution Evolution: In order to attract new Customers and reach them where they are performing travel searches today, Southwest expanded into new channels such as Expedia, Priceline, Google Flights, Kayak, and Skyscanner to broaden its Customer base and begin to engage them in its loyalty program."
+ },
+ "mar": {
+  "company_id": "0001048286",
+  "accession_no": "0001048286-26-000007",
+  "form": "10-K",
+  "text": "Although we believe that our strong brand recognition assists us in attracting and retaining guests and hotel owners, we compete against many other companies with strong brands and guest appeal, including Hilton, IHG Hotels & Resorts, Hyatt, Wyndham Hotels & Resorts, Accor, Choice Hotels, Best Western Hotels & Resorts, and others. Our direct digital channels also compete for guests with online travel\n8\nTable of Contents\nservices platforms, such as Expedia.com, Priceline.com, Booking.com, Travelocity.com, Orbitz.com, and Trip.com, and search engines such as Google, Bing, Yahoo, and Baidu."
+ },
+ "fdx": {
+  "company_id": "0001048911",
+  "accession_no": "0001048911-26-000105",
+  "form": "10-K",
+  "text": "Competitors for Express U.S. Domestic include other package delivery concerns, principally United Parcel Service, Inc. (“UPS”)"
+ },
+ "csco": {
+  "company_id": "0000858877",
+  "accession_no": "0000858877-26-000132",
+  "form": "10-K",
+  "text": "Our competitors (in each case relative to only some of our products or services) include: Amazon Web Services LLC; Arista Networks, Inc.; Broadcom Inc.; Ciena Corporation;"
+ },
+ "smci": {
+  "company_id": "0001375365",
+  "accession_no": "0001375365-26-000022",
+  "form": "10-K",
+  "text": "•We delivered a comprehensive portfolio of AI-focused solutions specifically designed to support the latest AI workloads, including products compatible with NVIDIA's Blackwell and Blackwell Ultra generation platforms"
+ },
+ "bio": {
+  "company_id": "0000916365",
+  "accession_no": "0000916365-26-000014",
+  "form": "10-K",
+  "text": "Lawton previously held a number of leadership positions at Home Depot, Inc. from 2005 to 2015, including Senior Vice President of Merchandising and head of Home Depot's online business."
+ },
+ "tcom": {
+  "company_id": "0001269238",
+  "accession_no": "0001193125-26-183379",
+  "form": "20-F",
+  "text": "ITEM 4.\nINFORMATION ON THE COMPANY\nA.\nHistory and Development of the Company\nWe commenced our business in June 1999. In March 2000, we established an exempted company with limited liability under the Companies Act in the Cayman Islands, Ctrip.com International, Ltd., as our new holding company. We started to consolidate Qunar in December 2015 and Skyscanner in December 2016. In October 2019, we changed our company name to “Trip.com Group Limited.” Since our inception, we have conducted the majority of our operations in China. We have also expanded our operations overseas since 2009.\nOn March 18, 2021, we effected a change to our authorized share capital by a one-to-eight subdivision of shares. Concurrently, we effected a proportionate change in our ADS to ordinary share ratio from eight ADSs representing one ordinary share to one ADS representing one ordinary share. Such changes have been reflected retrospectively throughout this document.\nIn April 2021, our ordinary shares commenced trading on the Main Board of the Hong Kong Stock Exchange under the stock code “9961.”\nOur principal executive offices are located at 30 Raffles Place, #29-01, Singapore 048622, and our telephone number is +65 3138-9736. Our principal website address is group.trip.com. The information on our websites should not be deemed to be part of this annual report. All information we file with the SEC can be obtained over the internet at the SEC’s website at www.sec.gov.\n54\nTable of Contents\nB.\nBusiness Overview\nWe are a leading global one-stop travel service provider, integrating a comprehensive suite of travel products and services and differentiated travel content. Leveraging our one-stop-shop model, high-quality service, and advanced technology, we are consistently expanding our global reach. We are the go-to destination for travelers in Asia, and increasingly for travelers around the world, to explore travel, get inspired, make informed and cost-effective travel bookings, enjoy hassle-free on-the-go support, and share travel experience. Founded in 1999 and listed on Nasdaq in 2003 and the Hong Kong Stock Exchange in 2021, we currently operate under a portfolio of brands, including (i) Ctrip, a leading provider of travel and related services in China, (ii) Qunar, a leading online travel agency in China, (iii) Trip.com, an online travel agency for global travelers, and (iv) Skyscanner, a leading global travel search company, with the mission “to pursue the perfect trip for a better world.”\nOur Platform\nOur one-stop travel platform connects our users and our ecosystem partners. Leveraging our AI capabilities and travel insights accumulated over the past years, we have evolved from an emerging online travel transaction platform to a one-stop travel platform integrating a comprehensive suite of travel products and services and differentiated travel content and connecting users and ecosystem partners from around the world. Our platform aggregates our product and service offerings, reviews and other content shared by our users based on their real travel experiences, and original content from our ecosystem partners to enable leisure and business travelers to have easy access to enjoyable travel experiences and make informed and cost-effective bookings.\nGovernment Regulations\nAs a global business, we are subject to changing government regulations across multiple jurisdictions. New laws and regulations may be adopted from time to time. This section sets forth the most important laws and regulations that govern our current business activities in multiple jurisdictions across the globe, including the PRC, the European Union, Singapore, the United Ki",
+  "note": "the first lines of Item 4, then the regulation heading and what follows (cut between)"
+ }
+}

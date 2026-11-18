@@ -76,6 +76,9 @@ META_SORT = {"name": "b.name", "company_id": "b.company_id", "sic": "lower(b.ind
              # sector, then industry within it (migration 046): the screener's grouping
              "sector": "lower(b.sector || ' / ' || b.sector_industry)"}
 OPS = {"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
+# industries a later migration renamed (silver.sic_sectors): a saved screen's old name still
+# filters (160: Exxon read "Refining & marketing", Morgan 12)
+RENAMED_INDUSTRIES = {"Refining & marketing": "Integrated oil, refining & marketing"}
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
 FILER_CATEGORIES: tuple[str, ...] = get_args(FilerCategory)
 # size bands in USD: label → (min inclusive, max exclusive)
@@ -562,7 +565,7 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
         params["sectors"] = s.sectors
     if s.sector_industries:
         meta.append("ss.industry = ANY(%(sector_industries)s)")
-        params["sector_industries"] = s.sector_industries
+        params["sector_industries"] = [RENAMED_INDUSTRIES.get(i, i) for i in s.sector_industries]
     if s.issue:
         # under RLS on ops.quality_findings: a company the caller can't read never matches, so
         # this says nothing about it (the public status page has the counts only)
