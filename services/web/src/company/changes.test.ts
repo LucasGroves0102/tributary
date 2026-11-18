@@ -49,6 +49,10 @@ describe("what changed, read for materiality", () => {
     expect(hiddenLine(vrt)).toBe("Not shown: 9 calendar rollovers (dates, “second” to “third” quarter), 2 paragraphs only split, " +
       "rejoined or page furniture, 2 table rows whose figures alone changed, 2 minor edits.");
     expect(hiddenLine({ ...vrt, sections: [] })).toBeNull();
+    // Morgan 17: prior-year comparatives (an older API's answer has none)
+    const withComparatives = { ...vrt, sections: vrt.sections.map((s) => ({ ...s, material: s.material && { ...s.material, hidden: { ...s.material.hidden, comparative: 3 } } })) };
+    const n = 3 * vrt.sections.filter((s) => s.material).length;
+    expect(hiddenLine(withComparatives)).toContain(`, ${n} prior-year comparatives (what the earlier 10-Q already said, or a year no longer shown).`);
     expect(countLine(deck, 10)).toBe("10 of 91 changes about “tariffs”");
     expect(countLine(vrt, 22)).toBe("22 changes");
     expect(countLine({ ...vrt, matched: 40, total: 40 }, 30)).toBe("40 changes (the first 30 shown)");

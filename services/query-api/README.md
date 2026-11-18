@@ -688,8 +688,10 @@ citations into both filings. A section re-parsed since its diff is `stale: true`
 ### Read for materiality
 
 With `view=reading|ranked` (or `q`, `numbers=new`) a second pass runs at query time (`changes.py`,
-its docstring is the spec): page furniture, split paragraphs, calendar rollovers and figure-only
-rows are hidden and counted; each change gets a period, figures, a score and why. Without them the
+its docstring is the spec): page furniture, split paragraphs, calendar rollovers, figure-only
+rows and a 10-Q's prior-year comparatives (`comparative`: the passage the earlier 10-Q already
+wrote about that period, or one about a year no longer presented) are hidden and counted; each
+change gets a period, figures, a score and why. Without them the
 answer is exactly the stored one. Details and measurements:
 [DESIGN.md](DESIGN.md#read-for-materiality).
 

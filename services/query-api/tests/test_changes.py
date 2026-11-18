@@ -124,6 +124,50 @@ def test_topic_and_new_figure_filters_on_deckers():
 
 # --- the rules ---------------------------------------------------------------------------------
 
+def test_booking_pairs_this_years_cash_flow_with_last_years_not_last_years_with_2024s():
+    """Morgan 17: Booking's Q3 2026 10-Q against Q3 2025's. Each MD&A explains two years' operating
+    cash flow; the pass paired this 10-Q's 2025 paragraph with the earlier one's 2024 paragraph and
+    showed "$4.8 → $4.0 billion" under "nine months ended September 30, 2025" (the year a quiet
+    calendar swap), a restatement that never happened. The 2025 paragraph repeats what the earlier
+    10-Q said (a comparative), 2024's is a year no longer presented: both hidden, and this year's
+    paragraph is the rewrite of last year's."""
+    f = fixture("bkng-2026-11-03-mdna-year-ago")
+    args = (f["section_key"], f["form"], f["text"], f["prior_text"], f["stored"])
+    before = read_section(*args)
+    top = max(before.changes, key=lambda c: c.score)
+    assert top.new.text.startswith("Net cash provided by operating activities for the nine "
+                                   "months ended September 30, 2025")
+    assert "September 30, 2024" in top.old.text and top.moved["from"] == "$1.5 billion"
+    r = read_section(*args, f["period_of_report"], f["prior_period_of_report"])
+    assert r.hidden["comparative"] == 3 and len(r.changes) == len(before.changes) - 2
+    top = max(r.changes, key=lambda c: c.score)
+    assert "nine months ended September 30, 2026" in top.new.text
+    assert "nine months ended September 30, 2025" in top.old.text
+    assert not any(c.old and c.old.text.startswith(
+        "Net cash provided by operating activities for the nine months ended September 30, 2024")
+        for c in r.changes)
+    # without the filings' periods (an older caller) the reading is as before
+    assert r.hidden["comparative"] and not before.hidden["comparative"]
+
+
+def test_comparatives_need_the_filings_period_and_no_new_figure():
+    from query_api.changes import ended
+
+    assert ended("For the nine months ended September 30, 2025, revenue rose.") == (
+        frozenset({"2025-09-30"}), False)
+    assert ended("During the six months ended June 30, 2025 and 2026, we spent $1") == (
+        frozenset({"2025-06-30", "2026-06-30"}), False)
+    # named as what something is compared with, or first in passing: not about that period
+    assert ended("Fuel decreased $718 million compared to the nine months ended September 30, "
+                 "2024.")[1] is True
+    assert ended("x " * 90 + "made during the nine months ended September 30, 2024.")[1] is True
+    # the prior 10-Q of the same year: nothing is a comparative of a year no longer shown
+    deck = fixture("deck-2026-10-29-mdna-prior")
+    r = read_section(deck["section_key"], deck["form"], deck["text"], deck["prior_text"],
+                     deck["stored"], "2026-09-30", "2026-06-30")
+    assert r.hidden["comparative"] == 0
+
+
 def test_furniture_masks_page_numbers_and_running_headers():
     text = "\n".join(["Table of Contents 24", "Body text of the page.", "Deckers | Q2 | 25",
                       "Deckers | Q2 | 26", "Deckers | Q2 | 27", "(1)", "Liquidity"])

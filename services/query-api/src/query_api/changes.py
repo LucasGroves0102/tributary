@@ -28,6 +28,20 @@ The rules (the spec; the README's "What changed" says the same):
       "nine months ended September 30") → hidden as `calendar`;
    d. equal once figures and one-letter tokens (n/m, n/a) are dropped as well (a table row
       whose cells moved or changed: the words are the same) → hidden as `figures_only`;
+   comparatives (10-Q passages, when both filings' periods are known; Morgan 17): a passage
+      whose every "ended <date>" is its filing's period end (within COMPARATIVE_DAYS, any year)
+      in an earlier year is a comparative (the Q3 2026 10-Q's "nine months ended September 30,
+      2025" in its first PERIOD_LEAD characters; not "the year ended December 31, 2025", a
+      reference, nor a period named as what something is compared with, "compared to the nine
+      months ended ...", nor one first named in passing late on). The earlier filing's
+      comparatives
+      for a year this filing no longer presents (before its own comparative year) are hidden as
+      `comparative` (rolled off); so is this filing's comparative that repeats the earlier
+      filing's own passage on that period (one stating the same date, Dice >= ALIGN_MIN) with no
+      figure that passage didn't state (a restated one stays). Else the year-earlier 10-Q's 2024
+      paragraph paired with this one's 2025 and read as a restatement of 2025 ("$4.8 → $4.0
+      billion", the dates quiet by rule 10), and this year's paragraph went unpaired with last
+      year's;
    e. fuzzy: Dice >= ALIGN_MIN over calendar-masked tokens sharing a token at most half the
       remaining old units have, best first (ties: closer relative position), never a quarter's
       passage with a year-to-date one (rule 4);
@@ -86,7 +100,9 @@ import unicodedata
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import date
 from difflib import SequenceMatcher
+from typing import Any
 
 # the stored pass's thresholds (filing_parser.diff), kept equal
 MIN_WORDS = 4
@@ -168,7 +184,20 @@ SUBSECTIONS: tuple[tuple[str, re.Pattern, float], ...] = tuple(
     ))
 SUBSECTION_MAX = 80  # a subsection heading: a line this long at most, no digits, not a sentence
 
-HIDDEN = ("resplit", "calendar", "figures_only", "minor")
+HIDDEN = ("resplit", "calendar", "figures_only", "minor", "comparative")
+COMPARATIVE_DAYS = 7  # a comparative's period end against its filing's, the year apart
+PERIOD_LEAD = 160  # a comparative names its period this early ("During the nine months ended")
+# "ended September 30, 2025": a passage's period ends (rule 3, comparatives)
+_MONTH_NUMBER = {m: i for i, names in enumerate(
+    [("january", "jan"), ("february", "feb"), ("march", "mar"), ("april", "apr"), ("may",),
+     ("june", "jun"), ("july", "jul"), ("august", "aug"), ("september", "sep", "sept"),
+     ("october", "oct"), ("november", "nov"), ("december", "dec")], start=1) for m in names}
+_ENDED = re.compile(r"\bended\s+(" + "|".join(sorted(_MONTH_NUMBER, key=len, reverse=True))
+                    + r")\.?\s+(\d{1,2}),?\s+((?:19|20)\d\d)\b"
+                    r"(?:\s*(?:and|,)\s*((?:19|20)\d\d)\b)?", re.I)
+# a period named as what something is compared with ("decreased $718 million compared to the
+# nine months ended September 30, 2024"): the passage is about the period after it
+_AGAINST = re.compile(r"(?:compar\w*|versus|vs\.?|relative to)\b[^.;]{0,40}$", re.I)
 
 
 # --- text -------------------------------------------------------------------------------------
@@ -260,6 +289,8 @@ class Unit:
     cal: tuple[str, ...] = ()
     bare: tuple[str, ...] = ()
     period: str | None = None
+    ended: frozenset[str] = frozenset()  # the period ends it names (rule 3, comparatives)
+    against: bool = False  # one of them as what something is compared with
     used: bool = False
 
     @property
@@ -284,7 +315,22 @@ def _finish(u: Unit, text: str) -> Unit:
     u.tokens = normalize(u.text)
     u.cal = calendar(u.tokens)
     u.bare = bare(u.cal)
+    u.ended, u.against = ended(u.text)
     return u
+
+
+def ended(text: str) -> tuple[frozenset[str], bool]:
+    """The period ends a passage names ("nine months ended September 30, 2025", "ended June 30,
+    2025 and 2026": both), as ISO dates, and whether it doesn't open on its period: names one as
+    what something is compared with ("compared to the nine months ended ..."), or first after
+    PERIOD_LEAD characters ("... payments made during the nine months ended ...": an aside)."""
+    out, against = set(), False
+    for k, m in enumerate(_ENDED.finditer(text)):
+        against = against or (k == 0 and m.start() > PERIOD_LEAD) or bool(
+            _AGAINST.search(text[max(0, m.start() - 60):m.start()]))
+        month, day = _MONTH_NUMBER[m.group(1).lower()], int(m.group(2))
+        out.update(f"{y}-{month:02d}-{day:02d}" for y in (m.group(3), m.group(4)) if y)
+    return frozenset(out), against
 
 
 def units(side: str, text: str, paragraphs: list[tuple[int, list[int]]],
@@ -551,10 +597,12 @@ def _runs(us: list[Unit], text: str, furniture: Furniture) -> list[tuple[list[Un
 
 
 def read_section(section_key: str, form: str, text: str, prior_text: str,
-                 stored: list[dict]) -> Reading:
+                 stored: list[dict], period_end: Any = None,
+                 prior_period_end: Any = None) -> Reading:
     """Rules 1-8 for one compared section of a filing of this form: `stored` are its
     gold.section_changes rows (kind, ordinal, new_spans, prior_spans). Periods (rule 4) are a
-    10-Q's: a 10-K's passages all describe its year."""
+    10-Q's: a 10-K's passages all describe its year. `period_end`, `prior_period_end`: the two
+    filings' periods of report (dates or ISO text), for rule 3's comparatives (none without)."""
     fn, fo = Furniture(text), Furniture(prior_text)
     hidden: dict[str, int] = dict.fromkeys(HIDDEN, 0)
     new_units, dn = units("new", text, [(c["ordinal"], c["new_spans"]) for c in stored
@@ -596,6 +644,11 @@ def read_section(section_key: str, form: str, text: str, prior_text: str,
                             hidden["resplit"] += 1
                             break
 
+    # comparatives (a 10-Q's prior-year passages): before any fuzzy pair can take one
+    end, prior_end = _day(period_end), _day(prior_period_end)
+    if form.startswith("10-Q") and end and prior_end:
+        hidden["comparative"] += _comparatives(new_units, old_units, end, prior_end)
+
     # e. fuzzy, over calendar-masked tokens
     pairs = _fuzzy([n for n in new_units if not n.used], [o for o in old_units if not o.used])
     # e'. a pair takes in its unpaired neighbours when that makes it closer (split and edited)
@@ -619,6 +672,57 @@ def read_section(section_key: str, form: str, text: str, prior_text: str,
         _features(c, section_key, cn if c.new else co)
     out.sort(key=lambda c: (c.ordinal, c.kind != "removed"))
     return Reading(out, hidden)
+
+
+def _day(d: Any) -> date | None:
+    try:
+        return date.fromisoformat(str(d or "")[:10])
+    except ValueError:
+        return None
+
+
+def _comparative_years(u: Unit, end: date) -> set[int] | None:
+    """The years of a passage's period ends when each is its filing's period end in an earlier
+    year (within COMPARATIVE_DAYS, so a 52-53 week calendar's too): a comparative. None: not
+    one (no period end, the filing's own year, or another date: a reference to a 10-K)."""
+    if u.against:
+        return None
+    years = set()
+    for iso in u.ended:
+        d = date.fromisoformat(iso)
+        try:
+            same = d.replace(year=end.year)
+        except ValueError:  # February 29
+            same = d.replace(year=end.year, day=28)
+        if d.year >= end.year or abs((same - end).days) > COMPARATIVE_DAYS:
+            return None
+        years.add(d.year)
+    return years or None
+
+
+def _comparatives(new_units: list[Unit], old_units: list[Unit], end: date,
+                  prior_end: date) -> int:
+    """Rule 3's comparatives, marked used; how many were hidden. `end`, `prior_end`: the two
+    filings' periods of report."""
+    hidden = 0
+    for o in old_units:
+        # the earlier filing's comparative for a year this one no longer presents: rolled off
+        years = _comparative_years(o, prior_end)
+        if not o.used and years and max(years) < end.year - 1:
+            o.used = True
+            hidden += 1
+    current = [o for o in old_units if any(d[:4] == str(prior_end.year) for d in o.ended)]
+    for n in new_units:
+        if n.used or not _comparative_years(n, end):
+            continue
+        bag = Counter(n.cal)
+        for o in current:
+            if (n.ended & o.ended and _dice(Counter(o.cal), bag, len(o.cal), len(n.cal))
+                    >= ALIGN_MIN and not new_figures(n.text, o.text)[0]):
+                n.used = True  # what the earlier filing already said about that period
+                hidden += 1
+                break
+    return hidden
 
 
 def _fuzzy(rest_new: list[Unit], rest_old: list[Unit]) -> list[tuple[Unit, Unit]]:

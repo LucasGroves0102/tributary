@@ -52,7 +52,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 /** "Not shown: 9 calendar rollovers, 2 paragraphs only split or rejoined, ..." or null. */
 export function hiddenLine(d: SectionChanges): string | null {
-  const sum = { calendar: 0, resplit: 0, figures_only: 0, minor: 0 };
+  const sum = { calendar: 0, resplit: 0, figures_only: 0, minor: 0, comparative: 0 };
   for (const s of d.sections) {
     const h = s.material?.hidden;
     if (!h) continue;
@@ -60,12 +60,15 @@ export function hiddenLine(d: SectionChanges): string | null {
     sum.resplit += h.resplit;
     sum.figures_only += h.figures_only;
     sum.minor += h.minor;
+    sum.comparative += h.comparative ?? 0;
   }
   const parts = [
     sum.calendar ? plural(sum.calendar, "calendar rollover") + " (dates, “second” to “third” quarter)" : null,
     sum.resplit ? plural(sum.resplit, "paragraph") + " only split, rejoined or page furniture" : null,
     sum.figures_only ? plural(sum.figures_only, "table row") + " whose figures alone changed" : null,
     sum.minor ? plural(sum.minor, "minor edit") : null,
+    // Morgan 17: a prior-year passage carried forward, or one about a year no longer presented
+    sum.comparative ? plural(sum.comparative, "prior-year comparative") + " (what the earlier 10-Q already said, or a year no longer shown)" : null,
   ].filter((x): x is string => x !== null);
   return parts.length ? `Not shown: ${parts.join(", ")}.` : null;
 }

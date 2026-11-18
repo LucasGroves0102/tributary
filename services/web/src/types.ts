@@ -1417,7 +1417,8 @@ export interface SectionChanges {
       removed: number;
       rewritten: number;
       shown: number;
-      hidden: { resplit: number; calendar: number; figures_only: number; minor: number };
+      /** comparative: an older API leaves it out */
+      hidden: { resplit: number; calendar: number; figures_only: number; minor: number; comparative?: number };
     };
     changes: {
       kind: "new" | "removed" | "rewritten";

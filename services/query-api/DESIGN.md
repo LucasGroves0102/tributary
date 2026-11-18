@@ -1866,8 +1866,15 @@ no stored row changes and nothing is rebuilt.
   joined; then hidden and counted per section in `material.hidden`: `resplit` (only split or
   rejoined, or only furniture differed), `calendar` (equal once month names, "second/third
   quarter" and the quarter's three months vs the year to date's six or nine months are masked),
-  `figures_only` (a table row whose words didn't change) and `minor` (similarity >= 0.9, the
-  stored diff's threshold). Pairs are re-made over what's left: never a quarter's passage with a
+  `figures_only` (a table row whose words didn't change), `minor` (similarity >= 0.9, the
+  stored diff's threshold) and `comparative` (Morgan 17, a 10-Q with both filings' periods: a
+  passage on the same period a year earlier that repeats what the earlier 10-Q said of it, with
+  no new figure, or the earlier 10-Q's passage on a year this one no longer presents). Booking's
+  Q3 2026 10-Q paired its 2025 operating-cash-flow paragraph with the Q3 2025 10-Q's 2024 one and
+  read "$4.8 → $4.0 billion" under an unchanged-looking "nine months ended September 30, 2025";
+  now 2026's is the rewrite of 2025's. On 24 large companies' latest year-ago MD&A diffs it hides
+  7 of 1,767 passages, each a comparative two years back (Coca-Cola's six were paired 2026 with
+  2024 before); the prior-10-Q basis never moves. Pairs are re-made over what's left: never a quarter's passage with a
   year-to-date one, a split-and-edited paragraph takes in its neighbours, and two passages with
   the same run-in heading ("Gross Profit.") and period pair even when rewritten past
   recognition.
