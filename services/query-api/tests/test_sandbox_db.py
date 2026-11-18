@@ -66,6 +66,22 @@ def test_create_writes_an_ordinary_user_plan_grants_and_watchlist(db):
     assert s.expires_at("alice-not-a-sandbox") is None
 
 
+def test_create_as_the_tables_owner_under_forced_rls(db):
+    """The Query API's login owns the tables and FORCE binds it: the watchlist (app 045) is
+    written as the new user (grant_demo_access sets app.user_id first)."""
+    s, conn = db
+    owner = conn.execute("SELECT tableowner FROM pg_tables WHERE schemaname = 'public'"
+                         " AND tablename = 'watchlists'").fetchone()[0]
+    if conn.execute("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = %s",
+                    (owner,)).fetchone()[0]:
+        pytest.skip(f"table owner {owner} bypasses row-level security")
+    conn.execute(f'SET LOCAL ROLE "{owner}"')
+    s.create(sandbox(), "ip1", 3, 10)
+    conn.execute("RESET ROLE")
+    assert rows(conn, "SELECT company_id FROM watchlists WHERE user_id = 'demo-t1'"
+                      " ORDER BY added_at") == [(KO,), (PEP,)]
+
+
 def test_with_the_catalog_public_a_sandbox_gets_no_company_grants(db):
     s, conn = db
     conn.execute("UPDATE public_catalogs SET public = true WHERE catalog_id = 'sec'")
