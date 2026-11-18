@@ -338,16 +338,24 @@ Point in time (query-api `point_in_time.py`): an "As of" date field under the he
 address as `?asof=YYYY-MM-DD` on every tab (`route.ts` `asOfDay`: a real day from 2009; today or
 later is today). Set, the key figures in the head (the screener row), Statements and Ratios read the
 Query API with `as_of`: the figures as they stood at the end of that day, from the filings filed by
-then, each citing the first filing that stated it, readings against that day. A quiet note under the
-field says so, that segments, data notes and the confidence mark are today's, and on other tabs that
-the day applies to Statements, Ratios and the key figures; "Back to today" clears it. No banner
-colour: the note is ink-2, like the head's meta.
+then, each citing the first filing that stated it, readings against that day. Set, the control is a
+band (sheet-2, an ink rule) and its note says what follows the day (the Overview's year and key
+figures, Statements, Ratios) and that everything else is today's; every other tab opens with "This tab
+shows today's ..." and each of the Overview's other sections with "Today's, not as it stood on ..."
+(`Folio`'s `TodaysView`), the head's dates with "Today:" and the holding "Today you hold" (Riley, test
+10, findings 18-19, 41). As of a day the key figures read gold's history (086), which its catch-up
+builds company by company: where `/restatements` says `history: false` the Overview says the day's
+figures aren't kept for the company yet and links Statements and Ratios for that day (they replay at
+read time) instead of "not reported" everywhere (finding 7). Statements as of a day skips the
+today-based "Not in these figures yet" notice (finding 3), and says EPS is split-adjusted to that day's
+share basis (finding 5). "Back to today" clears it.
 
 Restated figures: Statements asks for `originals=true`, today or as of a day, and a figure a later
 filing changed carries a small hollow square (ink-3, before the figure, like a callout's dot) and its
 hover the first figure, the filing that stated it and the day, and what changed it: a stock split,
 another line of the filings, or the company restating the same line (`data.ts` `restatedText`). The
-cell's text stays the figure.
+cell's text stays the figure. While the API says `history: false` (no history kept yet) a note under
+the bar says no figure can be marked yet and points to Data notes (finding 8).
 
 ### Head and Overview
 
@@ -367,13 +375,18 @@ twelve months are the 10-K's year (from a 10-Q they are four quarters added up, 
 "Four quarters to ..."); **Figures**, the key figures as a ledger (amounts, then rates), with Cash and
 short-term investments (what net debt subtracts) beside Cash and a negative net debt read as "Net cash"
 (the exact figure in its hover). A seal says "taken from the filing", so only a figure the filing
-states carries one (`data.ts` `howFiled`: a balance, a quarter from its 10-Q, the year from the 10-K);
+states carries one (`data.ts` `howFiled`, `statFiled`: a balance, a quarter from its 10-Q, the year from the 10-K);
 a ratio, a difference (net debt, free cash flow), four quarters added up or a fourth quarter worked out
 from the year has no seal, and its hover says what it is worked out from (`COMPUTED_FROM`, the API's
 definitions in words; ROE is twelve months' net income over the average of equity now and a year
-earlier). A balance a later 8-K may have changed keeps its figure in the ink with a red "*"; **Since the last report** (red-letter days, below); **Latest quarter**, the recap
+earlier). EPS (diluted) is the twelve months' like the block's other flows: `/per-share`'s TTM (the
+four quarters added on today's share basis, derived, no seal), a once-a-year filer's latest year (sealed
+unless a split was applied), the screener's quarter only from an older API, labelled "quarter"
+(`data.ts` `epsStat`; Riley, test 10, finding 1). A balance a later 8-K may have changed keeps its figure in the ink with a red "*". On results day (an 8-K
+with item 2.02 filed after the latest 10-Q or 10-K, `events.ts` `resultsOut`) a **Results out** section
+opens the Overview with the press release. **Since the last report** (red-letter days, below); **Latest quarter**, the recap
 set as a statement (a change from a zero or negative base reads n/m with the API's
-`pct_not_meaningful` in its hover); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
+`pct_not_meaningful` in its hover; changes carry no colour: debt and costs are in it); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
 filings and none from a 10-K or 10-Q, by the API's sources) files no 10-Q, 10-K or 8-K: Since the last
 report says it files current reports on 6-K (no 8-K list is asked for), Latest quarter that it files
@@ -826,7 +839,10 @@ in the box. Two counts, labelled, because they count different things: the outli
 API), the heading also *highlights* (each word marked, what next and previous step through). The
 outline's legend says what its numbers are; only one kind shows at a time. The previous and next
 filing of the same form (10-K, 10-Q, 8-K) open at the same section with the same search; one that
-isn't parsed links to EDGAR.
+isn't parsed links to EDGAR. A 10-K's Item 8 under 2,000 characters that only points to the
+statements (parser rule 7's measure) says which section holds them and links it: the longest later
+section whose title names financial statements, NVIDIA's Item 15 (`reader/sections.ts`
+`statementsElsewhere`; Riley, test 10, finding 10).
 The section shows as paragraphs and tables (`reader/blocks.ts`, rules in its docstring; #178, #179),
 read back from the stored text without a reparse: the parser writes one table row per line with its
 cells joined by a space, so a run of lines ending in figures ("Cash and cash equivalents $ 10,605
@@ -854,8 +870,10 @@ The results open with one sentence saying what was searched (`search/state.ts` `
 the API's answer, not from what was asked): "647 sections in every company's filings filed since
 Oct 10, 2026 match, best match first." (#81, #145). The dates a reader picks are exactly the dates
 searched (`searchWindow`: `window=exact`), across every company too; only an all-company search with
-no dates lets the API rank the newest window that fills a page, and then the sentence says from when
-and offers "The past year" and "All dates" (`dates=all`). One company is always every date, and the
+no dates lets the API rank the newest window that fills a page, and then the sentence says from when,
+that older filings aren't in the results, and offers "The past year" and "All dates" (`dates=all`). All
+dates refused as too broad (the API's 422) offers the way back to the newest filings (Riley, test 10,
+finding 34). One company is always every date, and the
 sentence says "of any date". Order: Best match or Newest first (`sort=date`; then the list stays in
 date order, a company's run of hits grouped, not all its hits). The pager says "1-20 of 647".
 Exact phrase (`isPhrase`/`asPhrase`) quotes the words; a phrase marks only the words together, in the
@@ -1073,7 +1091,9 @@ on the folder changed last. Never just the first workspace.
   a quarter of its margin, x0.75 and x1.25 of a positive one; the rates the user set; a case's default FCF margin follows its
   own operating margin, the API's rule worded in the case's rules line), and waits for the run of the latest
   numbers so a case never starts from stale ones. Before they're added, a bear or bull tab shows
-  that case's preview beside base; a case whose numbers don't parse keeps its last valid ones
+  that case's preview beside base, its switch outlined "Bear: preview" with a note that nothing is added
+  yet (Riley, test 10, finding 35); the years the frozen Case column covers are blanked, never cut
+  (`TableScroll` treats `data-frozen` as frozen, finding 6); a case whose numbers don't parse keeps its last valid ones
   (marked ⚠), never another case's. Check my thesis checks the base case. **Adjustments** (yours,
   labelled so): a named one-off in a fiscal quarter's operating income (Deckers' "IEEPA tariff
   refunds", $46M, Q2 FY2027: its H1 margin reads 19.9% adjusted beside 21.8% reported, and the
@@ -1233,7 +1253,10 @@ watch checks the screen as saved. The sidebar's workspaces mark a watched screen
 Alerts page lists screen alerts above filings (`ScreenAlerts.tsx`): the screen (a link to
 `#/screen/<id>`), what crossed a line with the value as the API read it, entered and left, each
 company a link, "and N more", and how many it no longer lists because the user can't read them;
-opening the list marks what it shows read. `#/screen/<id>` opens the saved item and replaces itself
+opening the list marks what it shows read. Above them, and in Settings, the screens the user watches
+(`WatchedScreens`: name, what it watches, the last check), so a watch shows before its first alert
+(Riley, test 10, findings 14, 72); the Alerts page says how many alerts were new on opening (it marks
+them read, so the bell then counts none). `#/screen/<id>` opens the saved item and replaces itself
 with Companies' address (`location.replace`). Nothing here decides a reading or a crossing: the API's.
 
 ## Portfolio
@@ -1248,7 +1271,9 @@ price form, the research link (a select of your projects and theses for the comp
 the journal. `#/portfolio/import`: the browser reads Fidelity's CSV and posts its text; the preview
 lists every row (keep it or not, a cost to type where the export had none, the account label as a
 name) and what was left out; Add saves; the export's last prices are kept only if ticked. The
-company page's head says "You hold N shares, since <day>" for an open holding.
+company page's head says "You hold N shares, since <day>" for an open holding. A review falls due after
+a 10-K, a 10-Q or results in an 8-K ("Review due: results released <day> (8-K)"); with no red lines the
+journal's form links the analysis's Monitor step, where they're set (Riley, test 10, findings 12-13).
 
 Rules: your money is shown to the cent (`cash`, parentheses for a negative), never with a seal
 (nothing here is a filed figure); umber (`--warn`) marks what asks for your writing (a review due,
@@ -1284,6 +1309,10 @@ for the company: each dataset's latest days, values in their field's unit and cu
 (`fieldValue`), the day each was known in its hover, never a seal. Charts draw `mine.` inputs like
 any (`chart/series.ts` skips their sources: no filing). Nothing of it reaches the assistant (the
 page is "about" to agent-api).
+
+Metrics: the formula box is the chart builder's (`chart/FormulaCombo.tsx`, `useMetricCatalog`: the
+same metric names, tickers and functions) and also suggests the user's own fields (`mine.<dataset>.<field>`);
+a problem shown clears on any edit (Riley, test 10, findings 9, 44).
 
 ## Finding a company
 
@@ -1412,7 +1441,12 @@ one compact LayerChart per column, every readable company a line in the same col
 by the chart builder's rules and shared with its session cache; nothing is asked until the
 charts are shown. One, two or three charts a row by the room they have (`@container multiples`); a
 short last row is centred, its charts the size of the rest, so eight columns leave no empty cell. A
-company with nothing to draw on a chart isn't in its legend; the footnote names it.
+company with nothing to draw on a chart isn't in its legend; the footnote names it, and a line that
+stops says nothing is on file after it. The target's line is heavier (`Series.strong`), so it reads
+apart by weight as well as colour; "One scale for charts in the same unit" puts the charts of one unit
+on one left axis (`LayerChart` `span`, not on a log scale). In the table a latest quarter more than 45
+days before the newest says "a quarter older" (`olderThan`, dates only), and High and Low say what
+they're of like the median (Riley, test 10, findings 32-33).
 
 ## API keys and Using the API
 
