@@ -292,8 +292,9 @@ def test_history_comes_before_the_question():
     history = [{"role": "user", "content": "NVDA revenue?"},
                {"role": "assistant", "content": "$96.2B"}]
     Agent(fake, query_api(ok)[0], "claude-haiku-5-5").ask("and before that?", history)
-    assert fake.requests[0]["messages"] == [*history,
-                                            {"role": "user", "content": "and before that?"}]
+    from tributary_agent.agent import HISTORY_NOTE
+    assert fake.requests[0]["messages"] == [*history, {"role": "user", "content": [
+        {"type": "text", "text": HISTORY_NOTE}, {"type": "text", "text": "and before that?"}]}]
 
 
 def test_collects_citations_from_tool_results():
@@ -590,3 +591,32 @@ def test_earnings_tool_keeps_long_tables_to_their_citation():
     assert first["text"] == "x" * 4000 and "omitted" not in first
     assert second["text"] is None and "get_section" in second["omitted"]
     assert second["citation"]["section_key"] == "EX-99.1"
+
+
+def test_a_follow_up_question_says_earlier_answers_had_their_own_lookups():
+    """History is text only: without the note a model disowned a list it had looked up."""
+    from tributary_agent.agent import HISTORY_NOTE
+
+    class Once:
+        def __init__(self):
+            self.requests = []
+
+        def create(self, **kwargs):
+            self.requests.append(kwargs)
+            return NS(stop_reason="end_turn", content=[NS(type="text", text="ok")],
+                      usage=NS(input_tokens=10, output_tokens=1))
+
+    class NoTools:
+        def run(self, name, args):
+            raise AssertionError("no tools expected")
+
+    m = Once()
+    Agent(m, NoTools(), "claude-haiku-5-5").ask(
+        "and the top three?", history=[{"role": "user", "content": "list them"},
+                                       {"role": "assistant", "content": "A, B, C"}])
+    last = m.requests[0]["messages"][-1]["content"]
+    assert last[0] == {"type": "text", "text": HISTORY_NOTE}
+    assert last[-1] == {"type": "text", "text": "and the top three?"}
+    m2 = Once()
+    Agent(m2, NoTools(), "claude-haiku-5-5").ask("first question")
+    assert m2.requests[0]["messages"][-1]["content"] == "first question"  # no history: unchanged

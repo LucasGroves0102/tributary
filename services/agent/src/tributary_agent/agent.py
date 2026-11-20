@@ -44,6 +44,15 @@ filing text.
 
 log = logging.getLogger("tributary_agent")
 
+# Earlier turns arrive as text only (server.Turn): their tool calls and results aren't in the
+# history, and a model seeing none disowned a list it had looked up (Lucas, 2026-11-20). Sent
+# ahead of a follow-up question only (not part of SYSTEM: the recorded suites have no history).
+HISTORY_NOTE = (
+    "Earlier answers in this conversation were each based on tool lookups made at the time; "
+    "those lookups and their results are not repeated here. Don't call an earlier answer "
+    "unverified because its lookups aren't shown: look up again whatever you need now, and say "
+    "so plainly if a new lookup disagrees with an earlier answer.")
+
 # The closing call at the round limit (not part of SYSTEM: replays never reach it).
 CLOSING = (
     "You have no tool calls left for this question. Answer now from the tool results above, "
@@ -179,6 +188,10 @@ class Agent:
                        {"type": "text", "text": question}]
         if blocks:
             content = [*({"type": "text", "text": b} for b in blocks),
+                       *(content if isinstance(content, list)
+                         else [{"type": "text", "text": content}])]
+        if history:
+            content = [{"type": "text", "text": HISTORY_NOTE},
                        *(content if isinstance(content, list)
                          else [{"type": "text", "text": content}])]
         messages: list[dict] = [*history, {"role": "user", "content": content}]
