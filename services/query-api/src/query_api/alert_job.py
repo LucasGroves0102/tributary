@@ -432,6 +432,16 @@ def run(*, alerts: AppAlerts, store: Any, can: Callable[[str, str, str], bool], 
     return report
 
 
+def log_report(report: Report) -> None:
+    """The run's summary line. The counts go under one `report` key: a LogRecord already has fields
+    named like some of them (`created`), and logging refuses an `extra` that would overwrite one
+    (that KeyError failed every run from 2026-11-09 to 11-20, after its work was done)."""
+    log.info("alerts run: %d users, %d new, %d ready, %d screens checked, %d screen alerts,"
+             " %d delivered, %d failed, %d errors", report.users, report.created, report.ready,
+             report.screens_checked, report.screen_alerts, report.delivered, report.failed,
+             report.errors, extra={"report": asdict(report)})
+
+
 def main() -> None:
     from psycopg_pool import ConnectionPool
 
@@ -462,10 +472,7 @@ def main() -> None:
     finally:
         pool.close()
         app_pool.close()
-    log.info("alerts run: %d users, %d new, %d ready, %d screens checked, %d screen alerts,"
-             " %d delivered, %d failed, %d errors", report.users, report.created, report.ready,
-             report.screens_checked, report.screen_alerts, report.delivered, report.failed,
-             report.errors, extra=asdict(report))
+    log_report(report)
     # every user failing means something is down (the database, OpenFGA): fail the Job
     sys.exit(1 if report.errors and report.errors >= max(report.users, 1) else 0)
 
