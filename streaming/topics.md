@@ -58,7 +58,7 @@ Only `connect` may write these topics and only `authz-sync` may read the five ac
 (ACLs in `kafka-acls.yaml`), so no other client can forge or read a grant.
 
 `app.public.public_catalogs` is the open-access switch (`{catalog_id, public}`). A table added to
-an already-running connector is not snapshotted (`snapshot.mode: initial`), so on an existing
+an already-running connector is not snapshotted (`snapshot.mode: when_needed` snapshots only without a usable position), so on an existing
 deployment the topic appears with the first update of the row (the flip, or the no-op update in
 `db/app/README.md`, "Open access"). authz-sync treats a missing topic as "no catalog is public"
 and subscribes when it appears; a fresh deployment's snapshot creates it at once.

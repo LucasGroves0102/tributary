@@ -11,7 +11,7 @@
   "slot.name": "app_debezium",
   "publication.name": "app_debezium",
   "publication.autocreate.mode": "filtered",
-  "snapshot.mode": "initial",
+  "snapshot.mode": "when_needed",
   "heartbeat.interval.ms": "10000",
   "poll.interval.ms": "50",
   "heartbeat.action.query": "UPDATE public.debezium_heartbeat SET ts = now() WHERE id = 1",

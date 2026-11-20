@@ -13,8 +13,8 @@ consumes them.
   costs next to no CPU.
 - Adding a table to `table.include.list`: with `publication.autocreate.mode: filtered` the
   connector sets the publication's tables to the list when it (re)starts, but
-  `snapshot.mode: initial` never snapshots a table added later, so its existing rows reach
-  Kafka only when they next change. After deploying such a change, check
+  `snapshot.mode: when_needed` snapshots only when the connector has no usable position (first
+  start, or its slot was lost), so a table added later still reaches Kafka only when its rows next change. After deploying such a change, check
   `SELECT tablename FROM pg_publication_tables WHERE pubname = 'app_debezium'` on the app
   database, and touch the rows if the consumer needs them (`public_catalogs`: see
   [db/app](../../db/app/README.md), "Open access").
@@ -25,3 +25,11 @@ consumes them.
   delete is followed by a tombstone (null value) that lets compaction drop the row.
 
 Connect's REST API is on host port 8083: `curl localhost:8083/connectors/app/status`.
+
+A lost slot (WAL past `max_slot_wal_keep_size`; `pg_replication_slots.wal_status = lost`) fails the task
+("Unable to obtain valid replication slot"), which fails the platform release's setup-connector job, and the
+tributary release waits on platform, so nothing deploys. Recover: drop the slot on the app database
+(`SELECT pg_drop_replication_slot('app_debezium')`), restart the connector with its tasks (`POST
+/connectors/app/restart?includeTasks=true`; `when_needed` re-snapshots the access tables) and authz-sync,
+then ask Flux to retry the platform release (`reconcile.fluxcd.io/requestedAt` and `resetAt` annotations).
+Happened 2026-11-18 to 11-20: new users and demo sandboxes read no companies until it was fixed.
