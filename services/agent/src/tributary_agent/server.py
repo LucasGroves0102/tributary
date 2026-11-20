@@ -9,7 +9,8 @@ import threading
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable, Iterator
-from dataclasses import asdict
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -42,6 +43,34 @@ log = logging.getLogger("tributary_agent")
 API_KEY_PREFIX = "trb_"
 # a connected app's access or refresh token (Query API oauth.py): refused here too
 APP_TOKEN_PREFIXES = ("tro_", "trr_")
+# Signed-in accounts (an owner-made password account, a GitHub sign-in): the stronger model and
+# their own daily budget when AGENT_ACCOUNT_MODEL / AGENT_ACCOUNT_DAILY_BUDGET_USD are set.
+# Demo sandboxes ("demo-"), demo users and anything else stay on AGENT_MODEL and its budget.
+ACCOUNT_PREFIXES = ("pw-", "gh-")
+# The asking user, set by create_app after who_is() checked the token and before it builds the
+# agent, report or check, so build_app's factories can pick that user's model.
+CURRENT_USER: ContextVar[str | None] = ContextVar("tributary_agent_user", default=None)
+
+
+def is_account(user_id: str) -> bool:
+    """A signed-in account, not a demo sandbox or a demo user."""
+    return user_id.startswith(ACCOUNT_PREFIXES)
+
+
+# The chat agent's default room to answer (Agent's own default); an account's stronger model
+# thinks longer, so AGENT_ACCOUNT_MAX_TOKENS can give it more.
+AGENT_MAX_TOKENS = 8000
+
+
+@dataclass(frozen=True)
+class AccountModel:
+    model: str
+    effort: str | None
+    max_tokens: int
+
+
+def _optional_float(value: str | None) -> float | None:
+    return float(value) if value not in (None, "") else None
 
 
 class Turn(BaseModel):
@@ -83,27 +112,39 @@ REFUNDS_PER_DAY = 2
 
 
 class Limits:
-    """Questions per hour per user and per client IP, model spend per UTC day across all
-    users, and refunds per user per UTC day."""
+    """Questions per hour per user and per client IP, model spend per UTC day (one budget
+    shared by everyone, or by demo users only when `account_budget_usd` gives signed-in
+    accounts their own), and refunds per user per UTC day."""
 
     def __init__(self, per_hour: int, per_ip_per_hour: int, daily_budget_usd: float,
                  clock: Callable[[], float] = time.time,
-                 refunds_per_day: int = REFUNDS_PER_DAY) -> None:
+                 refunds_per_day: int = REFUNDS_PER_DAY,
+                 account_budget_usd: float | None = None) -> None:
         self._per_hour = per_hour
         self._per_ip = per_ip_per_hour
         self._budget = daily_budget_usd
+        self._account_budget = account_budget_usd
         self._clock = clock
         self._lock = threading.Lock()
         self._by_user: dict[str, deque[float]] = defaultdict(deque)
         self._by_ip: dict[str, deque[float]] = defaultdict(deque)
         self._swept = clock()
-        self._spent: dict[str, float] = defaultdict(float)  # UTC date -> USD
+        self._spent: dict[tuple[str, str], float] = defaultdict(float)  # (pool, UTC date) -> USD
         self._refunds_per_day = refunds_per_day
         self._refunds_day = ""
         self._refunds: dict[str, int] = {}  # user -> refunds given on _refunds_day
 
     def _today(self) -> str:
         return datetime.fromtimestamp(self._clock(), UTC).date().isoformat()
+
+    def _pool(self, user_id: str | None) -> str:
+        return "account" if (self._account_budget is not None and user_id is not None
+                             and is_account(user_id)) else "shared"
+
+    def _used_up(self, user_id: str | None) -> bool:
+        pool = self._pool(user_id)
+        budget = self._account_budget if pool == "account" else self._budget
+        return self._spent[(pool, self._today())] >= (budget or 0)
 
     @staticmethod
     def _recent(asked: deque[float], now: float) -> deque[float]:
@@ -127,8 +168,10 @@ class Limits:
         `release` gives them back by."""
         now = self._clock()
         with self._lock:
-            if self._spent[self._today()] >= self._budget:
-                raise LimitExceeded("The demo's daily model budget is used up. Try tomorrow.")
+            if self._used_up(user_id):
+                raise LimitExceeded("The account's daily model budget is used up. Try tomorrow."
+                                    if self._pool(user_id) == "account" else
+                                    "The demo's daily model budget is used up. Try tomorrow.")
             self._sweep(now)
             by_ip = self._recent(self._by_ip[client_ip], now)
             by_user = self._recent(self._by_user[user_id], now)
@@ -166,16 +209,18 @@ class Limits:
             near = len(self._recent(self._by_ip[client_ip], now)) if client_ip in self._by_ip else 0
             return {"per_hour": self._per_hour, "network_per_hour": self._per_ip,
                     "left_this_hour": max(0, min(self._per_hour - mine, self._per_ip - near)),
-                    "paused": self._spent[self._today()] >= self._budget}
+                    "paused": self._used_up(user_id)}
 
-    def spend(self, usd: float) -> None:
+    def spend(self, usd: float, user_id: str | None = None) -> None:
+        """Records spend against the user's pool (the shared one without a user)."""
         with self._lock:
-            self._spent[self._today()] += usd
+            self._spent[(self._pool(user_id), self._today())] += usd
 
-    def spent(self) -> float:
-        """The day's (UTC) recorded model spend so far."""
+    def spent(self, user_id: str | None = None) -> float:
+        """The day's (UTC) recorded model spend so far in the user's pool (the shared one
+        without a user)."""
         with self._lock:
-            return self._spent[self._today()]
+            return self._spent[(self._pool(user_id), self._today())]
 
     def take_refund(self, user_id: str) -> bool:
         """Takes one of the user's refunds for today (UTC), or False when they're used up."""
@@ -331,7 +376,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
                 nonlocal spent
                 if not spent:
                     spent = True
-                    limits.spend(usd)
+                    limits.spend(usd, user_id)
 
             try:
                 for event in events:
@@ -404,6 +449,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             ip: Annotated[str, Depends(client_ip)]) -> StreamingResponse:
         user_id = who_is(tok)
         paid = charge(user_id, ip, tok)
+        CURRENT_USER.set(user_id)
         agent = make_agent(tok)
         return sse(agent.events(body.question, [t.model_dump() for t in body.history],
                                 body.context), user_id, "answer", paid)
@@ -421,6 +467,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             given back only after a model error before any output ("refunded") or when the
             user stops it before it saved (create_app's docstring)."""
             user_id = who_is(tok)
+            CURRENT_USER.set(user_id)
             reporter = reporter_for(tok)
             try:
                 job = reporter.prepare(str(body.workspace_id),
@@ -444,6 +491,7 @@ def create_app(make_agent: Callable[[str], Agent], who_is: Callable[[str], str],
             max_tokens left nothing to save; a partial check (submitted before the model
             stopped) is saved and counts."""
             user_id = who_is(tok)
+            CURRENT_USER.set(user_id)
             checker = checker_for(tok)
             try:
                 job = checker.prepare(str(body.item_id))
@@ -549,32 +597,49 @@ def build_app() -> FastAPI:
     messages = anthropic.Anthropic().messages
     model = os.environ.get("AGENT_MODEL", "claude-haiku-5-5")
     effort = os.environ.get("AGENT_EFFORT") or None
+    # signed-in accounts (is_account): their own model, effort and room to answer, if set
+    account = AccountModel(os.environ.get("AGENT_ACCOUNT_MODEL") or model,
+                           os.environ.get("AGENT_ACCOUNT_EFFORT") or effort,
+                           int(os.environ.get("AGENT_ACCOUNT_MAX_TOKENS") or AGENT_MAX_TOKENS))
     http = httpx.Client(base_url=base_url, timeout=30,
                         event_hooks={"request": [forward_request_id]})
     tools = MetricTools()
 
+    def chosen() -> AccountModel:
+        """The asking user's model (create_app sets CURRENT_USER before calling a factory):
+        picked here, in the request, never later inside a stream."""
+        user = CURRENT_USER.get()
+        if user is not None and is_account(user):
+            return account
+        return AccountModel(model, effort, AGENT_MAX_TOKENS)
+
     def make_agent(tok: str) -> Agent:
         api = QueryApi(base_url, tok, http=http)
-        return Agent(messages, api, model, stream=True, effort=effort, tools=tools.get(api),
-                     ui=UiActions(api))
+        m = chosen()
+        return Agent(messages, api, m.model, stream=True, effort=m.effort, max_tokens=m.max_tokens,
+                     tools=tools.get(api), ui=UiActions(api))
 
     def make_reporter(tok: str) -> Reporter:
         api = QueryApi(base_url, tok, http=http)
+        m = chosen()
         return Reporter(api, lambda scoped: Agent(
-            messages, scoped, model, stream=True, effort=effort, tools=tools.get(api),
-            rules=REPORT_RULES, max_rounds=REPORT_ROUNDS))
+            messages, scoped, m.model, stream=True, effort=m.effort, max_tokens=m.max_tokens,
+            tools=tools.get(api), rules=REPORT_RULES, max_rounds=REPORT_ROUNDS))
 
     def make_checker(tok: str) -> Checker:
         api = QueryApi(base_url, tok, http=http)
+        m = chosen()
         return Checker(api, lambda scoped: check_agent(
-            messages, scoped, model, tool_list=tools.get(api), effort=effort, stream=True))
+            messages, scoped, m.model, tool_list=tools.get(api), effort=m.effort, stream=True))
 
     return create_app(
         make_agent=make_agent,
         who_is=query_api_who_is(base_url),
         limits=Limits(int(os.environ.get("AGENT_RATE_PER_HOUR", "30")),
                       int(os.environ.get("AGENT_IP_RATE_PER_HOUR", "10")),
-                      float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2"))),
+                      float(os.environ.get("AGENT_DAILY_BUDGET_USD", "2")),
+                      account_budget_usd=_optional_float(
+                          os.environ.get("AGENT_ACCOUNT_DAILY_BUDGET_USD"))),
         take_quota=query_api_quota(base_url),
         refund_quota=query_api_refund(base_url),
         daily_count=query_api_daily_count(base_url),

@@ -524,3 +524,50 @@ def test_early_model_errors_are_given_back_at_most_twice_a_day():
 def test_usage_events_stay_in_the_server():
     c, _ = client()
     assert [e["type"] for e in events(ask(c))] == ["done"]
+
+
+def test_signed_in_accounts_spend_their_own_daily_budget():
+    from tributary_agent.server import is_account
+    assert is_account("pw-lucas") and is_account("gh-218118636")
+    assert not is_account("demo-936066a6f2ca7f40") and not is_account("alice")
+    clock = Clock()
+    limits = Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=2, clock=clock,
+                    account_budget_usd=5)
+    limits.spend(4.0, "pw-lucas")                      # the account's pool, not the demo's
+    limits.acquire("demo-a1", "203.0.113.1")           # the demo still has its $2
+    limits.acquire("pw-lucas", "203.0.113.1")          # $4 of $5: still open
+    limits.spend(1.0, "pw-lucas")
+    with pytest.raises(LimitExceeded, match="account's daily model budget"):
+        limits.acquire("pw-lucas", "203.0.113.1")
+    assert limits.left("pw-lucas", "203.0.113.1")["paused"] is True
+    assert limits.left("demo-a1", "203.0.113.1")["paused"] is False
+    limits.spend(2.0)                                  # no user: the shared (demo) pool
+    with pytest.raises(LimitExceeded, match="demo's daily model budget"):
+        limits.acquire("demo-a1", "203.0.113.1")
+    clock.t += 86400                                   # a new UTC day for both
+    limits.acquire("pw-lucas", "203.0.113.1")
+    limits.acquire("demo-a1", "203.0.113.1")
+
+
+def test_without_an_account_budget_everyone_shares_one():
+    limits = Limits(per_hour=100, per_ip_per_hour=100, daily_budget_usd=1, clock=Clock())
+    limits.spend(1.0, "pw-lucas")
+    with pytest.raises(LimitExceeded, match="demo's daily model budget"):
+        limits.acquire("demo-a1", "203.0.113.1")
+
+
+def test_the_factory_sees_the_checked_user_before_it_builds_the_agent():
+    """build_app picks the account's model from CURRENT_USER inside make_agent: create_app sets
+    it from who_is() (the checked token) before calling the factory."""
+    from tributary_agent.server import CURRENT_USER
+    seen = []
+    messages = ScriptedMessages()
+
+    def make_agent(tok):
+        seen.append(CURRENT_USER.get())
+        return Agent(messages, NoTools(), "claude-haiku-5-5")
+
+    c = TestClient(create_app(make_agent, who_is, Limits(10, 10, 5)))
+    r = c.post("/v1/ask", json={"question": "hi", "history": []},
+               headers={"Authorization": "Bearer alice-token"})
+    assert r.status_code == 200 and seen == ["alice"]

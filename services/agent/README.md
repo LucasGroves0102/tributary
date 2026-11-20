@@ -183,7 +183,9 @@ Config (env):
 | `AGENT_MAX_ROUNDS` | 6 | `agent-ask` |
 | `AGENT_RATE_PER_HOUR` | 30 | `agent-api`, per user |
 | `AGENT_IP_RATE_PER_HOUR` | 10 | `agent-api`, per client IP (production: 40, Flux release) |
-| `AGENT_DAILY_BUDGET_USD` | 2 | `agent-api`, all users, per UTC day |
+| `AGENT_DAILY_BUDGET_USD` | 2 | `agent-api`, per UTC day: everyone, or demo users only when the next line is set |
+| `AGENT_ACCOUNT_DAILY_BUDGET_USD` | unset | `agent-api`: signed-in accounts (`pw-`, `gh-`) get their own budget per UTC day |
+| `AGENT_ACCOUNT_MODEL`, `AGENT_ACCOUNT_EFFORT`, `AGENT_ACCOUNT_MAX_TOKENS` | `AGENT_MODEL`, `AGENT_EFFORT`, 8000 | `agent-api`: the model, effort and room to answer for signed-in accounts (hermes: `claude-opus-5-5`, `high`, 16000); demo sandboxes keep `AGENT_MODEL` |
 | `PORT` | 8001 | `agent-api` |
 
 ## Tests

@@ -241,6 +241,12 @@ services:
       AGENT_RATE_PER_HOUR: "30"
       AGENT_IP_RATE_PER_HOUR: "10"
       AGENT_DAILY_BUDGET_USD: "2"
+      # signed-in accounts (pw-, gh-; server.is_account): their own model and daily budget,
+      # demo sandboxes stay on AGENT_MODEL and the budget above (Lucas, 2026-11-20)
+      AGENT_ACCOUNT_MODEL: claude-opus-5-5
+      AGENT_ACCOUNT_EFFORT: high
+      AGENT_ACCOUNT_MAX_TOKENS: "16000"
+      AGENT_ACCOUNT_DAILY_BUDGET_USD: "5"
     resources:
       requests:
         cpu: 50m
