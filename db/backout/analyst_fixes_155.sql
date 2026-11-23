@@ -41,7 +41,7 @@ BEGIN
         ('gold.derived_rows(text[],date,gold.quarter_row[])', 'd22751c4c57103d6fda7665e6477a179'),
         ('gold.figure_facts(text,text,date)', '6789892e97611dd6c0260a25f695d7fc'),
         ('gold.filing_figures(text,text)', '51376508ac8a1a66d7e42cc92852346f'),
-        ('gold.financial_rows(text[],date)', '861bf05e3f8d8f5743e946c9761e291d'),
+        ('gold.financial_rows(text[],date)', '341a1dec1ff52a3b51a05312c7e0de16'),
         ('gold.financials_at(date)', '9bdd938e555828de0b4eed294e0dad5d'),
         ('gold.input_values(jsonb)', '06de5fab08b2d846d578a006a9efc859'),
         ('gold.knowledge_facts(text)', '18e26ac36e3c21f7ce905a870362750c'),

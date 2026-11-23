@@ -16,7 +16,8 @@ Kinds, in this order (the cheap ones first, so a long gold catch-up never holds 
   and of `gold.companies_for_ciks` (co-registrants that borrow the CIKs' filings).
 - known: gold's history (migration 086): `gold.rebuild_known(batch)` replays each company's views
   as of every filing date at the current rules, only companies whose gold is current
-  (ops.company_backlog). Not paused on deploy (the owner's call); a few seconds a company.
+  (ops.company_backlog). Not paused on deploy (the owner's call). A view per filing date: Apple's
+  70 dates about 16 minutes before migration 161, about 1.5 after.
 
 The versions are gold.rules_version() (gold and known), ops.check_financials_version() and
 ops.check_segments_version(); every refresh stamps ops.company_builds (gold.refresh_financials,
