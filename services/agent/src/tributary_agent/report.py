@@ -60,6 +60,9 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 COMPANY_TOOLS = ("get_financials", "list_filings", "get_section", "get_section_changes",
                  "search_filings", "get_earnings_release", "get_events_since_report",
                  "get_material_changes")
+# tools that list companies beyond any scope (they take no company_id): refused in a report or
+# a thesis check, which read only their own companies
+LISTING_TOOLS = ("find_companies",)
 
 REPORT_RULES = """
 
@@ -317,6 +320,9 @@ class ScopedTools:
         self.results: list[str] = []
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
+        if name in LISTING_TOOLS:
+            return (f"not run: {self._what} covers only the companies in {self._where}; "
+                    f"{name} lists others"), True
         if name in COMPANY_TOOLS:
             cid = args.get("company_id")
             if name == "search_filings" and cid is None:

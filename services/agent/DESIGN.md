@@ -28,6 +28,29 @@ factor new, says what the filing was compared with (tester 1 saw the check call 
 "new" while What changed, against the prior 10-Q, showed nothing new: against a year ago,
 Vertiv's covenant risk factors are new).
 
+`find_companies` lists companies by Tributary's sector grouping (`/v1/screener` as the user with
+`sector`/`sector_industry`, a name or a revenue band; largest TTM revenue first, 15 rows by
+default, 25 at most). Asked for "companies with renewable or nuclear energy", the model had only
+full-text search, which returned a SPAC and micro-caps that mention the words and missed
+Constellation, Vistra and Cameco (Lucas, 2026-11-23). The names come from `/v1/sectors`, read once
+a process (`SectorCatalog`, shared by `MetricTools`, every `QueryApi` and `UiActions`): the schema's
+enums once the Query API has answered, and a check before any call, which names the closest valid
+names, or every sector with its industries when none is close (a theme, "uranium", is no
+industry's name). Rows are compact: identity and the grouping (public metadata, so a company the
+user can't read is listed), then its values exactly as the screener gave them (null where the user
+can't read its financials), then any reading and the revenue's filing. Total assets is a column
+so a company before revenue still has a figure and is listed. The figures rank; verify.py reads
+only `/financials` rows, so the description sends the model to `get_financials` for any figure it
+states. The harness counts a row with a value for a company the user can't read financials for
+as a leak (TOOL_TIER `financials`, rows read up to their first nested object). A report or a
+check refuses it (`report.LISTING_TOOLS`): they read only their own companies. No re-recording.
+
+`get_financials` says which asked-for metrics have no figures (`no_figures`, formatted in
+tools.py only) when the company has others: an empty answer for a company before revenue's
+revenue read as "no financial data in Tributary" (Terrestrial Energy, Deep Fission). When nothing
+asked for came back, one more request (the latest quarter, every metric) learns which metrics
+it has; only their names are added.
+
 ## Round limit
 
 At the round limit (6 rounds of tool calls in chat, 12 in a report, 16 in a thesis check) the agent
@@ -104,6 +127,19 @@ action in the same answer built it, and names are trimmed, capped and free of co
 characters. The app then saves it through the Query API (which validates the state again, for
 this user only) and Undo deletes the saved item. Without the web app (CLI, recorded suites)
 requests are unchanged.
+
+`set_screen_filters` takes Tributary's `sectors` and `industries` (the app's sector and
+sector_industry lists; a sector counts whole unless `industries` names some of its industries;
+an empty list clears one) beside `industry`, which only matches the SEC's SIC label text. Names
+are checked against `/v1/sectors` (the closest come back). Then the screen the app would show
+(the filters merged into the context's, or the previous screen action's in the same answer,
+unless `reset`; `screen_params` twins the web app's `screenParams`) is asked of `/v1/screener` as
+the user, one row: no company → a tool error naming the screen, nothing applied, so the model
+can drop what it added (Lucas asked for a uranium screen and got `industry: "uranium"`, a band
+under $100M and "mine", none asked for: 0 matches). A 422 is said; a screener that can't answer
+doesn't block. The result tells the model how many match and that the screen is on the
+Companies page; UI_RULES say to change only the filters asked for. Context `screen` carries the
+same two lists.
 
 ## Allowance, limits and refunds
 

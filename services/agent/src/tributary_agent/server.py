@@ -33,7 +33,7 @@ from tributary_agent.report import (
 )
 from tributary_agent.telemetry import record_answer, record_error
 from tributary_agent.thesis_check import CHECK_QUESTIONS, CHECK_SECONDS, Checker, check_agent
-from tributary_agent.tools import MetricTools, QueryApi
+from tributary_agent.tools import MetricTools, QueryApi, SectorCatalog
 from tributary_agent.ui import UiActions, UiContext
 from tributary_telemetry import configure_logging
 from tributary_telemetry.http import forward_request_id, instrument, request_id_headers
@@ -603,7 +603,10 @@ def build_app() -> FastAPI:
                            int(os.environ.get("AGENT_ACCOUNT_MAX_TOKENS") or AGENT_MAX_TOKENS))
     http = httpx.Client(base_url=base_url, timeout=30,
                         event_hooks={"request": [forward_request_id]})
-    tools = MetricTools()
+    # the sector grouping (/v1/sectors), read once: find_companies' names, and the checks of
+    # find_companies and set_screen_filters
+    sectors = SectorCatalog()
+    tools = MetricTools(sectors)
 
     def chosen() -> AccountModel:
         """The asking user's model (create_app sets CURRENT_USER before calling a factory):
@@ -614,20 +617,20 @@ def build_app() -> FastAPI:
         return AccountModel(model, effort, AGENT_MAX_TOKENS)
 
     def make_agent(tok: str) -> Agent:
-        api = QueryApi(base_url, tok, http=http)
+        api = QueryApi(base_url, tok, http=http, sectors=sectors)
         m = chosen()
         return Agent(messages, api, m.model, stream=True, effort=m.effort, max_tokens=m.max_tokens,
-                     tools=tools.get(api), ui=UiActions(api))
+                     tools=tools.get(api), ui=UiActions(api, sectors=sectors))
 
     def make_reporter(tok: str) -> Reporter:
-        api = QueryApi(base_url, tok, http=http)
+        api = QueryApi(base_url, tok, http=http, sectors=sectors)
         m = chosen()
         return Reporter(api, lambda scoped: Agent(
             messages, scoped, m.model, stream=True, effort=m.effort, max_tokens=m.max_tokens,
             tools=tools.get(api), rules=REPORT_RULES, max_rounds=REPORT_ROUNDS))
 
     def make_checker(tok: str) -> Checker:
-        api = QueryApi(base_url, tok, http=http)
+        api = QueryApi(base_url, tok, http=http, sectors=sectors)
         m = chosen()
         return Checker(api, lambda scoped: check_agent(
             messages, scoped, m.model, tool_list=tools.get(api), effort=m.effort, stream=True))

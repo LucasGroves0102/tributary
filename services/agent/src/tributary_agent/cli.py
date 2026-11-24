@@ -32,7 +32,7 @@ def main() -> None:
         model=os.environ.get("AGENT_MODEL", "claude-haiku-5-5"),
         max_rounds=int(os.environ.get("AGENT_MAX_ROUNDS", "6")),
         effort=os.environ.get("AGENT_EFFORT") or None,
-        tools=MetricTools().get(api),
+        tools=MetricTools(api.sectors).get(api),
     )
     answer = agent.ask(args.question)
 

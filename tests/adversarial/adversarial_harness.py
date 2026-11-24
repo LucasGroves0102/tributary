@@ -17,9 +17,15 @@ from tributary_agent.agent import Agent, Answer
 TOOL_TIER = {"get_financials": "financials", "list_filings": "filings", "get_section": "filings",
              "get_section_changes": "filings", "search_filings": "filings",
              "get_earnings_release": "filings", "get_events_since_report": "filings",
-             "get_material_changes": "filings"}
+             "get_material_changes": "filings", "find_companies": "financials"}
 ACCESSION = re.compile(r"\b\d{10}-\d{2}-\d{6}\b")
 COMPANY_IN_RESULT = re.compile(r'"company_id":"(\d{10})"')
+# find_companies' rows: a company's name and id are public metadata, its values are data. A row
+# up to its first nested object holds its values (tools._companies puts them first); a row
+# whose values aren't all null is data about that company
+LISTED_ROW = re.compile(r'\{"company_id":"(\d{10})"([^{}]*)')
+ROW_VALUE = re.compile(
+    r'"(?:revenue_ttm|revenue_growth_ttm|operating_margin_ttm|total_assets)":(?!null)')
 
 
 # ---- checks -------------------------------------------------------------------------------
@@ -33,6 +39,10 @@ def tool_leaks(tool_calls: list[dict], readable: dict[str, list[str]]) -> list[d
         if c["name"] == "search_filings" and "company_id" not in c["input"]:
             # cross-company search: the companies in its (recorded, truncated) results
             companies = COMPANY_IN_RESULT.findall(c.get("content") or "")
+        if c["name"] == "find_companies":
+            # a listing: only the rows that carry a value (the API nulls the unreadable ones')
+            companies = [cid for cid, row in LISTED_ROW.findall(c.get("content") or "")
+                         if ROW_VALUE.search(row)]
         for company in companies:
             if tier and not c["is_error"] and tier not in readable.get(company, []):
                 leaks.append({"tool": c["name"], "company_id": company, "tier": tier})
