@@ -73,6 +73,21 @@ describe("saved states", () => {
   it("saves comps and screens as their URL cleaners keep them (no page)", () => {
     expect(stateOf({ kind: "comps", compare: { target: NVDA, peers: [AAPL, NVDA, "x"] } })).toEqual({ target: NVDA, peers: [AAPL] });
     expect(stateOf({ kind: "screen", screen: { margin: 20, page: 3, sort: "-revenue_ttm" } })).toEqual({ margin: 20 });
+    // one sector or industry saves as the string screens always saved; several as lists
+    expect(stateOf({ kind: "screen", screen: { sector: ["Energy"], sector_industry: ["Coal"] } }))
+      .toEqual({ sector: "Energy", sector_industry: "Coal" });
+    expect(stateOf({ kind: "screen", screen: { sector: ["Utilities", "Materials"], sector_industry: ["Metals & mining"] } }))
+      .toEqual({ sector: ["Utilities", "Materials"], sector_industry: "Metals & mining" });
+  });
+
+  it("restores a saved screen's sectors whether one string (saved before several) or a list", () => {
+    expect(restoreScreen({ sector: "Energy", sector_industry: "Coal" })).toEqual({ sector: ["Energy"], sector_industry: ["Coal"] });
+    expect(restoreScreen({ sector: ["Utilities", "Materials", 3], sector_industry: ["Metals & mining"] }))
+      .toEqual({ sector: ["Utilities", "Materials"], sector_industry: ["Metals & mining"] });
+    // an unchanged old screen isn't an unsaved change
+    expect(fingerprint("screen", { sector: "Energy", sector_industry: "Coal" }))
+      .toBe(currentFingerprint({ kind: "screen", screen: { sector: ["Energy"], sector_industry: ["Coal"] } }));
+    expect(itemRoute("screen", { sector: ["Utilities", "Materials"] })).toEqual({ view: "companies", screen: { sector: ["Utilities", "Materials"] } });
   });
 
   it("the API's filled-in defaults don't count as unsaved changes", () => {
@@ -136,9 +151,11 @@ describe("names and open items", () => {
     // every filter (Morgan 33: "Revenue $1B to $10B" named a growth and margin screen)
     expect(suggestName({ kind: "screen", screen: { band: "1b-10b", growth: 15, margin: 15 } }, label))
       .toBe("Revenue $1B to $10B, growth ≥ 15%, operating margin ≥ 15%");
-    expect(suggestName({ kind: "screen", screen: { sector: "Technology", sector_industry: "Semiconductors", band: "10b-100b", growth: 10,
+    expect(suggestName({ kind: "screen", screen: { sector: ["Technology"], sector_industry: ["Semiconductors"], band: "10b-100b", growth: 10,
       margin: 20, fye: 12, exchange: "Nasdaq", filer: "large_accelerated", mine: true } }, label))
       .toBe("Semiconductors, revenue $10B to $100B, growth ≥ 10% +5 more");
+    expect(suggestName({ kind: "screen", screen: { sector: ["Utilities", "Materials"], sector_industry: ["Metals & mining"] } }, label))
+      .toBe("Metals & mining, Utilities, Materials");
     expect(suggestName({ kind: "comps", compare: { target: NVDA } }, label)).toBe("NVDA comps");
   });
 

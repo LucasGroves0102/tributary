@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   addItem,
   ApiError,
+  ask,
   askFailure,
   checkThesis,
   companyEvents,
@@ -84,6 +85,22 @@ describe("a Query API one release older (the minute of a deploy)", () => {
     return seen;
   };
   const refused = () => Response.json({ detail: [{ type: "less_than_equal" }] }, { status: 422 });
+
+  it("an agent-api older than the screen's sectors and industries is asked again without them; nothing else is retried", async () => {
+    const ctx = { page: "companies" as const, screen: { margin: 20, sectors: ["Utilities"], industries: ["Metals & mining"] } };
+    const done = new Response('data: {"type":"done","answer":{}}\n\n', { headers: { "Content-Type": "text/event-stream" } });
+    const seen = older((s) => ((s.body as { context?: { screen?: object } }).context?.screen && "sectors" in (s.body as { context: { screen: object } }).context.screen
+      ? Response.json({ detail: [{ type: "extra_forbidden" }] }, { status: 422 }) : done));
+    const events: unknown[] = [];
+    await ask("t", "uranium miners?", [], (e) => events.push(e), undefined, ctx);
+    expect(seen.map((s) => (s.body as { context: unknown }).context)).toEqual([ctx, { page: "companies", screen: { margin: 20 } }]);
+    expect(events).toEqual([{ type: "done", answer: {} }]);
+    // a context without them: a 422 is the question's own
+    const plain = older(() => Response.json({ detail: "question too long" }, { status: 422 }));
+    await expect(ask("t", "x", [], () => {}, undefined, { page: "home" })).rejects.toBeInstanceOf(ApiError);
+    vi.unstubAllGlobals();
+    expect(plain).toHaveLength(1);
+  });
 
   it("a whole section asked at the old cap when the new one is refused", async () => {
     const seen = older((s) => (s.url.searchParams.get("max_chars") === "1000000" ? refused()

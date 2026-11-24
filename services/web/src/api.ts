@@ -928,13 +928,27 @@ export async function ask(
   signal?: AbortSignal,
   context?: UiContext,
 ): Promise<void> {
-  const r = await fetch(`${AGENT}/v1/ask`, {
+  const send = (ctx?: UiContext) => fetch(`${AGENT}/v1/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(context ? { question, history, context } : { question, history }),
+    body: JSON.stringify(ctx ? { question, history, context: ctx } : { question, history }),
     signal,
   });
+  let r = await send(context);
+  // the deploy window: an agent-api older than the screen's sectors and industries refuses the
+  // context (422, before anything is counted), so ask once more without them
+  const older = r.status === 422 ? olderContext(context) : null;
+  if (older) r = await send(older);
   await stream(r, onEvent);
+}
+
+/** The context without what an agent-api one release older refuses (its UiContext is strict): the
+ * screen's sectors and industries. Null when there is none. */
+export function olderContext(context?: UiContext): UiContext | null {
+  const s = context?.screen;
+  if (!context || !s || (s.sectors === undefined && s.industries === undefined)) return null;
+  const { sectors: _sectors, industries: _industries, ...rest } = s;
+  return { ...context, screen: rest };
 }
 
 // --- filing alerts (F6) ------------------------------------------------------------------------

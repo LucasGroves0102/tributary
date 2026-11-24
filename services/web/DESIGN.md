@@ -817,7 +817,13 @@ duplicate: two SEC registrants, each with its own statements, a parent's includi
 
 Sectors (#136): the screener's filters have a Sector and an Industry within it (`/v1/sectors`,
 Tributary's own grouping of SIC codes, not GICS), and "Group by sector" sorts by sector and industry
-with a heading row for each. The SIC label stays: the Industry column shows it with the sector's
+with a heading row for each. Several of each (uranium plus renewables): each box adds one, the
+chosen ones are removable chips under it (removing a sector takes its industries), and the Industry
+box offers the chosen sectors' industries grouped by sector (every sector's when the assistant set
+industries alone). The API reads them as a tree: an industry narrows its own sector, a sector with
+none of its industries chosen counts whole. The URL repeats `sector` and `sector_industry`; a saved
+screen keeps one as the string screens always saved, several as a list (an old address or saved
+screen reads as a list of one). The SIC label stays: the Industry column shows it with the sector's
 industry under it, and the company header reads "Technology · Semiconductors · Semiconductors & Related
 Devices (SIC 3674)".
 
@@ -927,7 +933,9 @@ The assistant sends the screen as `context` with each question (`assistant/actio
 applies the agent's `action` events (chart layers and options, screener filters, watchlist) with
 an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and page from before
 it, reverses watchlist calls, deletes an item the assistant saved (`save_to_workspace`), and
-also undoes every later action.
+also undoes every later action. The screen's sectors and industries go to agent-api as `sectors`
+and `industries`, and come back the same way in a screen action (an empty list clears one); the
+data-check filter, the grouping sort and the user's own metrics never go.
 
 ## Saved work and reports
 
@@ -1628,7 +1636,10 @@ tags-only wording); nothing new is requested. Portfolio: `/v1/portfolio` and the
 the unread answer has it. Your data: `/v1/datasets` answering 404 says it isn't available on this
 server yet; the company page's Your data panel asks `/v1/companies/{id}/datasets` and shows nothing
 on a 404; a saved screen refused for its own metrics (`metric`, or a sort on an `m_` column) is
-saved again without them; the screener sends `metric` only when the user chose one. Watched
+saved again without them; the screener sends `metric` only when the user chose one. Several
+sectors and industries: an agent-api older than them refuses the question's context (422, before
+anything is counted), and `ask` asks once more without the screen's `sectors` and `industries`;
+a saved screen with one of each saves the strings an older Query API took (`stateOf`). Watched
 screens: `/v1/watches` and `/v1/alerts/screens` answering 404 (or a 503 without the app database)
 show no watch and no screen alerts (`orNullOn404`); nothing else is asked differently. Connected
 apps: `/v1/oauth/connections` answering 404 hides Settings' section (`orNullOn404`); the consent

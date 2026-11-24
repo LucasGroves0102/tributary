@@ -75,9 +75,11 @@ export interface ScreenFilters {
   industry?: string;
   /** one 4-digit SIC code (from clicking a row's industry) */
   sic?: string;
-  /** a sector of Tributary's open grouping over SIC (/v1/sectors), and an industry within it */
-  sector?: string;
-  sector_industry?: string;
+  /** sectors of Tributary's open grouping over SIC (/v1/sectors), and industries: a tree, as the
+   * screener reads them together (an industry narrows its own sector, a sector none of whose
+   * industries is chosen counts whole). The URL repeats the key; a saved screen keeps one as a string. */
+  sector?: string[];
+  sector_industry?: string[];
   band?: Band;
   /** minimum revenue growth, TTM YoY, in percent */
   growth?: number;
@@ -100,6 +102,9 @@ export interface ScreenFilters {
 
 const KEYS = ["q", "industry", "sic", "sector", "sector_industry", "band", "growth", "margin", "fye",
   "exchange", "filer", "issue", "mine", "sort", "page"] as const;
+/** the screener's limits on the grouping's names (query-api ui.py, workspaces.ScreenState) */
+export const MAX_SECTORS = 12;
+export const MAX_INDUSTRIES = 20;
 /** own metrics a screen evaluates (query-api screener.MAX_METRICS) */
 export const MAX_METRICS = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -122,14 +127,20 @@ function int(v: string | null, lo: number, hi: number): number | undefined {
   return n !== undefined && Number.isInteger(n) ? n : undefined;
 }
 
+/** Names from repeated keys: trimmed, each once, at most `count`; undefined when none. */
+function names(vs: string[], max: number, count: number): string[] | undefined {
+  const out = [...new Set(vs.map((v) => text(v, max)).filter((v): v is string => v !== undefined))].slice(0, count);
+  return out.length ? out : undefined;
+}
+
 export function parseScreen(query: string): ScreenFilters {
   const p = new URLSearchParams(query);
   const f: ScreenFilters = {
     q: text(p.get("q")),
     industry: text(p.get("industry")),
     sic: /^\d{4}$/.test(p.get("sic") ?? "") ? p.get("sic")! : undefined,
-    sector: text(p.get("sector"), 40),
-    sector_industry: text(p.get("sector_industry"), 60),
+    sector: names(p.getAll("sector"), 40, MAX_SECTORS),
+    sector_industry: names(p.getAll("sector_industry"), 60, MAX_INDUSTRIES),
     band: (BANDS as readonly string[]).includes(p.get("band") ?? "") ? (p.get("band") as Band) : undefined,
     growth: num(p.get("growth"), -1000, 100000),
     margin: num(p.get("margin"), -1000, 100),
@@ -155,6 +166,10 @@ export function clean(f: ScreenFilters): ScreenFilters {
     if (v === undefined || v === "" || v === false) continue;
     if (k === "sort" && v === DEFAULT_SORT) continue;
     if (k === "page" && v === 0) continue;
+    if (Array.isArray(v)) {
+      if (v.length) (out as Record<string, unknown>)[k] = [...v];
+      continue;
+    }
     (out as Record<string, unknown>)[k] = v;
   }
   if (f.metric?.length) out.metric = [...f.metric];
@@ -167,7 +182,8 @@ export function screenQuery(f: ScreenFilters): string {
   const p = new URLSearchParams();
   for (const k of KEYS) {
     const v = c[k];
-    if (v !== undefined) p.set(k, v === true ? "1" : String(v));
+    if (Array.isArray(v)) for (const x of v) p.append(k, x);
+    else if (v !== undefined) p.set(k, v === true ? "1" : String(v));
   }
   for (const m of c.metric ?? []) p.append("metric", m);
   return p.toString();
@@ -179,7 +195,7 @@ export function isEmpty(f: ScreenFilters): boolean {
 
 /** How many filters are set: the count on the collapsed filter band. */
 export function activeFilters(f: ScreenFilters): number {
-  return [f.q, f.industry, f.sic, f.sector, f.sector_industry, f.band, f.growth, f.margin, f.fye, f.exchange, f.filer, f.issue, f.mine]
+  return [f.q, f.industry, f.sic, ...(f.sector ?? []), ...(f.sector_industry ?? []), f.band, f.growth, f.margin, f.fye, f.exchange, f.filer, f.issue, f.mine]
     .filter((v) => v !== undefined && v !== "" && v !== false).length;
 }
 
@@ -215,8 +231,8 @@ export function screenParams(f: ScreenFilters, columns: string[] = SCREEN_COLUMN
   if (f.q) p.q = f.q;
   if (f.industry) p.industry = f.industry;
   if (f.sic) p.sic = [f.sic];
-  if (f.sector) p.sector = [f.sector];
-  if (f.sector_industry) p.sector_industry = [f.sector_industry];
+  if (f.sector?.length) p.sector = [...f.sector];
+  if (f.sector_industry?.length) p.sector_industry = [...f.sector_industry];
   if (f.band) p.revenue_band = f.band;
   if (f.fye) p.fiscal_year_end_month = f.fye;
   if (f.exchange) p.exchange = [f.exchange];
@@ -239,7 +255,7 @@ export function describe(f: ScreenFilters): string {
     f.q && `name or ticker "${f.q}"`,
     f.industry && `industry contains "${f.industry}"`,
     f.sic && `SIC ${f.sic}`,
-    f.sector_industry ? `${f.sector ? `${f.sector}: ` : ""}${f.sector_industry}` : f.sector && `sector ${f.sector}`,
+    sectorWords(f),
     f.band && `revenue ${BAND_LABELS[f.band]}`,
     f.growth !== undefined && `revenue growth ≥ ${f.growth}%`,
     f.margin !== undefined && `operating margin ≥ ${f.margin}%`,
@@ -259,7 +275,7 @@ export function nameClauses(f: ScreenFilters): string[] {
     f.q && `"${f.q}"`,
     f.industry && `industry "${f.industry}"`,
     f.sic && `SIC ${f.sic}`,
-    f.sector_industry ?? f.sector,
+    sectorName(f),
     f.band && `revenue ${BAND_LABELS[f.band]}`,
     f.growth !== undefined && `growth ≥ ${f.growth}%`,
     f.margin !== undefined && `operating margin ≥ ${f.margin}%`,
@@ -269,6 +285,28 @@ export function nameClauses(f: ScreenFilters): string[] {
     f.issue && `check: ${checkName(f.issue) ?? f.issue}`,
     f.mine && "readable only",
   ].filter((x): x is string => typeof x === "string" && x !== "");
+}
+
+/** The grouping's filters in words: one industry in its sector as before ("Energy: Coal"), else
+ * the sectors and the industries, each listed. */
+function sectorWords(f: ScreenFilters): string | undefined {
+  const s = f.sector ?? [];
+  const i = f.sector_industry ?? [];
+  if (i.length === 1 && s.length <= 1) return `${s.length ? `${s[0]}: ` : ""}${i[0]}`;
+  const parts = [
+    s.length && `${s.length === 1 ? "sector" : "sectors"} ${s.join(", ")}`,
+    i.length && `industries ${i.join(", ")}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join("; ") : undefined;
+}
+
+/** The grouping in a screen's name: its industries (a sector with one industry is that industry, as
+ * before), then any other sectors. */
+function sectorName(f: ScreenFilters): string | undefined {
+  const s = f.sector ?? [];
+  const i = f.sector_industry ?? [];
+  const shown = i.length && s.length <= 1 ? i : [...i, ...s];
+  return shown.length ? shown.join(", ") : undefined;
 }
 
 export const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August",

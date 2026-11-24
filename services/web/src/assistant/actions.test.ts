@@ -20,6 +20,12 @@ describe("the screen sent with a question", () => {
     const ctx = uiContext({ view: "companies", screen: { margin: 20, issue: "impossible_value", page: 2 } }, emptyChart(), () => null);
     expect(JSON.parse(JSON.stringify(ctx.screen))).toEqual({ margin: 20 });
   });
+
+  it("names the screen's sectors and industries as agent-api does, and never own metrics or the grouping sort", () => {
+    const ctx = uiContext({ view: "companies", screen: { sector: ["Utilities"], sector_industry: ["Metals & mining"], sort: "sector",
+      metric: ["8f14e45f-ceea-467f-a8d5-6f2ad7a1c0b4"] } }, emptyChart(), () => null);
+    expect(JSON.parse(JSON.stringify(ctx.screen))).toEqual({ sectors: ["Utilities"], industries: ["Metals & mining"] });
+  });
 });
 
 describe("compare actions", () => {
@@ -82,6 +88,11 @@ describe("chart actions", () => {
 it("merges screen filters unless reset", () => {
   expect(screenAfter({ band: "1b-10b", page: 3 }, { margin: 25 }, false)).toEqual({ band: "1b-10b", margin: 25 });
   expect(screenAfter({ band: "1b-10b" }, { industry: "software" }, true)).toEqual({ industry: "software" });
+  // the agent's sectors and industries are the screen's sector and sector_industry; an empty list clears one
+  expect(screenAfter({ sector: ["Utilities"], band: "lt100m" }, { industries: ["Metals & mining", "Independent power & renewables"] }, false))
+    .toEqual({ sector: ["Utilities"], sector_industry: ["Metals & mining", "Independent power & renewables"], band: "lt100m" });
+  expect(screenAfter({ sector: ["Utilities"], sector_industry: ["Electric utilities"] }, { sectors: [], industries: ["Coal"] }, false))
+    .toEqual({ sector_industry: ["Coal"] });
 });
 
 describe("screen context", () => {
