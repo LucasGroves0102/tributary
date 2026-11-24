@@ -460,7 +460,10 @@ jobs:
       SEGMENTS_BATCH: "25"
       SEGMENTS_ROUNDS: "40"
       SEGMENTS_PAUSE_SECONDS: "0"
-      CATCHUP_SECONDS: "1200"
+      # 40 min (2026-11-23): the checks re-run while the parser catch-up re-reads statements took
+      # most of 20, and gold's history (086, ~80 s a company since 161) got what was left. The job
+      # caps it at JOB_SECONDS (3000) less its own work, so the next hour's run still starts.
+      CATCHUP_SECONDS: "2400"
   # Filing alerts (query_api/alert_job.py, app migration 016): every 10 minutes, the 10-K, 10-Q
   # and material 8-K filings of each user's watched and analysed companies in the last 3 days
   # (public filing index), as in-app notifications with their key figures and the user's red

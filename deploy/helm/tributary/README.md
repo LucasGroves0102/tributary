@@ -73,7 +73,7 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | `insiders-catchup` | doc-fetcher (`doc-fetcher-insiders`) | daily 08:45 | on | Forms 3/4/5 of the last 7 days the live doc-fetcher missed (059) |
 | `filing-facts` | facts-fetcher (`facts-fetcher-filings`) | daily 09:30 | on (Flux release) | filings companyfacts lacks, from their own XBRL (055) |
 | `demo-cleanup` | query-api (`query-api-demo-cleanup`) | hourly at :15 | on | deletes expired demo sandboxes |
-| `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018); then up to 20 min of catch-up: gold and checks an older rule built (071) |
+| `segments` | facts-fetcher (`facts-fetcher-segments`) | hourly at :20 | on (Flux release) | segment and KPI facts from the stored documents' inline XBRL (018); then up to 40 min of catch-up: gold, its history and checks an older rule built (071) |
 | `section-index` | parser (`parser-index`) | hourly at :40 | on (Flux release) | search passages and section diffs (021) and the parser-output checks of what it indexes (072); then catch-up: re-queues 3,000 documents of an older parser for `parser-backfill` (paused until the owner starts it), up to 5 min of parser checks on older documents (072), the rest of 20 min on older passages (071) |
 | `alerts` | query-api (`query-api-alerts`) | every 10 minutes | on | filing alerts and webhooks (app migration 016); watched screens, each once after the nightly figures land (app 024, tributary 110) |
 | `business-peers` | parser (`parser-peers`) | Sundays 05:30 | on | peers by business (047, 160) |
