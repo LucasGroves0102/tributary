@@ -3,6 +3,12 @@
 Files installed directly on the server, outside Kubernetes. Postgres 16 runs on the host (with
 `wal_level=logical` for Debezium) and holds the `tributary`, `app` and `openfga` databases.
 
+**Hermes runs without backups (owner's decision, 2026-11-24).** Hermes is one machine with one disk:
+a backup on it dies with it, and the copies (14 nightly dumps plus a weekly full one, ~117 GB) were
+filling the disk. The SEC data can be downloaded and rebuilt again. The backup and restore-test
+timers are disabled there and their alerts removed. The scripts below stay for a host with
+off-site storage.
+
 | File | Does |
 |---|---|
 | `pg-backup.sh` | logical backup as the `postgres` user: roles (`pg_dumpall --globals-only`) plus one custom-format dump per database, each checked with `pg_restore --list` before the backup directory is published, with `<db>.rowcounts` (every table's row count in the dump's own snapshot); deletes backups older than `KEEP_DAYS`; writes `pg_backup_last_success_timestamp_seconds` and `pg_backup_size_bytes` for node-exporter's textfile collector |
@@ -45,10 +51,6 @@ Dumps use `zstd:1` compression (Postgres 16). Most of the document bodies are al
 minutes (38 GB, 2026-11-02). Older gzip dumps restore the same way. The full dump was 57 GB on
 2026-11-22 and the nightly slim dump 6.7 GB on 2026-11-23.
 
-The restore test needs `FREE_SPACE_FACTOR` x the full dump free (~115 GB at 57 GB). On hermes it has
-refused to run since 2026-11-22 (89 GB free on 2026-11-24, with 14 days of slim dumps on the same disk):
-`PostgresRestoreTestFailed`, then `PostgresRestoreTestMissing`. It needs room: off-site backups (the
-hosting move), or fewer days of slim dumps (`KEEP_DAYS`).
 
 ## Install
 
@@ -104,6 +106,5 @@ fills. Past the cap the slot is invalidated and Debezium re-snapshots the app ta
 after a change: `sudo -u postgres psql -c "SELECT pg_reload_conf()"`. The
 `ReplicationSlotRetainingWal` alert fires above 10 GB.
 
-The `PostgresBackupMissing` alert ([deploy/helm/monitoring](../helm/monitoring)) fires when no
-backup succeeded in 26 hours; `PostgresRestoreTestFailed` when the last restore test failed, and
-`PostgresRestoreTestMissing` when none passed in 8 days (including before the first run). Alloy ships the unit's journal to Loki.
+The backup alerts (`PostgresBackupMissing`, `PostgresRestoreTestFailed`, `PostgresRestoreTestMissing`)
+were removed with the backups on 2026-11-24; restore them from git history with the timers. Alloy ships the unit's journal to Loki.

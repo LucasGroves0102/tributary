@@ -21,8 +21,7 @@ rules are off.
 
 - `templates/rules.yaml`: `KafkaConsumerLagGrowing`, `FilingsNotArriving` (no new
   `filings.raw` message in 2 hours, weekdays 14:00-21:00 UTC), `CompanyFactsBehindEdgar` (needs
-  `opsDatabase.enabled`), `PostgresBackupMissing`, `PostgresRestoreTestFailed`,
-  `PostgresRestoreTestMissing` (no passing weekly restore test in 8 days), `PostgresDown`,
+  `opsDatabase.enabled`), `PostgresDown`,
   `ReplicationSlotRetainingWal` (a slot holding over 10 GB of WAL), `PostgresConnectionsHigh`,
   `DiskUsageHigh`, `DiskSpaceUnder100GB` (a warning: runbook below), `DiskSpaceLow` (under 50
   GB free), and for the document crawl
@@ -65,8 +64,8 @@ and for kafka-exporter over SASL `kafka-exporter-kafka` (`username`, `password`;
 the [Kafka authentication rollout](../platform/README.md#kafka-authentication-saslscram):
 `prometheus-kafka-exporter.kafkaServer` on port 9094 and `sasl.enabled` + `sasl.scram.enabled`,
 set in the hermes release values).
-`PostgresBackupMissing` and the two restore-test alerts read the textfile metrics written by
-[deploy/host/pg-backup.sh and pg-restore-test.sh](../../host).
+No backup alerts: hermes runs without backups since 2026-11-24 ([deploy/host](../../host)); the
+backup and restore-test alerts went with them.
 
 ## Install
 
