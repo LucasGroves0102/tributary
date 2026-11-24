@@ -20,7 +20,7 @@ export interface Screen {
   /** what the screen shows now, sent with each question */
   context: () => UiContext;
   /** applies an action event; returns what the message shows (with Undo) */
-  onAction: (a: UiAction) => { id: number; label: string };
+  onAction: (a: UiAction) => { id: number; label: string; page?: string };
 }
 
 const HISTORY_TURNS = 10;

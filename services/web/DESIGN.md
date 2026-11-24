@@ -935,7 +935,10 @@ an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and pa
 it, reverses watchlist calls, deletes an item the assistant saved (`save_to_workspace`), and
 also undoes every later action. The screen's sectors and industries go to agent-api as `sectors`
 and `industries`, and come back the same way in a screen action (an empty list clears one); the
-data-check filter, the grouping sort and the user's own metrics never go.
+data-check filter, the grouping sort and the user's own metrics never go. Below 1200px the drawer
+floats over the page, so a change to a page (the chart, Companies, Compare) is made behind it: the
+applied line then has Show, which closes the drawer (the conversation stays; Ctrl J opens it again).
+Beside the page there is nothing to show and no Show.
 
 ## Saved work and reports
 

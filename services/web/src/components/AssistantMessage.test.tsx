@@ -86,3 +86,25 @@ it("says every figure verified when they all are, naming none", () => {
   expect(container.querySelector(".badge.ok")?.textContent).toBe("✓ 1 figure found in the data it was given");
   expect(container.querySelector(".badge.ok")?.getAttribute("title")).toContain("doesn't mean the assistant read the passage");
 });
+
+it("an applied change to a page offers Show where the panel covers the page; a watchlist change or an undone one doesn't", () => {
+  let shown = 0;
+  const onShow = () => {
+    shown += 1;
+  };
+  const t: AssistantTurn = { ...turn(answer("Done: the screen is on the Companies page.", [])), actions: [
+    { id: 1, label: "Screen: industries Metals & mining", page: "Companies" },
+    { id: 2, label: "Added TSLA to watchlist" },
+    { id: 3, label: "Chart: NVDA revenue", page: "the chart builder" },
+  ] };
+  act(() => root.render(<AssistantMessage turn={t} undone={new Set([3])} onShow={onShow} />));
+  const acts = [...container.querySelectorAll(".act")];
+  const show = (el: Element) => [...el.querySelectorAll("button")].find((b) => b.textContent === "Show");
+  expect(acts.map((a) => !!show(a))).toEqual([true, false, false]);
+  expect(show(acts[0]!)!.title).toBe("Close the assistant to see Companies; Ctrl J opens it again");
+  act(() => show(acts[0]!)!.click());
+  expect(shown).toBe(1);
+  // beside the page (a wide window) there is nothing to show
+  act(() => root.render(<AssistantMessage turn={t} />));
+  expect([...container.querySelectorAll(".act button")].some((b) => b.textContent === "Show")).toBe(false);
+});

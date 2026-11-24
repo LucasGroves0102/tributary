@@ -19,8 +19,8 @@ interface Applied {
 }
 
 export interface UiActions {
-  /** Applies an action from the agent; returns its id and label for the message. */
-  apply: (a: UiAction) => { id: number; label: string };
+  /** Applies an action from the agent; returns its id, label and the page it changed for the message. */
+  apply: (a: UiAction) => { id: number; label: string; page?: string };
   /** Undoes the action and every later one (newest first), and goes back to its page. */
   undo: (id: number) => Promise<void>;
   undone: ReadonlySet<number>;
@@ -120,7 +120,10 @@ export function useUiActions(user: string | null, deps: Deps): UiActions {
         });
       }
     }
-    return { id: entry.id, label: entry.label };
+    const page = isChartAction(a) ? "the chart builder"
+      : a.action === "set_screen_filters" ? "Companies"
+        : a.action === "set_compare" ? "Compare" : undefined;
+    return { id: entry.id, label: entry.label, ...(page ? { page } : {}) };
   }, []);
 
   const undo = useCallback(async (id: number) => {
