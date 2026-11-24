@@ -211,6 +211,8 @@ class CompsState(_Strict):
         return self
 
 
+SectorName = Annotated[str, Field(min_length=1, max_length=40)]
+IndustryName = Annotated[str, Field(min_length=1, max_length=60)]
 SCREEN_SORTS = ("name", "sic", "fiscal_year_end", "revenue_ttm", "revenue_growth_ttm",
                 "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q",
                 "debt_to_equity_q", "sector")
@@ -221,9 +223,12 @@ class ScreenState(_Strict):
     q: str | None = Field(default=None, min_length=1, max_length=100)
     industry: str | None = Field(default=None, min_length=1, max_length=100)
     sic: str | None = Field(default=None, pattern=r"^\d{4}$")
-    # F4: the open sector grouping (migration 046), names as /v1/sectors gives them
-    sector: str | None = Field(default=None, min_length=1, max_length=40)
-    sector_industry: str | None = Field(default=None, min_length=1, max_length=60)
+    # F4: the open sector grouping (migration 046), names as /v1/sectors gives them: one as a
+    # string (every state saved before several), several as a list (the screener's limits)
+    sector: SectorName | Annotated[list[SectorName], Field(min_length=1, max_length=12)] | None \
+        = None
+    sector_industry: IndustryName | Annotated[list[IndustryName], Field(
+        min_length=1, max_length=20)] | None = None
     band: Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"] | None = None
     growth: float | None = Field(default=None, ge=-1000, le=100000)
     margin: float | None = Field(default=None, ge=-1000, le=100)

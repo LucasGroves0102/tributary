@@ -359,6 +359,13 @@ def test_screen_params_match_the_web_app():
         "q": "a", "industry": "software", "sic": ["7372"], "revenue_band": "1b-10b",
         "fiscal_year_end_month": 12, "exchange": ["Nasdaq"], "filer_category": ["accelerated"],
         "access": "financials"}
+    # the sector grouping: one as the string it was saved as, several as lists
+    one = screen_params({"sector": "Energy", "sector_industry": "Coal"})
+    assert (one["sector"], one["sector_industry"]) == (["Energy"], ["Coal"])
+    several = screen_params({"sector": ["Utilities", "Materials"],
+                             "sector_industry": ["Metals & mining"]})
+    assert (several["sector"], several["sector_industry"]) == (["Utilities", "Materials"],
+                                                               ["Metals & mining"])
 
 
 # --- HTTP ------------------------------------------------------------------------------------

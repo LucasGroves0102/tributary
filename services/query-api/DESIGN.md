@@ -247,7 +247,10 @@ quarter end) or `<metric>_q` (latest fiscal quarter) for every metric in the for
 each the latest value with its own `sources[key]` (`period_end`, `accession_no`, `form`,
 `filed`). Filters: `sic` (4-digit, repeatable), `sic_prefix` (1-3 digits), `industry` (SIC
 description contains), `q` (name contains or exact ticker), `exchange`,
-`fiscal_year_end_month`, `sector` / `sector_industry` (repeatable, exact names from `/v1/sectors`),
+`fiscal_year_end_month`, `sector` / `sector_industry` (repeatable, exact names from `/v1/sectors`;
+given together they are a tree: an industry narrows its own sector, a sector none of whose
+industries is given counts whole, an industry of another sector adds it; industry names are
+unique, so a sector with an industry inside it reads as sector AND industry, as before),
 `company_id` (repeatable, at most 21: only these companies, including
 ones without gold financials, for a comps table or a tearsheet), `filer_category` (`large_accelerated`, `accelerated`,
 `non_accelerated`), `revenue_band` / `assets_band` (`lt100m`, `100m-1b`, `1b-10b`, `10b-100b`,
@@ -1590,8 +1593,8 @@ they set. Rules: `watches.py`'s docstring; the pass: `watch_job.py`; storage: ap
   resolve through the owner's items and datasets. So a company the owner can't read is never in their
   screen, whoever else reads it (`test_watch_screens_db.py`, catalog closed and open).
 - **Exactly the screener.** `screen_of` maps a saved state the way the web's `screenParams` and
-  `/v1/screener` do (growth and margin as minimum fractions, band, one sic, sector, exchange, filer,
-  name, issue); a DB test compares its members with `/v1/screener?access=financials` for the same
+  `/v1/screener` do (growth and margin as minimum fractions, band, one sic, exchange, filer,
+  name, issue; sectors and industries as lists, a string saved before several being one); a DB test compares its members with `/v1/screener?access=financials` for the same
   screen. Lines read the screener's own values: `Screen.blank_columns` adds their columns to the query
   without changing which companies `hide_blank` lists (None: the screener's SQL byte for byte), and a
   value compares only as k<i> would (`comparable`: none for n/m, n/a, old, another currency). A line

@@ -445,7 +445,9 @@ def test_screener_rows_carry_co_registrants_and_sector_filters(token):
     compiled = c.store.compiled[-1]
     assert compiled.params["sectors"] == ["Technology"]
     assert compiled.params["sector_industries"] == ["Semiconductors"]
-    assert "ss.sector = ANY(%(sectors)s)" in compiled.sql and "Technology" not in compiled.sql
+    # both given: the tree (test_screener), with the names bound, never in the SQL
+    assert "ss.industry = ANY(%(sector_industries)s) OR ss.sector = ANY(ARRAY(" in compiled.sql
+    assert "Technology" not in compiled.sql and "Semiconductors" not in compiled.sql
     rows = {x["company_id"]: x for x in r.json()["rows"]}
     assert rows[NVDA]["co_registrants"][0]["company_id"] == TSLA
     assert rows[TSLA]["co_registrants"] == []
@@ -467,3 +469,14 @@ def test_saved_comps_and_screens_accept_f4_fields():
         CompsState(target=NVDA, cols=["salary_ttm"])  # type: ignore[list-item]
     with pytest.raises(ValidationError):
         ScreenState(sort="-salary")
+    # several sectors and industries save as lists; one stays the string it always was
+    several = ScreenState.model_validate({"sector": ["Utilities", "Materials"],
+                                          "sector_industry": ["Metals & mining"]})
+    assert several.model_dump(exclude_none=True) == {
+        "sector": ["Utilities", "Materials"], "sector_industry": ["Metals & mining"]}
+    assert screen.model_dump(exclude_none=True)["sector"] == "Financials"
+    for bad in ({"sector": []}, {"sector": ["x" * 41]}, {"sector": ["Energy"] * 13},
+                {"sector_industry": ["Coal"] * 21}, {"sector_industry": [""]},
+                {"sector": [3]}):
+        with pytest.raises(ValidationError):
+            ScreenState.model_validate(bad)

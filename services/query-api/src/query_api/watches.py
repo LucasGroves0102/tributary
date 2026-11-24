@@ -114,10 +114,11 @@ def screen_of(state: dict, columns: list[str], metrics: dict[str, MetricColumn],
               extra: list[str], limit: int = MAX_MEMBERS + 1) -> Screen:
     """The Screen /v1/screener runs for a saved screen's state (workspaces.ScreenState) as the
     Companies page sends it (web companies/screen.ts screenParams: growth and margin as minimum
-    fractions, band as revenue_band, one sic, sector, exchange and filer), with these columns
-    (the user's, else the default) and the state's own metrics, plus `extra` columns read
-    without changing which companies are listed (Screen.blank_columns). Always only companies
-    the caller can read (`granted_only`), every page of it in company-id order."""
+    fractions, band as revenue_band, one sic, exchange and filer; sectors and industries as
+    lists, a string being one), with these columns (the user's, else the default) and the
+    state's own metrics, plus `extra` columns read without changing which companies are listed
+    (Screen.blank_columns). Always only companies the caller can read (`granted_only`), every
+    page of it in company-id order."""
     filters: list[Filter] = []
     if state.get("growth") is not None:
         filters.append(Filter("revenue_growth_ttm", "gte", fraction(state["growth"])))
@@ -130,12 +131,14 @@ def screen_of(state: dict, columns: list[str], metrics: dict[str, MetricColumn],
     read = [*blank, *(k for k in dict.fromkeys(extra) if k not in blank)]
     q, issue = state.get("q"), state.get("issue")
     one = lambda key: [state[key]] if state.get(key) else []  # noqa: E731
+    # a sector and an industry: one as a string (states saved before several), several as a list
+    some = lambda key: list(state[key]) if isinstance(state.get(key), list) else one(key)  # noqa: E731
     return Screen(columns=read, blank_columns=blank if read != blank else None, metrics=metrics,
                   coverage=True, hide_blank=q is None and issue is None, granted_only=True,
                   sic=one("sic"), industry=state.get("industry"), q=q,
                   exchanges=one("exchange"), fye_months=one("fye"),
-                  filer_categories=one("filer"), sectors=one("sector"),
-                  sector_industries=one("sector_industry"), issue=issue, filters=filters,
+                  filer_categories=one("filer"), sectors=some("sector"),
+                  sector_industries=some("sector_industry"), issue=issue, filters=filters,
                   sort="company_id", limit=limit, offset=0)
 
 

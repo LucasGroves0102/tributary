@@ -561,11 +561,23 @@ def compile_screen(s: Screen, granted: list[str] | None) -> Compiled:
         meta.append("gold.filer_category(c.filer_categories) = ANY(%(filer_categories)s)")
         params["filer_categories"] = s.filer_categories
     if s.sectors:
-        meta.append("ss.sector = ANY(%(sectors)s)")
         params["sectors"] = s.sectors
     if s.sector_industries:
-        meta.append("ss.industry = ANY(%(sector_industries)s)")
         params["sector_industries"] = [RENAMED_INDUSTRIES.get(i, i) for i in s.sector_industries]
+    if s.sectors and s.sector_industries:
+        # several of each (the web app's lists, the assistant's screens): an industry narrows its
+        # own sector, a sector none of whose industries is chosen counts whole, and an industry
+        # of a sector not chosen adds it ("uranium plus renewables": Metals & mining and Utilities).
+        # Industry names are unique across sectors, so with every industry inside a chosen sector
+        # (all the web app sent before) this is exactly sector AND industry. The sectors left whole
+        # are one uncorrelated subquery (an InitPlan), not a lookup per company.
+        meta.append("(ss.industry = ANY(%(sector_industries)s) OR ss.sector = ANY(ARRAY("
+                    "SELECT unnest(%(sectors)s::text[]) EXCEPT SELECT x.sector"
+                    " FROM silver.sic_sectors x WHERE x.industry = ANY(%(sector_industries)s))))")
+    elif s.sectors:
+        meta.append("ss.sector = ANY(%(sectors)s)")
+    elif s.sector_industries:
+        meta.append("ss.industry = ANY(%(sector_industries)s)")
     if s.issue:
         # under RLS on ops.quality_findings: a company the caller can't read never matches, so
         # this says nothing about it (the public status page has the counts only)

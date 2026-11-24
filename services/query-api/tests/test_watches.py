@@ -95,6 +95,18 @@ def test_a_saved_screen_runs_as_the_companies_page_sends_it():
     assert (s.sort, s.limit, s.offset) == ("company_id", MAX_MEMBERS + 1, 0)
 
 
+def test_several_sectors_and_industries_run_as_lists_and_one_as_before():
+    """The web app saves one sector or industry as a string (every state saved before) and
+    several as a list: both are the screener's lists."""
+    s = screen_of({"sector": ["Utilities", "Materials"],
+                   "sector_industry": ["Metals & mining"]}, [], {}, [])
+    assert (s.sectors, s.sector_industries) == (["Utilities", "Materials"], ["Metals & mining"])
+    old = screen_of({"sector": "Energy", "sector_industry": "Coal"}, [], {}, [])
+    assert (old.sectors, old.sector_industries) == (["Energy"], ["Coal"])
+    assert compile_screen(old, None).sql == compile_screen(
+        screen_of({"sector": ["Energy"], "sector_industry": ["Coal"]}, [], {}, []), None).sql
+
+
 def test_a_name_or_a_data_check_lists_companies_whatever_they_have():
     assert not screen_of({"q": "NVDA"}, [], {}, []).hide_blank
     assert not screen_of({"issue": "outlier"}, [], {}, []).hide_blank

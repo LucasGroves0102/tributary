@@ -264,6 +264,13 @@ def screen_params(s: dict) -> dict:
                                 ("exchange", "exchange", True), ("filer", "filer_category", True)):
         if s.get(key) is not None:
             p[param] = [s[key]] if as_list else s[key]
+    # the sector grouping: one saved as a string, several as a list
+    for key, param in (("sector", "sector"), ("sector_industry", "sector_industry")):
+        names = s.get(key)
+        if isinstance(names, str) and names:
+            p[param] = [names]
+        elif isinstance(names, list) and names:
+            p[param] = [n for n in names if isinstance(n, str)]
     if s.get("mine"):
         p["access"] = "financials"
     return p
