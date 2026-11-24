@@ -11,22 +11,22 @@ Microsoft, Nvidia, Costco, JPMorgan) and workspace.
 latency, completeness against EDGAR's daily indexes, coverage, data-quality checks and the last
 recorded test-suite runs, live from the production database.
 
-Measured on production on 2026-11-17 unless the row or its report says otherwise (the status page has the live figures):
+Measured on production on 2026-11-24 unless the row or its report says otherwise (the status page has the live figures):
 
 | | |
 |---|---|
 | **0 of 59** | prompt attacks on the assistant leaked data (recorded 2026-10-18 with the catalog closed, replayed in CI; [adversarial suite](tests/adversarial/report.md)). Cross-user, deterministic, in CI: 2,487 checks that no other user, key, connected app, sandbox or MCP tool reaches a user's private data, with the catalog open and closed ([access suite](tests/access/README.md)) |
 | **128 of 128** | figures in the agent's answers traced to a filing or XBRL fact ([citation suite](tests/citations/report.md)) |
 | **< 0.2 s** | to revoke access after a grant changes, measured in CI to OpenFGA and the RLS tables (0.11–0.17 s, [report](tests/propagation/report.md)), not yet on production; CI fails above 3 s (BRD target: 30 s) |
-| **50 s / 8.8 min** | p50 / p95 from EDGAR acceptance to Postgres for the 85.6% of 22,084 filings (last 7 days) the live feed caught; the rest came from EDGAR's daily index hours later. Target 2 min at p95: missed |
+| **51 s / 4.2 min** | p50 / p95 from EDGAR acceptance to Postgres for the 96.7% of 15,198 filings (last 7 days) the live feed caught; the rest came from EDGAR's daily index hours later. Target 2 min at p95: missed |
 | **53 s / 77 s** | p50 / p95 from EDGAR acceptance to a 10-K, 10-Q or 8-K's parsed sections in the reader (413 filings, measured 2026-11-09) |
-| **2,820 of 77,428** | filings in EDGAR's daily indexes over the last 30 days were missing when the nightly completeness check ran (all on one day), and it republished them |
-| **6,625** | companies with financials from XBRL, of 992,927 SEC filers indexed |
+| **102 of 80,611** | filings in EDGAR's daily indexes over the last 30 days were missing when the nightly completeness check ran (all on one day), and it republished them |
+| **6,663** | companies with financials from XBRL, of 994,206 SEC filers indexed |
 | **957** | figures printed in 96 companies' 10-Ks, checked against the database on every push, each difference listed; 808 of them machine-read and kept only where the print equals the filing's XBRL, not yet hand-checked ([reference set](tests/golden/README.md#reference-set)) |
 | **6,068** | exchange-listed companies measured nightly for every kind of data gap, each one said on the company's page: fixable, not in the SEC's data, or out of scope ([db](db/DESIGN.md#076_coveragesql)) |
-| **638,870** | 10-K, 10-Q and 8-K filings from 5,408 companies since November 2015, parsed into 3.59M sections; 433 GB of HTML kept in 28 GB |
+| **666,499** | 10-K, 10-Q, 8-K, 20-F, 40-F and 6-K filings from 6,647 companies since November 2015, parsed into 3.86M sections; 454 GB of HTML kept in 31 GB |
 | **27M + 33M** | filing records and XBRL facts, kept current by nightly batch loads on one self-managed server |
-| **~4,000** | tests on every push: 3,000+ Python, 1,100+ web unit, 23 browser end-to-end flows, ~70 Rust |
+| **~8,300** | tests on every push: 7,000+ Python, 1,100+ web unit, 28 browser end-to-end flows, ~70 Rust |
 
 ## What it does
 
@@ -91,7 +91,7 @@ with its measurements.
   SEC's data has a gap, and histories carried across re-registrations (Broadcom from 2010 through
   Avago, Marvell from 2008) ([db](db/DESIGN.md#074_statement_reconciliation_confidencesql),
   [coverage](db/DESIGN.md#076_coveragesql)).
-- **Insider filings.** Forms 3, 4 and 5 parsed from the SEC's ownership XML (33,572 stored)
+- **Insider filings.** Forms 3, 4 and 5 parsed from the SEC's ownership XML (37,908 stored)
   ([query-api](services/query-api/README.md#insider-filings),
   [doc-fetcher](services/doc-fetcher/README.md#insider-filings-forms-3-4-5)).
 - **Foreign filers** (20-F, 40-F): figures in their own currency, never converted, kept out of
@@ -100,8 +100,9 @@ with its measurements.
   with its risk factors, a 40-F's exhibits), and 6-K results releases on the Earnings tab
   ([db](db/README.md), [parser](services/parser/README.md#foreign-filers-rules-12-and-13),
   [doc-fetcher](services/doc-fetcher/README.md)).
-- **The assistant** on every screen, answering through Query API tools with every figure verified
-  ([agent](services/agent/README.md)).
+- **The assistant** on every screen, answering through Query API tools with every figure verified:
+  Claude Opus 5.5 for signed-in accounts, Claude Haiku 5.5 in demo sandboxes, each with a daily
+  budget ([agent](services/agent/README.md)).
 - **API keys.** Personal access tokens for your own scripts: read or read and write, rate-limited
   per key, revoked at once, the same two permission layers; a public "Using the API" page and a
   one-file Python client ([query-api](services/query-api/README.md#api-keys),

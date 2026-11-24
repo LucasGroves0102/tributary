@@ -165,7 +165,9 @@ Production also takes the material-event items (1.01-1.03, 1.05, 2.01, 2.03-2.06
 Helm values: about 65,000 more 8-Ks over the 5 years, about 1.2 GB.
 Production's window is 11 years since 2026-11-09 (`CRAWL_YEARS`), reaching back to late 2015 for the
 documents of 2016 onward: about 288,000 more filings, roughly +53 GB in the database and 29 hours of fetching at
-the crawl's spare rate, then search indexing.
+the crawl's spare rate, then search indexing. Done: the crawl finished in November 2026 (662,303 targets); the
+database was 199 GB on 2026-11-24 (97 GB on 2026-11-09), with the foreign filers' documents (migration 095) and
+parser v7's tables landing in the same weeks.
 
 | | |
 |---|---|

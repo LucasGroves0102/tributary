@@ -33,15 +33,22 @@ the crawl (`ops.doc_crawl_plan`, then `doc-crawler` + `parser-backfill`), then t
 Full dumps hold every table's data (since parser v7 that includes `silver.filing_tables`, the parsed
 documents' tables: a few GB once every filing is parsed with v7) except what the `section-index` job
 derives from the parsed sections: `gold.section_search`, `gold.section_diffs`, `gold.section_changes` and its checkpoint
-`ops.section_index` (~35 GB, listed in `tributary.schema-only-tables`). After restoring one, run
-the `section-index` job until `ops.section_index_status` has caught up (about 1 h of indexing and
-~4 h of diffs for ~265k filings; see the job's comment in the chart's `values.yaml`), then
+`ops.section_index` (~82 GB on 2026-11-24, listed in `tributary.schema-only-tables`). After restoring one,
+run the `section-index` job until `ops.section_index_status` has caught up (measured at ~265k filings:
+about 1 h of indexing and ~4 h of diffs; there are ~666k now, so expect roughly 2.5 times that; see the
+job's comment in the chart's `values.yaml`), then
 `REINDEX` `gold.section_search_tsv`. Search and "What changed" are empty until then; every other
 screen works at once.
 
 Dumps use `zstd:1` compression (Postgres 16). Most of the document bodies are already gzip, and
 `pg_dump`'s default gzip recompressing them on one core took most of the first full dump's ~70
-minutes (38 GB, 2026-11-02). Older gzip dumps restore the same way.
+minutes (38 GB, 2026-11-02). Older gzip dumps restore the same way. The full dump was 57 GB on
+2026-11-22 and the nightly slim dump 6.7 GB on 2026-11-23.
+
+The restore test needs `FREE_SPACE_FACTOR` x the full dump free (~115 GB at 57 GB). On hermes it has
+refused to run since 2026-11-22 (89 GB free on 2026-11-24, with 14 days of slim dumps on the same disk):
+`PostgresRestoreTestFailed`, then `PostgresRestoreTestMissing`. It needs room: off-site backups (the
+hosting move), or fewer days of slim dumps (`KEEP_DAYS`).
 
 ## Install
 

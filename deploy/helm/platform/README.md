@@ -59,7 +59,7 @@ so a pod that gets Kafka network access (a policy mistake, a compromised service
 read the CDC topics or forge a grant.
 
 **Listener.** `SASL` (SASL_PLAINTEXT, SCRAM-SHA-512) on `kafka.sasl.port` (9094), next to
-today's `PLAINTEXT` on 9092 until phase C. No TLS, on purpose: Kafka and all its clients run on
+the `PLAINTEXT` listener on 9092 until phase C turns that off (on hermes it is off). No TLS, on purpose: Kafka and all its clients run on
 one node, so the traffic never leaves hermes' pod bridge, and SCRAM is a salted
 challenge-response that never sends the password, so even a capture on the node yields no
 credential. Someone able to capture there is root on the node and can read the Secrets anyway;

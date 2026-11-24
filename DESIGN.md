@@ -240,7 +240,8 @@ server-sent events with per-user and per-address rate limits and a daily spend c
 (financials, filings, sections, What changed, earnings releases, events since the last report,
 search, ...) take no user parameter: the agent holds the asking user's token, so it sees exactly
 what that user may read, and it cites the filing, section or XBRL tag, and freshness for every
-figure. Needs `ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL`. Tests use a scripted
+figure. Needs `ANTHROPIC_API_KEY` in `.env`; the model is `AGENT_MODEL` (Claude Haiku 5.5: demo sandboxes),
+or `AGENT_ACCOUNT_MODEL` for signed-in accounts (Claude Opus 5.5 on hermes, its own daily budget). Tests use a scripted
 fake model.
 
 ```bash
