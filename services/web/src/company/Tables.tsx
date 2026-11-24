@@ -45,6 +45,7 @@ import { Seal } from "../components/Seal";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { useLoad, type Load } from "./useLoad";
+import { ResultsPending } from "./ResultsPending";
 
 const PERIODS: [Period, string][] = [
   ["q", "Quarterly"],
@@ -282,7 +283,13 @@ export function BlanksLegend() {
 
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
-export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {}, asOf }: TableProps & { view?: StatementView; asOf?: string }) {
+export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {}, asOf, canRead = false, fiscalYearEnd = null }: TableProps & {
+  view?: StatementView;
+  asOf?: string;
+  /** the user reads the company's filings: a quarter's results out before its report are said (ResultsPending) */
+  canRead?: boolean;
+  fiscalYearEnd?: string | null;
+}) {
   const kind: Statement = view.kind ?? "is";
   // the address keeps TTM for the statements that have one
   const period: Period = kind === "bs" && view.period === "ttm" ? "q" : view.period ?? "q";
@@ -398,6 +405,9 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
+      {!asOf && !behind && canRead && load?.state === "ok" && !load.data.annualOnly && (
+        <ResultsPending token={token} companyId={companyId} fiscalYearEnd={fiscalYearEnd} />
+      )}
       {asOf && kind === "is" && !asFiled && load?.state === "ok" && load.data.perShare && (
         <p className="foot" role="note">
           EPS and shares are split-adjusted to the share basis of {day(asOf, true)}, as it stood then: only the stock splits a filing

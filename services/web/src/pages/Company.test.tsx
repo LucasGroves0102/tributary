@@ -347,6 +347,12 @@ it("overview: a once-a-year filer's revenue chart says why it has no quarters (R
   expect(container.textContent).toContain("Birkenstock Holding reports once a year (Form 20-F), so there is no quarterly revenue to chart.");
 });
 
+it("overview: a company with figures but no revenue says no revenue is reported, never that there is no data", async () => {
+  override = (u) => (u.pathname.endsWith("/financials") ? Response.json({ as_of: "", rows: [] }) : null);
+  await render("overview");
+  expect(container.textContent).toContain("No revenue reported: Nvidia's filings state no revenue figure yet, or none could be read.");
+});
+
 const TTM_EPS = fin("eps_diluted", "2026-07-26", "4.9085", "FY2027 Q2", {
   value_source: "derived", as_filed: null, splits: [],
   derivation: { method: "ttm_eps", inputs: [
@@ -515,6 +521,28 @@ it("results day: the Overview opens on the release when an 8-K with results foll
   expect(top.textContent).toContain("Nvidia released its results on November 17, 2026.");
   expect(top.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${release}/EX-99.1`);
   expect(container.querySelector(".folios > .folio")).toBe(top);
+});
+
+it("results announced before the 10-Q (NVIDIA, Nov 17): the Overview's figures and the statements say why they end at the last report", async () => {
+  const release = "0001045810-26-000101";
+  const asked: URL[] = [];
+  override = (u) => {
+    if (!u.pathname.endsWith("/earnings")) return null;
+    asked.push(u);
+    return Response.json({ company_id: NVDA, as_of: "", method: "", quarters: [{ period_end: "2026-10-25", estimated: true, report: null,
+      release: { accession_no: release, form: "8-K", filed: "2026-11-17", accepted_at: null, items: [], section_key: "EX-99.1", title: null,
+        total_chars: null, document_url: null, filing_url: null }, headline: null, outlook: [], adjustments: [], other_releases: [] }] });
+  };
+  await render();
+  const line = $(".results-pending")!;
+  expect(line.textContent).toBe("Results for the quarter ended Oct 25, 2026 were announced on Nov 17 (8-K). Detailed figures arrive with the 10-Q.");
+  expect(line.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${release}/EX-99.1`);
+  expect(asked[0]!.searchParams.get("quarters")).toBe("1");
+  expect(asked[0]!.searchParams.get("tables")).toBeNull();
+  await act(async () => root.unmount());
+  container.remove();
+  await render("statements");
+  expect($(".statements .results-pending")?.textContent).toContain("Detailed figures arrive with the 10-Q.");
 });
 
 it("names the company from the directory while its figures load (Riley, test 10, finding 15)", async () => {

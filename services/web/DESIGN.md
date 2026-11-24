@@ -404,7 +404,14 @@ four quarters added on today's share basis, derived, no seal), a once-a-year fil
 unless a split was applied), the screener's quarter only from an older API, labelled "quarter"
 (`data.ts` `epsStat`; Riley, test 10, finding 1). A balance a later 8-K may have changed keeps its figure in the ink with a red "*". On results day (an 8-K
 with item 2.02 filed after the latest 10-Q or 10-K, `events.ts` `resultsOut`) a **Results out** section
-opens the Overview with the press release. **Since the last report** (red-letter days, below); **Latest quarter**, the recap
+opens the Overview with the press release. Without it, when the earnings answer's newest quarter has a
+release and no 10-Q or 10-K (`events.ts` `resultsPending`, `/earnings` with one quarter and no tables,
+asked only of a filings reader), one quiet line under the figures says the quarter's results were
+announced on that day (the 8-K linked) and that detailed figures arrive with the 10-Q (the 10-K for
+the fiscal year's last quarter); Statements says the same above its table (NVIDIA, Nov 2026: its Oct 25
+quarter announced on Nov 17, the statements ended in July with no word why). A company with figures but
+no revenue (one before revenue) reads "No revenue reported" where the revenue chart would be, never
+as having no data. **Since the last report** (red-letter days, below); **Latest quarter**, the recap
 set as a statement (a change from a zero or negative base reads n/m with the API's
 `pct_not_meaningful` in its hover; changes carry no colour: debt and costs are in it); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
@@ -1627,7 +1634,8 @@ F6: every `/v1/alerts` route answering 404 means no alerts yet: no bell, and the
 Monitor step's lists and Settings' section say alerts aren't available on this server yet; an older
 API's notification without `filing_url` links EDGAR from the company id. The thesis's Write view and
 the comps table change no request, and Home's new default arrangement asks nothing new. F1, F7b, F8b:
-`/earnings`, `/events`, `/insiders` and `/text-kpis` answering 404 read "not available here yet"
+`/earnings`, `/events`, `/insiders` and `/text-kpis` answering 404 read "not available here yet" (the
+Overview's and Statements' results-announced line just doesn't show)
 (`api.ts` `orNullOn404`); a model's price currency is the user's work, so like F2's fields it is never
 stripped from a save an older API refuses. API keys: `/v1/api-keys` answering 404 hides the Settings
 section, and `/v1/openapi-keys.json` answering 404 makes Using the API say the server doesn't take
