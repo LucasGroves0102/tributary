@@ -112,9 +112,11 @@ reshapes these tables can break the side project (the Query API is the stable co
 
 ## Postgres settings
 
-`/etc/postgresql/16/main/conf.d/tributary.conf`, installed from `postgresql-tributary.conf` here,
-sets the memory (shared_buffers 3GB, work_mem 32MB, maintenance_work_mem 1GB, the file says why;
-`shared_buffers` needs `sudo systemctl restart postgresql`) and `wal_level = logical`,
+The memory settings (shared_buffers 3GB, work_mem 32MB, maintenance_work_mem 1GB, autovacuum_work_mem
+256MB, effective_cache_size 8GB; `postgresql-tributary.conf` here says why) were applied on hermes on
+2026-11-25 with `ALTER SYSTEM`, so they live in `postgresql.auto.conf`, which wins over conf.d; change
+them the same way (`sudo -u postgres psql -c "ALTER SYSTEM SET ..."`, then reload, or restart for
+`shared_buffers`). `/etc/postgresql/16/main/conf.d/tributary.conf` sets `wal_level = logical`,
 `listen_addresses = '*'` (pods reach it over the k3s bridge; `pg_hba.conf` limits who) and
 `max_slot_wal_keep_size = 20GB`. The last one caps how much WAL a replication slot may hold:
 Debezium's slot only advances on app-database traffic (it writes a heartbeat every 10 s to
