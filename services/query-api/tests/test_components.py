@@ -60,7 +60,8 @@ def test_a_release_figure_cites_its_table_and_cell():
     from query_api.shapes import release_cell, release_citation
 
     figure = shape(NVDA, "revenue", "quarter",
-                   row("revenue", "1494243000000", tag="release:EX-99.1/0/1/1"), {}, {}, None, set())
+                   row("revenue", "1494243000000", tag="release:EX-99.1/0/1/1"), {}, {}, None,
+                   set())
     assert figure["figure"]["how"] == "release"
     assert figure["figure"]["citation"]["release"] == {"section": "EX-99.1", "table": 0, "row": 1,
                                                        "column": 1}
