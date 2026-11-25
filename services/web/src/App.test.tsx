@@ -262,7 +262,7 @@ describe("Home", () => {
     const start = $(".start-card")!;
     expect(start.querySelector("h2")?.textContent).toBe("Start an analysis");
     expect(start.querySelector('input[aria-label="Company to analyse"]')).not.toBeNull();
-    expect([...container.querySelectorAll(".page > .card h2, .page > section.card h2")].map((h) => h.textContent?.split(" ")[0]))
+    expect([...container.querySelectorAll(".page section.card h2")].map((h) => h.textContent?.split(" ")[0]))
       .toEqual(["Start", "Watchlist", "New", "Recent"]);
     expect($(".status-strip")).toBeNull();
     expect(container.textContent).not.toContain("Expected filings");

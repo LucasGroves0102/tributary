@@ -391,6 +391,15 @@ are the watchlist, new filings and data notes, the three the testers said work; 
 Continue where you left off and Expected filings are off (`views/model.ts` `DEFAULT_HOME`) and come
 back in Customize.
 
+Layout (spec §6 Home): the start is a section ruled off under it, not a card. New filings lead (7 of 12
+columns) and the side cards that follow them in the user's order (Expected filings, data notes) sit beside
+them (5 columns; stacked under 900px of page); the rest run full width in order. The feed is grouped by
+the day filed (the date once, at the head of its day), each row the form, the company and its period,
+Read, and What changed on a 10-K or 10-Q (the reader in that mode). Beside the filings a data note is
+its title line; its company links the Data notes tab, where the explanation is. The feed's API answer
+has no 8-K items or quotes, so the spec's item names and pasted lines aren't shown here (the company's
+Overview has them). The watchlist's Remove shows on a row's hover (always on a coarse pointer).
+
 ## Company page
 
 ### As of a past day

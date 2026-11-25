@@ -1465,3 +1465,174 @@ button.chip.on,
   padding: 16px 0 0;
   border-top: 0;
 }
+
+/* --- Home (§6): the start, then new filings leading with the side cards beside them, the watchlist ledger -- */
+
+.page .start-card {
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  padding: 0 0 24px;
+}
+
+.start-card .card-b {
+  padding: 0;
+  gap: 12px;
+}
+
+.start-card h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 650;
+}
+
+.start-main p {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+.start-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.start-projects {
+  gap: 4px 16px;
+  font-size: 13px;
+}
+
+.start-projects a {
+  color: var(--ink);
+  text-decoration-color: var(--rule-2);
+}
+
+/* lead (7) + side (5) of 12 columns, stacked when the content box is under 900 (§3) */
+.home-split {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.home-side {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  min-width: 0;
+}
+
+.home-lead {
+  min-width: 0;
+}
+
+@container main (max-width: 900px) {
+  .home-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+}
+
+/* new filings: the day once at the head of its rows, the form as a code, the company, the way in */
+.feed .it {
+  grid-template-columns: 56px 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 40px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.feed .it.day-first {
+  border-top: 1px solid var(--ink-2);
+  margin-top: -1px;
+}
+
+.feed .it:first-child {
+  border-top: 0;
+}
+
+.feed .it:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+
+.feed-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.feed .it .tag {
+  justify-self: start;
+}
+
+.feed-name {
+  color: var(--ink);
+}
+
+.feed-period {
+  color: var(--pencil);
+}
+
+.feed-act {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.feed .it.new .feed-name b {
+  font-weight: 650;
+}
+
+/* a home side card's table sits in its narrow column at its own measure */
+.home-side .t td,
+.home-side .t th {
+  white-space: nowrap;
+}
+
+/* the watchlist: a ledger with its row actions in a quiet slot */
+.t.watchlist td.actions .btn {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t.watchlist td.actions .btn {
+    opacity: 0;
+    transition: opacity var(--t-hover-out) linear;
+  }
+
+  .t.watchlist tr:hover td.actions .btn,
+  .t.watchlist tr:focus-within td.actions .btn {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+}
+
+.status-strip {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+}
+
+/* beside the filings, data notes read as one line each (§6 Home: a summary); the explanation, figures and
+   filings are on the company's Data notes tab, which each note's company links */
+.home-side .note p,
+.home-side .note-figs,
+.home-side .note-f {
+  display: none;
+}
+
+.home-side .notes .note {
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.home-side .card-h .sub {
+  flex-basis: 100%;
+}
