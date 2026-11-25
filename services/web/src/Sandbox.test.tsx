@@ -165,8 +165,8 @@ describe("Try the demo", () => {
     await settle();
     expect(window.location.hash).toBe("#/");
     // two items, not a dotted string (Seal)
-    expect([...$(".sandbox-banner")!.children].map((c) => c.textContent)).toEqual(["Demo sandbox: 20 companies", expect.stringMatching(/^Resets in 2[34]h$/)]);
-    expect($(".top .who")?.textContent).toContain("demo sandbox");
+    expect($(".top .who")?.textContent).toMatch(/^Demo sandbox · resets in 2[34]h$/);
+    expect($(".top .who button")?.getAttribute("title")).toContain("A temporary demo sandbox (20 companies)");
     expect(container.querySelector("select[aria-label='Demo user']")).toBeNull();
     // the session survives a reload
     expect(loadSession()?.userId).toBe("demo-0123456789abcdef");
@@ -178,7 +178,7 @@ describe("Try the demo", () => {
     saveSession({ kind: "sandbox", token: "stored", userId: "demo-aa", expiresAt: new Date(Date.now() + 5 * HOUR).toISOString(), companies: IDS });
     await mount(<App picker={false} />);
     expect(created).toBe(0);
-    expect($(".sandbox-banner")?.textContent).toContain("Resets in 4h");
+    expect($(".top .who")?.textContent).toContain("resets in 4h");
     expect(button("Try the demo")).toBeUndefined();
   });
 
@@ -338,20 +338,20 @@ describe("a sandbox lists only its own companies", () => {
     // Keep: still in the sandbox
     await click([...dialog.querySelectorAll("button")].find((b) => b.textContent === "Keep")!);
     expect(loadSession()).not.toBeNull();
-    expect($(".sandbox-banner")).not.toBeNull();
+    expect($(".top .who")?.textContent).toContain("Demo sandbox");
     await click(button("End demo"));
     await click([...document.querySelectorAll(".ws-confirm button")].find((b) => b.textContent === "End demo")! as HTMLButtonElement);
     expect(loadSession()).toBeNull();
     expect($("h1")?.textContent).toBe("Tributary");
   });
 
-  it("a sandbox shows its demo badge, explained, and says who it is in words", async () => {
+  it("a sandbox says so in the top bar's account chip, explained, in words", async () => {
     stored();
     await mount(<App picker={false} />);
-    const badge = $(".brand .env") as HTMLElement;
-    expect(badge.textContent).toBe("demo");
-    expect(badge.title).toMatch(/temporary demo sandbox/);
-    expect(badge.title).not.toMatch(/top bar/);
+    const chip = $(".top .who button") as HTMLElement;
+    expect(chip.textContent).toMatch(/^Demo sandbox · resets in/);
+    expect(chip.title).toMatch(/temporary demo sandbox/);
+    expect(chip.title).not.toMatch(/top bar/);
   });
 
   it("offers no permission tests on Ask: the adversarial suite has those, the product doesn't", async () => {
@@ -368,7 +368,7 @@ describe("a sandbox lists only its own companies", () => {
     window.location.hash = `#/company/${TSLA}/statements`;
     await mount(<App picker={false} />);
     expect($(".not-in-demo")).toBeNull();
-    expect($(".sandbox-banner")?.textContent).toMatch(/^Demo sandbox: every companyResets in/);
+    expect($(".top .who button")?.getAttribute("title")).toContain("A temporary demo sandbox (every company)");
     await typeInPalette("tsla");
     const searches = vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"))
       .filter((u) => u.pathname.endsWith("/v1/companies/search"));

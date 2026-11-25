@@ -17,6 +17,8 @@ import "./tokens.css";
 import "./styles.css";
 import "./seal.css";
 import "./ui.css";
+import "./shell.css";
+import "./company.css";
 
 installMotion();
 

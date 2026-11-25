@@ -1,182 +1,184 @@
+import { useEffect, useRef } from "react";
+
+import { accountName, readableTotal } from "../access";
 import { bellLabel } from "../alerts/alerts";
-import { UNNAMED } from "../companies/directory";
-import { href, NAV, type Route } from "../route";
-import { THEME_WORD, type ThemeChoice } from "../theme";
+import { ago, localClock } from "../format";
+import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
+import { href, type Route } from "../route";
+import type { AlertUnread, Me } from "../types";
 import { MenuButton } from "./MenuButton";
-import type { AlertUnread } from "../types";
+import { Seal } from "./Seal";
 
 interface Props {
   route: Route;
-  /** "Nvidia (NVDA)" (companies/directory.ts) */
-  companyName: (companyId: string) => string | null;
-  /** "NVDA": beside a filing, where the room goes to the filing */
-  companyShort?: (companyId: string) => string;
-  /** what the reader has open: "10-K filed Feb 21, 2026" */
-  filingLabel?: string | null;
   users: string[];
   user: string | null;
   busy: boolean;
-  /** Light, Dark or System (the visitor's): the button says which, and moves to the next */
-  theme: ThemeChoice;
   assistantOpen: boolean;
   onUser: (u: string) => void;
-  /** A GitHub sign-in: shown by login, with Sign out (which forgets the token). */
+  /** A GitHub or password sign-in: shown by login, with Sign out (which forgets the token). */
   account?: { login: string; onSignOut: () => void };
+  /** a demo sandbox: what it covers ("every company", "20 companies") and when it resets ("23h") */
+  sandbox?: { covers: string; resetsIn: string; onEnd: () => void } | null;
   onSearch: () => void;
-  /** the three themes by name (Riley 72: the button was a blind cycle) */
-  onTheme: (choice: ThemeChoice) => void;
-  /** a demo sandbox's way out: forget it and go back to the front door (Riley 14: there was none) */
-  onEndDemo?: () => void;
   onAssistant: () => void;
-  /** narrow screens: open or close the sidebar drawer */
+  /** narrow screens: open or close the rail's drawer */
   onMenu?: () => void;
   menuOpen?: boolean;
   /** filing alerts' unread count (F6): undefined while it loads, null without alerts (no bell) */
   alerts?: AlertUnread | null;
+  /** the newest filing in the index, whoever's (useFeedStatus) */
+  listed?: string | null;
+  /** the newest filing's text parsed, among those the user can read */
+  lastIngested?: string | null;
+  /** the watchlist's values' time */
+  valuesAsOf?: string | null;
+  me?: Me | null;
 }
 
+/** The top bar (.interface-design/system.md §4), 48px and still: the logo; search (Ctrl K opens the
+ * palette); the feed's freshness as a status point that opens a popover, linking to Data status; Alerts
+ * with a count; the Assistant (Ctrl J); who is signed in, with the way out. The theme is in Settings. */
 export function TopBar(props: Props) {
-  const { route, users, user, busy, theme, assistantOpen } = props;
+  const { route, users, user, busy, assistantOpen } = props;
   return (
     <header className="top">
       {props.onMenu && (
-        <button className="btn ghost sm menu-btn" aria-label="Menu" aria-expanded={!!props.menuOpen}
-          aria-controls="side-nav" onClick={props.onMenu}>
-          ☰
+        <button className="icon-btn menu-btn" aria-label="Menu" aria-expanded={!!props.menuOpen} aria-controls="side-nav" onClick={props.onMenu}>
+          <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+            <path d="M2 4.5h14M2 9h14M2 13.5h14" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
         </button>
       )}
-      <Breadcrumb route={route} companyName={props.companyName} companyShort={props.companyShort} filingLabel={props.filingLabel ?? null} />
+      <a className="brand" href={href({ view: "home" })} aria-label="Tributary, Home">
+        <Seal size="logo" />
+        <span className="wordmark">Tributary</span>
+      </a>
       <button className="search-box" onClick={props.onSearch} aria-label="Search (Ctrl K)">
-        <svg className="search-ic" width="13" height="13" viewBox="0 0 16 16" aria-hidden="true">
+        <svg className="search-ic" width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M11 11l4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          <path d="m11 11 3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-        <span className="sb-long">Search companies, filings, pages, actions</span>
-        <span className="sb-short">Search</span>
-        <span className="grow" />
+        <span className="sb-long">Companies, filings, pages</span>
         <kbd>Ctrl K</kbd>
       </button>
-      <span className="grow" />
-      {props.account ? (
-        <span className="who">
-          <span className="faint">Signed in as</span> <span className="who-name">{props.account.login}</span>
-          <button className="btn ghost sm" onClick={props.account.onSignOut}>
-            Sign out
+      <div className="top-right">
+        <Freshness listed={props.listed ?? null} lastIngested={props.lastIngested ?? null} valuesAsOf={props.valuesAsOf ?? null} me={props.me ?? null} />
+        {props.alerts && (() => {
+          const reviews = props.alerts.reviews_due ?? 0;
+          const count = props.alerts.unread + reviews;
+          return (
+            <a className={count ? "tb bell on" : "tb bell"} href={href({ view: "alerts" })}
+              aria-label={bellLabel(props.alerts.unread, reviews)} title={bellLabel(props.alerts.unread, reviews)}
+              aria-current={route.view === "alerts" ? "page" : undefined}>
+              <span className="bell-word">Alerts</span>
+              {count > 0 && <span className="count" aria-hidden="true">{count > 99 ? "99+" : count}</span>}
+            </a>
+          );
+        })()}
+        {route.view !== "ask" && (
+          <button className="tb assistant-btn" aria-pressed={assistantOpen} aria-expanded={assistantOpen} aria-controls="assistant-panel"
+            onClick={props.onAssistant}>
+            Assistant <kbd>Ctrl J</kbd>
           </button>
-        </span>
-      ) : users.length > 0 ? (
-        <label className="who">
-          <span className="faint">Signed in as</span>
-          <select
-            value={user ?? ""}
-            disabled={busy}
-            aria-label="Demo user"
-            onChange={(e) => props.onUser(e.target.value)}
-          >
-            {users.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        user && (
+        )}
+        {props.account ? (
           <span className="who">
-            <span className="faint">Signed in to</span> <span className="who-name">{user}</span>
-            {props.onEndDemo && (
-              <button className="btn ghost sm end-demo" onClick={props.onEndDemo} title="Leave the demo and go back to the front door; the sandbox is deleted when it resets">
-                End demo
-              </button>
-            )}
+            <MenuButton className="tb who-chip" count={false} title={`Signed in as ${props.account.login}`}
+              label={<><span className="visually-hidden">Signed in as </span><span className="who-name">{props.account.login}</span></>}
+              items={[{ label: "Sign out", onSelect: props.account.onSignOut }]} />
           </span>
-        )
-      )}
-      {props.alerts && (() => {
-        const reviews = props.alerts.reviews_due ?? 0;
-        const count = props.alerts.unread + reviews;
-        return (
-        <a className={count ? "btn ghost sm bell on" : "btn ghost sm bell"} href={href({ view: "alerts" })}
-          aria-label={bellLabel(props.alerts.unread, reviews)} title={bellLabel(props.alerts.unread, reviews)}
-          aria-current={route.view === "alerts" ? "page" : undefined}>
-          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
-            <path d="M8 1.5a4 4 0 0 0-4 4v2.6L2.6 11h10.8L12 8.1V5.5a4 4 0 0 0-4-4zM6.3 12.5a1.8 1.8 0 0 0 3.4 0"
-              fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
-          </svg>
-          <span className="bell-word">Alerts</span>
-          {count > 0 && <span className="count" aria-hidden="true">{count > 99 ? "99+" : count}</span>}
-        </a>
-        );
-      })()}
-      <MenuButton className="btn ghost sm theme-btn more-btn" count={false}
-        title={`Theme: ${THEME_WORD[theme].toLowerCase()}${theme === "system" ? " (your device's setting)" : ""}`}
-        label={<><span className="theme-k">Theme</span> {THEME_WORD[theme]}</>}
-        items={(["light", "dark", "system"] as const).map((c) => ({
-          label: c === "system" ? "System (your device's setting)" : THEME_WORD[c], checked: theme === c, onCheckedChange: () => props.onTheme(c),
-        }))} />
-      {route.view !== "ask" && (
-        <button
-          className="btn sm assistant-btn"
-          aria-pressed={assistantOpen}
-          onClick={props.onAssistant}
-        >
-          Assistant <span className="kbd">Ctrl J</span>
-        </button>
-      )}
+        ) : users.length > 0 ? (
+          <label className="who">
+            <span className="visually-hidden">Signed in as</span>
+            <select className="who-select" value={user ?? ""} disabled={busy} aria-label="Demo user" onChange={(e) => props.onUser(e.target.value)}>
+              {users.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : props.sandbox ? (
+          <span className="who">
+            <MenuButton className="tb who-chip" count={false}
+              title={`A temporary demo sandbox (${props.sandbox.covers}): it and what you save in it are deleted when it resets, in ${props.sandbox.resetsIn}`}
+              label={<>Demo sandbox<span className="who-sub"> · resets in {props.sandbox.resetsIn}</span></>}
+              items={[{ label: "End demo", onSelect: props.sandbox.onEnd, title: "Leave the demo and go back to the front door; the sandbox is deleted when it resets" }]} />
+          </span>
+        ) : user ? (
+          <span className="who">
+            <span className="visually-hidden">Signed in as </span>
+            <span className="who-name">{user}</span>
+          </span>
+        ) : null}
+      </div>
     </header>
   );
 }
 
-function Breadcrumb({
-  route,
-  companyName,
-  companyShort,
-  filingLabel,
-}: {
-  route: Route;
-  companyName: (companyId: string) => string | null;
-  companyShort?: (companyId: string) => string;
-  filingLabel: string | null;
-}) {
-  if (route.view === "company" || route.view === "filing") {
-    const name = companyName(route.companyId) ?? UNNAMED;
-    return (
-      <nav className="crumb" aria-label="Breadcrumb">
-        <a href={href({ view: "companies" })}>Companies</a>
-        <span className="sep">/</span>
-        {route.view === "company" ? (
-          <span aria-current="page">{name}</span>
-        ) : (
-          <>
-            <a href={href({ view: "company", companyId: route.companyId })} title={name}>{companyShort?.(route.companyId) ?? name}</a>
-            <span className="sep">/</span>
-            <span aria-current="page">{filingLabel ?? "Filing"}</span>
-          </>
-        )}
-      </nav>
-    );
-  }
-  if (route.view === "search") {
-    return (
-      <nav className="crumb" aria-label="Breadcrumb">
-        <span aria-current="page">Search filings{route.search ? `: “${route.search.q.replace(/^"(.*)"$/, "$1")}”` : ""}</span>
-      </nav>
-    );
-  }
-  const label = route.view === "about" ? "What Tributary covers"
-    : route.view === "status" ? "Data status"
-    : route.view === "api" ? "Using the API"
-    : route.view === "settings" ? "Settings"
-    : route.view === "alerts" ? "Alerts"
-    : route.view === "portfolio" ? "Portfolio"
-    : route.view === "workspace" ? "Workspace"
-    : route.view === "report" ? "Report"
-    : route.view === "thesis" ? "Thesis"
-    : route.view === "model" ? "Model"
-    : (NAV.find((n) => n.view === route.view)?.label ?? "Home");
+/** The feed's freshness (§4's status point): a point, green while EDGAR's feed is in its hours, and when
+ * the newest filing was listed; it opens what that means, linking to Data status. Words from the
+ * freshness vocabulary only (listed, parsed): never "live". */
+function Freshness({ listed, lastIngested, valuesAsOf, me }: { listed: string | null; lastIngested: string | null; valuesAsOf: string | null; me: Me | null }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      const d = ref.current;
+      if (d?.open && !d.contains(e.target as Node)) d.open = false;
+    };
+    const esc = (e: KeyboardEvent) => {
+      const d = ref.current;
+      if (e.key === "Escape" && d?.open) {
+        d.open = false;
+        d.querySelector("summary")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("keydown", esc);
+    };
+  }, []);
+  const open = edgarOpen();
   return (
-    <nav className="crumb" aria-label="Breadcrumb">
-      <span aria-current="page">{label}</span>
-    </nav>
+    <details className="fresh" ref={ref} title={FRESHNESS_EXPLAINED}>
+      <summary className="tb">
+        <span className={listed && open ? "live" : "live quiet"} aria-hidden="true" />
+        {listed ? <>Listed <span className="fresh-ago">{ago(listed)}</span></> : "Data freshness"}
+      </summary>
+      <div className="pop fresh-pop">
+        <p>
+          {listed ? <>Newest filing listed {ago(listed)}</> : "The feed's time isn't known yet"}
+          {listed && !open && <><br />EDGAR's feed slows after 5:30 pm ET and on weekends</>}
+        </p>
+        <p className="pencil">
+          {lastIngested ? `Newest filing text parsed ${ago(lastIngested)}` : "Filings: nothing you can read yet"}
+          <br />
+          {valuesAsOf ? `Watchlist values as of ${localClock(valuesAsOf)}` : "Values appear as they're filed"}
+          {me && (
+            <>
+              <br />
+              Signed in as {accountName(me)}
+              <br />
+              {readableTotal(me).toLocaleString("en-US")} readable {readableTotal(me) === 1 ? "company" : "companies"}
+            </>
+          )}
+        </p>
+        <p><a href={href({ view: "status" })}>Data status →</a></p>
+      </div>
+    </details>
   );
+}
+
+/** EDGAR business hours (6:00 am-5:30 pm ET, weekdays), when filings reach its feed within
+ * minutes; after them the feed goes quiet until the next morning. */
+export function edgarOpen(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+  return !["Sat", "Sun"].includes(get("weekday")) && minutes >= 6 * 60 && minutes < 17 * 60 + 30;
 }

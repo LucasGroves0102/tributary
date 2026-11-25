@@ -53,6 +53,7 @@ import { loadPending, savePending } from "./connect/connect";
 import { go, href, pageOf, parse, useRoute, type Route } from "./route";
 import { resolveTicker } from "./palette/commands";
 import { useShortcuts } from "./shortcuts";
+import { markKeyboard, T, viaKeyboard } from "./motion";
 import { inScope, ScopeContext, scopeOf } from "./scope";
 import { accountName, catalogOpen, readableFor, readableTotal } from "./access";
 import {
@@ -347,7 +348,25 @@ export function App(props: Props = {}) {
     if (focusTick) input.current?.focus();
   }, [focusTick]);
 
+  // the panel slides in over the room the page gave up at once, and slides away to close (§7.4); Ctrl J
+  // or Escape is instant. Closing, it stays mounted for its 180ms, and focus goes back to its opener.
+  const [drawerLeaving, setDrawerLeaving] = useState(false);
+  const drawerInstant = useRef(false);
+  const drawerWasOpen = useRef(drawerOpen);
   const setDrawer = useCallback((open: boolean) => {
+    const instant = viaKeyboard();
+    drawerInstant.current = instant;
+    if (!open && drawerWasOpen.current) {
+      if (document.activeElement?.closest(".ai-drawer")) {
+        window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".assistant-btn")?.focus({ preventScroll: true }));
+      }
+      if (!instant) {
+        setDrawerLeaving(true);
+        window.setTimeout(() => setDrawerLeaving(false), T.panelOut);
+      }
+    }
+    if (open) setDrawerLeaving(false);
+    drawerWasOpen.current = open;
     setDrawerOpen(open);
     save(DRAWER_KEY, open ? "open" : "closed");
   }, []);
@@ -465,6 +484,8 @@ export function App(props: Props = {}) {
   }, [token, views.watchlistColumns]);
 
   useShortcuts((s) => {
+    // a shortcut's change is instant (spec §7.2): the palette, the panel and a page change by key
+    markKeyboard();
     switch (s.type) {
       case "palette":
         setPalette((p) => (p === null ? "" : null));
@@ -756,18 +777,38 @@ export function App(props: Props = {}) {
       <DirectoryContext.Provider value={directory}>
       <AllowanceContext.Provider value={allowanceState}>
       <div className={showDrawer ? "app with-ai" : "app"}>
+        <TopBar
+          menuOpen={navOpen}
+          onMenu={() => setNavOpen((o) => !o)}
+          route={route}
+          users={users}
+          user={session?.kind === "sandbox" ? "demo sandbox" : user}
+          account={(session?.kind === "github" || session?.kind === "account") && session.login
+            ? { login: me ? accountName(me) : session.login, onSignOut: () => signOut(null) }
+            : undefined}
+          sandbox={session?.kind === "sandbox"
+            ? { covers: open ? "every company" : `${session.companies.length} companies`, resetsIn: resetsIn(session.expiresAt, clock), onEnd: () => setEndingDemo(true) }
+            : null}
+          busy={assistant.busy}
+          assistantOpen={showDrawer}
+          onUser={setUser}
+          onSearch={() => setPalette("")}
+          onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
+          alerts={alertCount}
+          listed={listed}
+          lastIngested={ingested}
+          valuesAsOf={workspace.watchlist.state === "ok" ? workspace.watchlist.data.as_of : null}
+          me={me}
+        />
         <Sidebar
           open={navOpen}
           route={route}
           me={me}
           workspace={workspace}
-          lastIngested={ingested}
-          listed={listed}
           onAdd={() => setPalette(WATCH_PREFIX)}
           onExport={exportWatchlist}
           onShortcuts={() => setHelp(true)}
           connections={market?.enabled ?? false}
-          sandboxResetsIn={session?.kind === "sandbox" ? resetsIn(session.expiresAt, clock) : null}
           workspaces={token ? <WorkspaceTree saved={saved} onOpen={openSaved} onError={setError} watched={watching.watched} /> : null}
           onSignOut={session?.kind === "sandbox" ? () => setEndingDemo(true)
             : (session?.kind === "github" || session?.kind === "account") ? () => signOut(null) : undefined}
@@ -775,28 +816,6 @@ export function App(props: Props = {}) {
         />
         {navOpen && <div className="scrim" aria-hidden="true" onClick={() => setNavOpen(false)} />}
         <div className="main">
-          <TopBar
-            menuOpen={navOpen}
-            onMenu={() => setNavOpen((o) => !o)}
-            route={route}
-            companyName={companyLabel}
-            companyShort={companyShort}
-            filingLabel={filingText}
-            users={users}
-            user={session?.kind === "sandbox" ? "demo sandbox" : user}
-            account={(session?.kind === "github" || session?.kind === "account") && session.login
-              ? { login: me ? accountName(me) : session.login, onSignOut: () => signOut(null) }
-              : undefined}
-            busy={assistant.busy}
-            theme={theme}
-            assistantOpen={showDrawer}
-            onUser={setUser}
-            onSearch={() => setPalette("")}
-            onTheme={setTheme}
-            onEndDemo={session?.kind === "sandbox" ? () => setEndingDemo(true) : undefined}
-            onAssistant={() => (drawerOpen ? setDrawer(false) : focusAssistant())}
-            alerts={alertCount}
-          />
           {endingDemo && session?.kind === "sandbox" && (
             <ConfirmDelete text="End the demo?" detail={END_DEMO_DETAIL} yes="End demo" onNo={() => setEndingDemo(false)}
               onYes={() => {
@@ -806,12 +825,6 @@ export function App(props: Props = {}) {
                 toast({ text: "The demo has ended: its sandbox and what you saved in it are deleted.", topic: "end-demo" });
               }} />
           )}
-          {session?.kind === "sandbox" && (
-            <div className="sandbox-banner" role="note">
-              <span>Demo sandbox: {open ? "every company" : `${session.companies.length} companies`}</span>
-              <span>Resets in {resetsIn(session.expiresAt, clock)}</span>
-            </div>
-          )}
           {error && (
             <div className="banner" role="alert">
               {error}
@@ -820,7 +833,10 @@ export function App(props: Props = {}) {
               </button>
             </div>
           )}
-          <main className="content">
+          {/* a page change said to a screen reader (motion.ts settle): "Nvidia, Overview" */}
+          <div id="route-announce" className="visually-hidden" aria-live="polite" />
+          {/* the page's own parts take the view transition's names (a company: its head stays on a tab change) */}
+          <main className={route.view === "company" ? "content" : "content vt-content"}>
             <ErrorBoundary resetKey={window.location.hash}>
             <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
             {route.view === "status" ? (
@@ -981,7 +997,7 @@ export function App(props: Props = {}) {
             ) : route.view === "about" ? (
               <About allowance={allowance} open={catalogOpen(me, "financials")} />
             ) : route.view === "settings" ? (
-              <Settings key={user} token={token} watches={watching.list} />
+              <Settings key={user} token={token} watches={watching.list} theme={theme} onTheme={setTheme} />
             ) : route.view === "alerts" ? (
               <AlertsPage key={user} token={token} watches={watching.list} />
             ) : route.view === "portfolio" ? (
@@ -1077,8 +1093,9 @@ export function App(props: Props = {}) {
             </ErrorBoundary>
           </main>
         </div>
-        {showDrawer && (
-          <AssistantPanel variant="drawer" {...panelProps} onClose={() => setDrawer(false)} />
+        {(showDrawer || (drawerLeaving && route.view !== "ask")) && (
+          <AssistantPanel variant="drawer" {...panelProps} onClose={() => setDrawer(false)}
+            motion={[!showDrawer && "closing", drawerInstant.current && "instant"].filter(Boolean).join(" ") || undefined} />
         )}
       </div>
       {help && <ShortcutSheet onClose={() => setHelp(false)} />}

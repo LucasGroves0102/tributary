@@ -29,7 +29,7 @@ const assistant: Assistant = {
 
 async function render(wide: boolean, onClose: () => void) {
   // jsdom has no matchMedia: the window's width as the drawer's rule reads it
-  vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(max-width: 1200px)" && !wide, addEventListener: () => {}, removeEventListener: () => {} }));
+  vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(max-width: 1199px)" && !wide, addEventListener: () => {}, removeEventListener: () => {} }));
   await act(async () => root.render(
     <AssistantPanel assistant={assistant} context={{ label: "Companies", suggestions: [] }} signedIn variant="drawer"
       inputRef={createRef<HTMLTextAreaElement>()} onClose={onClose} />,

@@ -16,18 +16,41 @@ import { WatchedScreens } from "../watches/WatchedScreens";
 import { ApiKeysSection } from "../apikeys/ApiKeysSection";
 import { connectMarketData, disconnectMarketData, failureReason } from "../api";
 import { ConnectedAppsSection } from "../connect/ConnectedApps";
+import { Choices } from "../components/Choices";
 import { Skeleton } from "../components/States";
 import { localDay } from "../format";
 import { href } from "../route";
 import { refreshMarketData, useMarketData } from "../market/useMarketData";
+import { THEME_WORD, type ThemeChoice } from "../theme";
 import type { MarketConnection, MarketProvider, ScreenWatches } from "../types";
 
-export function Settings({ token, watches }: { token: string; watches?: ScreenWatches | null }) {
+/** The three themes by name (Riley 72: never a blind cycle). */
+const THEMES: [ThemeChoice, string][] = [["light", THEME_WORD.light], ["dark", THEME_WORD.dark], ["system", THEME_WORD.system]];
+
+export function Settings({ token, watches, theme, onTheme }: {
+  token: string;
+  watches?: ScreenWatches | null;
+  /** the theme in force and the way to choose one (theme.ts): Light, Dark or the system's */
+  theme?: ThemeChoice;
+  onTheme?: (choice: ThemeChoice) => void;
+}) {
   const market = useMarketData(token);
   return (
     <div className="page settings-page">
       <h1>Settings</h1>
       <AlertSettingsSection token={token} />
+      {theme && onTheme && (
+        <section className="card" aria-label="Display">
+          <div className="card-h">
+            <h2 className="grow">Display</h2>
+            <span className="sub">kept for you in this browser</span>
+          </div>
+          <div className="card-b settings-theme">
+            <Choices label="Theme" value={theme} set={onTheme} options={THEMES} />
+            <p className="small muted">System follows your device's setting.</p>
+          </div>
+        </section>
+      )}
       {/* the screens that alert, beside the filing alerts (Riley, test 10, finding 72): a watch is set on its screen */}
       {!!watches?.watches.length && (
         <section className="card" aria-label="Watched screens">

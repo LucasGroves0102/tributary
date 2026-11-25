@@ -24,10 +24,12 @@ interface Props {
   onClose?: () => void;
   /** the questions left: shown before one is spent (null: unknown, so nothing is claimed) */
   allowance?: Allowance | null;
+  /** the drawer's motion: "closing" while it slides away, "instant" when Ctrl J opened it (shell.css) */
+  motion?: string;
 }
 
-/** Below this width the drawer floats over the page (styles.css, "Narrower screens"). */
-const OVERLAY = "(max-width: 1200px)";
+/** Below this width the drawer floats over the page (shell.css, "widths"). */
+const OVERLAY = "(max-width: 1199px)";
 
 /** Whether the drawer covers the page now (it follows the window). */
 function useOverlay(drawer: boolean): boolean {
@@ -54,6 +56,7 @@ export function AssistantPanel({
   inputRef,
   onClose,
   allowance = null,
+  motion,
 }: Props) {
   const { turns, draft, busy, setDraft, submit, stop, clear } = assistant;
   const bottom = useRef<HTMLDivElement>(null);
@@ -65,8 +68,13 @@ export function AssistantPanel({
 
   return (
     <aside
-      className={variant === "drawer" ? "ai ai-drawer" : "ai ai-page card"}
+      id={variant === "drawer" ? "assistant-panel" : undefined}
+      className={variant === "drawer" ? `ai ai-drawer${motion ? ` ${motion}` : ""}` : "ai ai-page card"}
       aria-label="Assistant"
+      onKeyDown={(e) => {
+        // Escape closes the panel (the question box's first Escape only leaves the box)
+        if (e.key === "Escape" && onClose && !(e.target instanceof HTMLTextAreaElement)) onClose();
+      }}
     >
       <div className="ai-h">
         <b>Assistant</b>
