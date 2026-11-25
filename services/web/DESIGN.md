@@ -657,7 +657,14 @@ Each change says New / Removed / Rewritten, its section, its period ("3 months",
 date", "3 and 6 months": a 10-Q's quarter text is never read as its half-year text), the passage
 with its word diff (a "second" → "third" swap inside it unmarked), "Why it ranks here: new passage ·
 5 new figures · new risk wording: tariff, refund · Results of operations" and Read it in the filing;
-the first 30, then Show all. In Analysis the same list pins each passage with its period ("MD&A (6
+the first 30, then Show all. It reads as a blackline (spec §4): each change numbered, its passage in
+the serif beside a 2px change bar, inserted words tinted `ins-bg` and underlined 2px in `ins-line`, deleted
+words struck through in `pencil` and still readable, a removed passage struck through whole; screen
+readers hear "[inserted: …]" and "[deleted: …]" (CSS generated content, so the text stays the filing's);
+the ranker's facts sit one to a line in a notes column at the right, folding under the passage below 720px.
+A Filings row's What changed opens the reader in that mode; an alert's link (`#/company/<id>/filings?changes=`)
+still opens it on the Filings tab, naming the filing once the index lists it, with Open in the reader.
+In Analysis the same list pins each passage with its period ("MD&A (6
 months, year to date)"). The filing reader's side by side asks the same view, a 10-Q a year earlier
 with the comparison switchable, and puts each passage's period beside it. When the year-ago 10-Q
 isn't indexed the page falls back to the previous one once and says so. An older Query API (no
@@ -900,6 +907,15 @@ token shared by every component; a 404 or an error hides everything below):
   Price tab as `overview` and Settings as `about` (the agent can't read prices).
 
 ## Filing reader
+
+The page (spec §4 Reader): a crumb (the company / Filings), the title with Original on EDGAR and Ask about
+this section (the primary), a meta row (accession, period, sections); a toolbar with **Read | What
+changed** (a 10-K or 10-Q; `#/filing/...?view=changes`, the count from `/changes`), the search and the
+previous and next filing of the form; then the outline (208px; the item number in a pencil column, the open
+item a sheet chip) and the page, a sheet with a hairline: Tributary's labels in Archivo, the filing's words
+in Source Serif 17/28 on a 660px measure. What changed shows the filing's ranked changes (`Changes`, below)
+in the page's place and the outline counts each section's changes; switching modes cross-fades the page
+like a tab (`motion.ts` `kindOf`). Under 900px of page the outline folds behind "Contents".
 
 Filing reader (`components/explore/FilingReader.tsx`, pure parts in `reader/text.ts`): the section
 is read in full (`max_chars`, the API's cap is 1,000,000: the old 50,000 hid later matches and

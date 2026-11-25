@@ -7,7 +7,8 @@ import {
   section as fetchSection,
   sectionChanges,
 } from "../../api";
-import { edgarLink } from "../../company/Filings";
+import { Changes, edgarLink } from "../../company/Filings";
+import { Choices } from "../Choices";
 import { addDays } from "../../home/data";
 import { FormMark } from "../FormMark";
 import { useLoad, type Load } from "../../company/useLoad";
@@ -57,6 +58,8 @@ interface Props {
   /** called once the filing's text is readable, and again for each section opened (Home's
    * "Continue where you left off") */
   onRead?: (sectionKey: string | null) => void;
+  /** What changed (a 10-K or 10-Q): the filing's changes in place of a section's text */
+  mode?: "changes";
 }
 
 const SEARCH_FORMS = /^(10-K|10-Q|8-K|20-F|40-F|6-K)(\/A)?$/;
@@ -73,7 +76,7 @@ const NEXT_8K_WITHIN_DAYS = 400;
  * about 2,000 characters that hold all the words, from the API), the section heading shows the
  * same passages and *highlights* (each word marked in the text, counted here, what next and
  * previous step through). */
-export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead, onFiling }: Props) {
+export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead, onFiling, mode }: Props) {
   const filing = useLoad(`${companyId}|${accessionNo}`, () => parsedFiling(token, companyId, accessionNo));
   const f = filing?.state === "ok" ? filing.data : null;
   const active = f ? (f.sections.find((s) => s.section_key === sectionKey) ?? f.sections[0] ?? null) : null;
@@ -136,11 +139,15 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   useEffect(() => setMatch(-1), [accessionNo, active?.section_key, query, at]);
   // the section whose What changed is open (closes when another section opens)
   const [diffFor, setDiffFor] = useState<string | null>(null);
+  // on a narrow page the outline folds behind "Contents" (spec §3), open on a tap
+  const [tocOpen, setTocOpen] = useState(false);
 
   const back = (
-    <a className="back" href={href({ view: "company", companyId, tab: "filings" })}>
-      ← {name ?? "Company"} filings
-    </a>
+    <p className="crumb">
+      <a href={href({ view: "company", companyId })}>{name ?? "Company"}</a>
+      <span aria-hidden="true"> / </span>
+      <a className="back" href={href({ view: "company", companyId, tab: "filings" })}>Filings</a>
+    </p>
   );
   if (!filing || filing.state === "loading") return <div className="page">{back}<Skeleton lines={8} label="Loading the filing" /></div>;
   if (filing.state === "denied") {
@@ -200,34 +207,49 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
     </a>
   );
 
+  // What changed (a 10-K or 10-Q): the filing's changes in the page's place, the outline counting them
+  const changesOn = mode === "changes" && !!form;
+  const changed = new Map<string, number>(changes?.state === "ok" ? changes.data.sections.map((s) => [s.section_key, s.material
+    ? s.material.new + s.material.removed + s.material.rewritten
+    : s.summary.new + s.summary.removed + s.summary.rewritten]) : []);
+  const changedTotal = [...changed.values()].reduce((a, b) => a + b, 0);
+  const toMode = (m: "read" | "changes") =>
+    go({ view: "filing", companyId, accessionNo, section: active?.section_key ?? null, ...(query ? { q: query } : {}), ...(m === "changes" ? { mode: "changes" as const } : {}) });
+
   return (
-    <div className="page reader">
-      {back}
-      <header className="page-header">
-        <div>
+    <div className={changesOn ? "page reader changes-mode" : "page reader"}>
+      <header className="reader-head">
+        {back}
+        <div className="page-bar">
           <h1>
             <FormMark form={f.form} /> {name ? `${name}, ` : ""}filed {day(f.filed, true)}
           </h1>
-          <p className="muted">
-            <span className="mono">{accessionNo}</span>
-            {f.period_of_report && ` · ${periodPhrase(f.form, f.period_of_report)}`}
-          </p>
+          <div className="page-actions">
+            {f.document_url?.startsWith("https://www.sec.gov/") && (
+              <a className="btn external" href={f.document_url} target="_blank" rel="noopener noreferrer">
+                Original on EDGAR ↗
+              </a>
+            )}
+            {onAsk && active && (
+              <button className="btn primary" onClick={() => onAsk(`Summarize ${active.title ?? `section ${active.section_key}`} in this ${f.form}.`)}>
+                Ask about this section
+              </button>
+            )}
+          </div>
         </div>
-        <div className="row wrap">
-          {f.document_url?.startsWith("https://www.sec.gov/") && (
-            <a className="btn sm ghost external" href={f.document_url} target="_blank" rel="noopener noreferrer">
-              Original on EDGAR ↗
-            </a>
-          )}
-          {onAsk && active && (
-            <button className="btn sm" onClick={() => onAsk(`Summarize ${active.title ?? `section ${active.section_key}`} in this ${f.form}.`)}>
-              Ask about this section
-            </button>
-          )}
-        </div>
+        <p className="reader-meta">
+          <span className="code">{accessionNo}</span>
+          {f.period_of_report && <span>{periodPhrase(f.form, f.period_of_report)}</span>}
+          <span>{f.sections.length} {f.sections.length === 1 ? "section" : "sections"}</span>
+        </p>
       </header>
-      <div className="reader-tools row wrap">
-        <form className="row grow" role="search" onSubmit={submit}>
+      <div className="reader-tools">
+        {form && (
+          <Choices label="Read the filing or what changed" value={changesOn ? "changes" : "read"} set={toMode}
+            options={[["read", "Read"], ["changes", changedTotal ? `What changed ${changedTotal.toLocaleString()}` : "What changed"]]} />
+        )}
+        {!changesOn && (
+        <form className="reader-search" role="search" onSubmit={submit}>
           <input className="field" type="search" aria-label="Search this filing" placeholder={'Search this filing: words or "a phrase"'}
             value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} onKeyDown={onSearchKey} />
           <button className="btn sm" type="submit">Search</button>
@@ -243,6 +265,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
             <span>Exact phrase</span>
           </label>
         </form>
+        )}
         {stepped && active && (
           <span className="filing-steps" role="group" aria-label={`Other ${stepped} filings`}>
             <FilingStep load={prior} dir="prior" form={stepped} companyId={companyId} sectionKey={active.section_key} q={query} />
@@ -251,20 +274,24 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
         )}
       </div>
       <div className="reader-body">
-        <nav className="toc" aria-label="Sections">
+        <button type="button" className="btn toc-toggle" aria-expanded={tocOpen} aria-controls="reader-toc" onClick={() => setTocOpen((o) => !o)}>
+          Contents<span className="more-caret" aria-hidden="true" />
+        </button>
+        <nav id="reader-toc" className={tocOpen ? "toc" : "toc folded"} aria-label="Sections">
           {query && <SearchHits hits={hits} query={query} companyId={companyId} accessionNo={accessionNo} />}
           {query && <p className="toc-legend faint small">Number: passages that match, about 2,000 characters each</p>}
           {outlineGroups(f.sections).map((g) => (
             <div key={g.label} className="grp">
               <div className="grp-h">{g.label}</div>
               {g.sections.map((s) => {
-                const hit = hitsBySection.get(s.section_key);
+                const hit = changesOn ? undefined : hitsBySection.get(s.section_key);
+                const n = changesOn ? changed.get(s.section_key) : undefined;
                 return (
                   <a
                     key={s.section_key}
                     href={href({ view: "filing", companyId, accessionNo, section: s.section_key, ...(query ? { q: query } : {}) })}
-                    aria-current={s.section_key === active?.section_key ? "page" : undefined}
-                    title={`${s.chars.toLocaleString("en-US")} characters`}
+                    aria-current={!changesOn && s.section_key === active?.section_key ? "page" : undefined}
+                    title={changesOn ? `Read ${sectionTitle(s.section_key, s.title)}` : `${s.chars.toLocaleString("en-US")} characters`}
                   >
                     {/* the item's number under its Part's heading, not the stored key ("II-1A"), and no "38k"
                         counts in the outline: the size is the hover (Riley 81) */}
@@ -275,12 +302,20 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
                         {hit.passages_matched}
                       </span>
                     )}
+                    {n !== undefined && n > 0 && (
+                      <span className="cnt changed" title={`${n} ${n === 1 ? "change" : "changes"} in this section`}>{n}</span>
+                    )}
                   </a>
                 );
               })}
             </div>
           ))}
         </nav>
+        {changesOn ? (
+          <article className="section-text changes-page" aria-label="What changed">
+            <Changes token={token} companyId={companyId} accessionNo={accessionNo} name={name ?? "This company"} form={f.form} />
+          </article>
+        ) : (
         <article className="section-text" data-sticky-scope="">
           {sectionKey && active && active.section_key !== sectionKey && (
             <p className="faint small">This filing has no section {sectionKey}; showing {active.section_key}.</p>
@@ -337,6 +372,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
             </div>
           )}
         </article>
+        )}
       </div>
     </div>
   );

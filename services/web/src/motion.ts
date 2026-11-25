@@ -88,6 +88,9 @@ function depth(r: Route): number {
 }
 
 export function kindOf(prev: Route | null, next: Route): NavKind {
+  // the reader's Read and What changed: one page, its content cross-fading in place like a tab (§7.4)
+  if (prev?.view === "filing" && next.view === "filing" && prev.accessionNo === next.accessionNo &&
+    (prev.mode ?? "read") !== (next.mode ?? "read")) return "tab";
   if (!prev || pageOf(prev) === pageOf(next)) return "none";
   if (prev.view === "company" && next.view === "company" && prev.companyId === next.companyId) return "tab";
   const a = depth(prev);

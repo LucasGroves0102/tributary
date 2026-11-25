@@ -747,3 +747,721 @@ button.chip.on,
   font-size: 12px;
   color: var(--pencil);
 }
+
+/* --- the filing reader (§4 Reader, §6) ----------------------------------------------------------- */
+/* the crumb, the title with its one primary, a meta row; then Read | What changed and the search; the
+   outline (208), the page (a sheet with a hairline, the filing's words in Source Serif 17/28 on a 660px
+   measure) */
+
+.reader {
+  gap: 24px;
+}
+
+.reader-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reader-head .crumb {
+  margin: 0 0 4px;
+}
+
+.crumb a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-2);
+}
+
+.reader-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reader-head h1 .tag {
+  font-size: 13px;
+}
+
+.reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--pencil);
+}
+
+.reader-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.reader-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 360px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reader-search .field {
+  flex: 1 1 auto;
+  max-width: 360px;
+  min-width: 0;
+}
+
+.reader-search .chk {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.filing-steps {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+
+.reader-body {
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 32px;
+}
+
+.toc-toggle {
+  display: none;
+}
+
+.toc {
+  gap: 0;
+  font-size: 13px;
+}
+
+.toc .grp {
+  margin: 0 0 16px;
+}
+
+.toc .grp-h {
+  padding: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pencil);
+}
+
+.toc a {
+  align-items: baseline;
+  gap: 0;
+  min-height: 32px;
+  padding: 6px 8px 6px 0;
+  border-radius: var(--r-control);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 20px;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.toc .key {
+  flex: none;
+  width: 30px;
+  min-width: 0;
+  padding-left: 8px;
+  font-size: 12px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .toc a:hover {
+    background: var(--sheet);
+    transition-duration: 0s;
+  }
+}
+
+.toc a[aria-current="page"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--ink);
+}
+
+.toc .cnt {
+  flex: none;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.toc .cnt.changed {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+/* the page: a sheet with a hairline; Tributary's labels in Archivo, the filing's words in the serif */
+.section-text {
+  padding: 24px 40px 32px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--sheet);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 28px;
+  color: var(--ink);
+}
+
+.section-text > p,
+.section-text .blk,
+.section-text .blk p {
+  max-width: 660px;
+}
+
+.section-text .section-h {
+  margin: 0 0 16px;
+  padding: 8px 0;
+  background: var(--sheet);
+  box-shadow: none;
+  font-family: var(--sans);
+}
+
+.section-text .section-h h2 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.section-text .section-h .btn,
+.section-text .statements-elsewhere,
+.section-text .section-nav,
+.section-text .empty,
+.section-text .faint.small {
+  font-family: var(--sans);
+}
+
+.section-text .section-nav {
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+/* a filing's table keeps its own units and columns, in the interface face, on the page's ruling */
+.section-text .filing-table {
+  border: 0;
+  border-radius: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.section-text .filing-table .t th,
+.section-text .filing-table .t td.first {
+  background: var(--sheet);
+}
+
+.section-text mark {
+  background: var(--well);
+  box-shadow: inset 0 -2px 0 var(--ink-2);
+  border-radius: 0;
+}
+
+.section-text mark.cur {
+  background: var(--ins-bg);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+
+.section-text p.hit {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--ink-2);
+  margin-left: -16px;
+  padding: 0 0 0 14px;
+  border-radius: 0;
+}
+
+@container main (max-width: 900px) {
+  .reader-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .toc-toggle {
+    display: inline-flex;
+    justify-self: start;
+  }
+
+  .toc {
+    position: static;
+    max-height: none;
+  }
+
+  .toc.folded {
+    display: none;
+  }
+
+  .section-text {
+    padding: 16px 16px 24px;
+  }
+}
+
+/* --- What changed (blackline, §4): inserted text tinted and underlined, deleted text struck through in
+   pencil and still readable, a 2px change bar, the ranker's notes beside each change ---------------- */
+
+.changes-page {
+  padding-top: 16px;
+}
+
+.changes {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 22px;
+  container: changes / inline-size;
+}
+
+.changes-tools {
+  gap: 8px 16px;
+  padding: 0 0 16px;
+}
+
+.changes-basis,
+.changes-why,
+.changes-hidden {
+  margin: 0 0 4px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.changes-basis {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* the segmented controls inside (Against, Order, a Filings tab's forms): a well track, the chosen one a sheet */
+.seg {
+  display: inline-flex;
+  flex: none;
+  max-width: 100%;
+  padding: 2px;
+  gap: 0;
+  border: 0;
+  border-radius: var(--r-track);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.seg > button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.seg > button + button {
+  border-left: 0;
+}
+
+.seg > button.on,
+.seg > button[aria-pressed="true"] {
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule-2);
+  color: var(--ink);
+}
+
+@media (pointer: coarse) {
+  .seg > button {
+    height: 40px;
+  }
+}
+
+.diff {
+  gap: 0;
+}
+
+.changes .diff.card-b,
+.card-b.diff {
+  padding: 0;
+}
+
+.changes-count {
+  margin: 8px 0 16px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* one change: its head, its passage (serif, a change bar), the notes at the right */
+.diff p.new,
+.diff p.removed,
+.diff p.rewritten {
+  display: grid;
+  grid-template-columns: minmax(0, 660px) minmax(180px, 220px);
+  grid-template-areas:
+    "head notes"
+    "body notes"
+    "fold notes";
+  align-items: start;
+  column-gap: 32px;
+  margin: 0;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  line-height: 22px;
+}
+
+.diff p .change-head {
+  grid-area: head;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+
+.diff p .change-head b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.diff p .change-head .tag {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.diff p .change-head .tag::before {
+  content: "· ";
+  color: var(--pencil);
+}
+
+.change-n {
+  min-width: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.diff p .change-body {
+  grid-area: body;
+  display: block;
+  padding: 0 0 0 16px;
+  border-left: 2px solid var(--ink-2);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 28px;
+  color: var(--ink);
+}
+
+.diff p .fold-toggle {
+  grid-area: fold;
+  justify-self: start;
+  margin: 8px 0 0 16px;
+}
+
+.diff p .change-notes {
+  grid-area: notes;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 24px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.diff p .change-why,
+.diff p .change-links {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+/* the notes are the ranker's facts alone; "Why it ranks here" is said once, for a screen reader */
+.diff p .change-why .cw-k {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.diff p .change-why .cw {
+  display: block;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.diff p .change-why .cw-sep {
+  display: none;
+}
+
+.diff p .change-links a {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.diff p .change-links a::after {
+  content: " →";
+}
+
+/* the blackline itself */
+.diff ins,
+.sbs-r ins {
+  background: var(--ins-bg);
+  color: var(--ink);
+  font-weight: inherit;
+  text-decoration: underline 2px var(--ins-line);
+  text-underline-offset: 4px;
+  text-decoration-skip-ink: none;
+}
+
+.diff del,
+.sbs-r del {
+  color: var(--pencil);
+  text-decoration: line-through 1px var(--pencil);
+}
+
+/* screen readers hear where an insertion and a deletion start and end (§4); the text stays the filing's */
+.diff ins::before,
+.diff ins::after,
+.diff del::before,
+.diff del::after,
+.sbs-r ins::before,
+.sbs-r ins::after,
+.sbs-r del::before,
+.sbs-r del::after {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(100%);
+  white-space: nowrap;
+}
+
+.diff ins::before,
+.sbs-r ins::before {
+  content: " [inserted: ";
+}
+
+.diff del::before,
+.sbs-r del::before {
+  content: " [deleted: ";
+}
+
+.diff ins::after,
+.diff del::after,
+.sbs-r ins::after,
+.sbs-r del::after {
+  content: "] ";
+}
+
+/* a wholly new passage is labelled and barred, not tinted; a removed one struck through in pencil */
+.diff p.removed .change-body {
+  color: var(--pencil);
+  text-decoration: line-through 1px var(--pencil);
+}
+
+.diff mark {
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--ink);
+  border-radius: 0;
+  padding: 0;
+}
+
+/* the notes fold under each change where there's no room beside them (§3) */
+@container changes (max-width: 720px) {
+  .diff p.new,
+  .diff p.removed,
+  .diff p.rewritten {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "body"
+      "fold"
+      "notes";
+  }
+
+  .diff p .change-notes {
+    padding: 12px 0 0 18px;
+  }
+}
+
+/* the side by side of one section's changes: prior | this filing, the same blackline */
+.sbs-r > div {
+  border-radius: 0;
+  padding: 8px 0 8px 16px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.sbs-r.new .new,
+.sbs-r.removed .old,
+.sbs-r.rewritten > div {
+  background: transparent;
+  border-left: 2px solid var(--ink-2);
+}
+
+.sbs-r.removed .old {
+  color: var(--pencil);
+  text-decoration: line-through 1px var(--pencil);
+}
+
+.sbs-h {
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+/* --- Search (§6): the words and one primary; the filters as one row of 32px controls; what was searched as
+   a notice; the results grouped by company, each passage's snippet in the filing's own serif ------------- */
+
+.page .search-form {
+  gap: 12px;
+}
+
+.search-form > .row:first-child {
+  gap: 8px;
+}
+
+.search-form > .row:first-child .field {
+  max-width: 640px;
+  height: var(--control-h);
+  font-size: 14px;
+}
+
+.search-form .row.wrap {
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.search-form .row.wrap > label,
+.search-form .row.wrap > .row {
+  gap: 8px;
+}
+
+.search-form .row.wrap .faint {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.search-form > p.faint.small {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* what was searched: one line on a sheet with a hairline, the ways further back at its right */
+.search-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 40px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.search-scope .small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.results .result-co {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.results .result-co h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.results .result-co h2 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.result-filing {
+  margin: 0 0 16px;
+}
+
+.result-filing > .row {
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.result-filing > .row a {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.result-filing ul {
+  gap: 16px;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.result-filing li > a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.result-filing li > a b {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.result-filing .search-count {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* the filing's own words: serif 15/24, the searched words marked with an underline on a well tint */
+.snippet {
+  max-width: 720px;
+  margin: 4px 0 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.snippet mark {
+  background: var(--well);
+  box-shadow: inset 0 -2px 0 var(--ink-2);
+  border-radius: 0;
+  padding: 0;
+}
+
+.results .pager {
+  padding: 16px 0 0;
+  border-top: 0;
+}

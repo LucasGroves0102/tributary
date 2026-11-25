@@ -56,6 +56,8 @@ export type Route =
       at?: number;
       /** words to highlight (a search) */
       q?: string;
+      /** What changed: the filing's changes against its comparable filing, in the reader (`?view=changes`) */
+      mode?: "changes";
     }
   | { view: "chart" }
   | { view: "compare"; compare?: CompareState }
@@ -200,6 +202,7 @@ export function parse(hash: string): Route {
       section: c && SECTION.test(c) ? c : null,
       ...(at && /^\d{1,9}$/.test(at) ? { at: Number(at) } : {}),
       ...(q ? { q } : {}),
+      ...(params.get("view") === "changes" ? { mode: "changes" as const } : {}),
     };
   }
   // a page name this app doesn't have: say so rather than show Home under a wrong address; the
@@ -254,6 +257,7 @@ export function href(route: Route): string {
       const params = new URLSearchParams();
       if (route.at !== undefined) params.set("at", String(route.at));
       if (route.q) params.set("q", route.q);
+      if (route.mode === "changes") params.set("view", "changes");
       return `#/filing/${route.companyId}/${route.accessionNo}` +
         (route.section ? `/${encodeURIComponent(route.section)}` : "") +
         (params.size ? `?${params}` : "");

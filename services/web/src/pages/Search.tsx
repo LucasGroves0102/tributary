@@ -5,7 +5,7 @@ import { FormMark } from "../components/FormMark";
 import { useLoad } from "../company/useLoad";
 import { useDirectory } from "../companies/directory";
 import { CompanyPicker, type PickedCompany } from "../components/CompanySearch";
-import { Skeleton } from "../components/States";
+import { TextShape } from "../components/States";
 import { day, localDay, UNNAMED } from "../format";
 import { sectionName } from "../reader/sections";
 import { searchTerms, snippetRuns } from "../reader/text";
@@ -156,7 +156,10 @@ export function Search({ token, search, companies, open = false, suggestions = N
           Every company's filing index is still on its Filings tab.
         </p>
       ) : !load || load.state === "loading" ? (
-        <Skeleton lines={5} label="Searching" />
+        <div className="skel results results-shape" role="status" aria-busy="true">
+          <span className="visually-hidden">Searching…</span>
+          {[0, 1, 2].map((i) => <div key={i} className="result-co" aria-hidden="true"><span className="blank-v w-160" /><TextShape /></div>)}
+        </div>
       ) : load.state === "denied" ? (
         <p className="empty locked">That company's filings aren't included in your access.</p>
       ) : load.state === "error" ? (

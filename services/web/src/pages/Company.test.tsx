@@ -160,12 +160,15 @@ const onChartMany = vi.fn();
 const onAsk = vi.fn();
 let noMargin = false;
 let morePeers = 0;
+/** the Filings tab opened by an alert's link (`?changes=<accession>`) */
+let changesFor: string | undefined;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => respond(url)));
   rowFor = () => nvdaRow({ access: ["filings", "financials"] });
   indexReadable = true;
+  changesFor = undefined;
   newerIndex = [];
   clearNewest();
   noMargin = false;
@@ -188,7 +191,7 @@ async function render(tab: CompanyTab = "overview", companyId = NVDA, scope: Sco
   await act(async () =>
     root.render(
       <ScopeContext.Provider value={scope}>
-        <Company token="t" companyId={companyId} tab={tab} statements={statements} asOf={asOf} watched={false} onWatch={onWatch}
+        <Company token="t" companyId={companyId} tab={tab} statements={statements} changes={changesFor} asOf={asOf} watched={false} onWatch={onWatch}
           onChart={onChart} onChartMany={onChartMany} onAsk={onAsk} />
       </ScopeContext.Provider>,
     ),
@@ -716,7 +719,12 @@ it("filings: form filters, 8-K items, the reader, and what changed", async () =>
   expect(last.searchParams.get("offset")).toBeNull();
   expect(rows()).toHaveLength(1);
   await click(button("All"));
-  await click(rows()[1]!.querySelector("button"));
+  // a row's What changed opens the reader in that mode (spec §6); an alert's link opens it here
+  const link = [...rows()[1]!.querySelectorAll("a")].find((a) => a.textContent === "What changed")!;
+  expect(link.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}?view=changes`);
+  act(() => root.unmount());
+  changesFor = ACC;
+  await render("filings");
   for (let i = 0; i < 2; i++) await act(async () => {});
   expect(paths().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/filings/${ACC}/changes`)).toBe(true);
   const diff = $(".diff")!;
@@ -745,12 +753,11 @@ it("filings: a free plan sees the whole index with EDGAR links, no reader", asyn
   expect(paths().some((u) => u.pathname === `/api/query/v1/companies/${NVDA}/filings`)).toBe(false);
 });
 
-it("what changed says which filing it is, in words, and closes when a filter hides the row", async () => {
+it("what changed from an alert's link says which filing it is, in words, and closes when a filter hides the row", async () => {
+  changesFor = ACC;
   await render("filings");
-  await click(button("All"));
-  const row = [...container.querySelectorAll("table.t tbody tr:not(.year-h)")].find((r) => r.textContent?.includes("What changed"))!;
-  await click([...row.querySelectorAll("button")].find((b) => b.textContent === "What changed")!);
   for (let i = 0; i < 2; i++) await act(async () => {});
+  const row = [...container.querySelectorAll("table.t tbody tr:not(.year-h)")].find((r) => r.textContent?.includes("What changed"))!;
   expect(row.className).toBe("sel");
   const head = () => [...container.querySelectorAll(".card-h")].find((h) => h.textContent?.startsWith("What changed"))!;
   expect(head().textContent).toMatch(/10-Q filed Aug 26, 2026/);
@@ -759,7 +766,7 @@ it("what changed says which filing it is, in words, and closes when a filter hid
   expect(head().querySelector(".sub")?.getAttribute("title")).toContain("Accession ");
   expect(head().querySelector(".mono")).toBeNull();
   await click(button("10-K"));
-  expect(head().querySelector(".sub")).toBeNull();
+  expect(head()).toBeUndefined();
   expect(button("Close")).toBeUndefined();
 });
 

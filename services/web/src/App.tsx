@@ -958,6 +958,7 @@ export function App(props: Props = {}) {
                 sectionKey={route.section}
                 at={route.at}
                 q={route.q}
+                mode={route.mode}
                 name={companyName(route.companyId)}
                 onAsk={askAbout}
                 onRead={(section) => saved.recordFiling(route.companyId, route.accessionNo, section)}

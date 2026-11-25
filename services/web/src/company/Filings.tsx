@@ -77,11 +77,14 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
     closeDiff();
   };
   const changes = useRef<HTMLElement>(null);
-  const showDiff = (f: IndexedFiling) => {
-    setDiff(f.accession_no);
-    setDiffFiling(f);
+  // an alert's link names the filing by accession: once the index lists it, say which it is in words and
+  // compare it as its form is compared, then bring it into view
+  const listed = diff && !diffFiling ? rows.find((f) => f.accession_no === diff) : undefined;
+  useEffect(() => {
+    if (!listed) return;
+    setDiffFiling(listed);
     requestAnimationFrame(() => changes.current?.scrollIntoView?.({ block: "start" }));
-  };
+  }, [listed]);
   const headings = filingHeadings(rows, fiscalYearEnd);
 
   return (
@@ -190,10 +193,11 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
                                 EDGAR ↗
                               </a>
                             ) : null}
+                            {/* What changed opens the reader in that mode (spec §6) */}
                             {periodic && f.sections_available && (
-                              <button className="btn sm ghost" onClick={() => showDiff(f)}>
+                              <a className="btn sm ghost" href={href({ view: "filing", companyId, accessionNo: f.accession_no, section: null, mode: "changes" })}>
                                 What changed
-                              </button>
+                              </a>
                             )}
                           </td>
                         </tr>
@@ -227,27 +231,23 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
             : "Reading parsed text needs filings access (the pro plan and a grant); until then each filing links to EDGAR."}
         </div>
       </section>
-      <section className="card" ref={changes}>
-        <div className="card-h">
-          <h2>What changed</h2>
-          {diff && (
+      {/* an alert's link (`?changes=`) opens a filing's What changed here; a row's opens it in the reader */}
+      {diff && (
+        <section className="card" ref={changes}>
+          <div className="card-h">
+            <h2>What changed</h2>
             <span className="sub" title={`Accession ${diff}`}>
               {diffFiling ? `${diffFiling.form} filed ${day(diffFiling.filed, true)}` : "the filing you chose"}
             </span>
-          )}
-          {diff && <span className="grow" />}
-          {diff && <button className="btn sm ghost" onClick={closeDiff}>Close</button>}
-        </div>
-        {diff ? (
+            <span className="grow" />
+            <a className="btn sm ghost" href={href({ view: "filing", companyId, accessionNo: diff, section: null, mode: "changes" })}>
+              Open in the reader
+            </a>
+            <button className="btn sm ghost" onClick={closeDiff}>Close</button>
+          </div>
           <Changes key={diff} token={token} companyId={companyId} accessionNo={diff} name={name} form={diffFiling?.form ?? null} />
-        ) : (
-          <p className="empty">
-            Choose What changed on a 10-K or 10-Q to see the Risk Factors and MD&amp;A paragraphs
-            that are new, removed or rewritten: a 10-Q against the same quarter a year earlier, a
-            10-K against the previous 10-K, the most material first.
-          </p>
-        )}
-      </section>
+        </section>
+      )}
     </>
   );
 }
@@ -450,6 +450,7 @@ function MaterialList({ data, companyId, pin, view, all, onAll }: {
         return (
           <p key={i} className={c.kind}>
             <span className="row wrap change-head">
+              <span className="change-n" aria-hidden="true">{i + 1}</span>
               <b>{KIND[c.kind]}</b>
               <span className="tag">{sectionShort(s.section_key)}</span>
               {period && <span className="tag period" title="The period this passage describes">{period}</span>}
@@ -461,9 +462,14 @@ function MaterialList({ data, companyId, pin, view, all, onAll }: {
                   )
                 : text(c.text ?? c.prior_text ?? "")}
             </Folded>
+            {/* the notes beside a change carry only the ranker's facts, in its words, one to a line (§4) */}
+            <span className="change-notes">
             {c.why && c.why.length > 0 && (
               <span className="change-why faint small">
-                Why {view === "ranked" ? "it ranks here" : "it matters"}: {c.why.join("; ")}
+                <span className="cw-k">Why {view === "ranked" ? "it ranks here" : "it matters"}: </span>
+                {c.why.map((w, j) => (
+                  <span key={j} className="cw">{w}{j < c.why!.length - 1 && <span className="cw-sep">; </span>}</span>
+                ))}
               </span>
             )}
             <span className="change-links small">
@@ -478,6 +484,7 @@ function MaterialList({ data, companyId, pin, view, all, onAll }: {
                 </a>
               )}
               {pin && <> {pin(c, s)}</>}
+            </span>
             </span>
           </p>
         );
