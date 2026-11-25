@@ -55,7 +55,9 @@ function respond(url: string, init?: RequestInit): Response {
     return Response.json({ per_hour: 30, network_per_hour: 40, left_this_hour: 28, paused: false, per_day: 1000, left_today: 998, report_questions: 3, check_questions: 4 });
   }
   if (path.endsWith("/v1/filings/latest")) {
-    return Response.json({ as_of: "", filings: [feedFiling({ ingested_at: new Date().toISOString() })] });
+    // filed 10 days ago: Home's feed keeps 90 days, so a fixed date ages out of it (it did on 2026-11-25)
+    const filed = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+    return Response.json({ as_of: "", filings: [feedFiling({ filed, ingested_at: new Date().toISOString() })] });
   }
   if (path.endsWith("/v1/filing-index")) {
     return Response.json({ as_of: "", forms: [], from: null, to: null, limit: 50, offset: 0, has_more: false, filings: [{
