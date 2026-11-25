@@ -232,6 +232,12 @@ html[data-motion="reduced"] .tab-ink {
   height: 24px;
 }
 
+.text-shape {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0;
+}
+
 .hero-blank {
   width: 220px;
   height: 40px;

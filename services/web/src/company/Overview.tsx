@@ -6,7 +6,7 @@ import { Folio, TodaysView } from "../components/Folio";
 import { Mark, MarkLegend, type MarkKind } from "../components/Mark";
 import { FigureButton, useSourceCard, type SourceInfo } from "../components/SourceCard";
 import { onGridKey } from "../components/ledgerGrid";
-import { ErrorPanel, sentence } from "../components/States";
+import { ErrorPanel, sentence, TextShape } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { currencyOf, day, exactAmount, ledgerUnit, paren } from "../format";
 import { href } from "../route";
@@ -550,7 +550,7 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
       ) : !canRead ? (
         <p className="empty locked">The description comes from the 10-K's text, which needs the pro plan and a grant for {name}.</p>
       ) : (
-        <Gate load={load} name={name} what="Filings">
+        <Gate load={load} name={name} what="Filings" shape={<TextShape />}>
           {() =>
             section ? (
               <div className="business">

@@ -20,6 +20,16 @@ export function Skeleton({ lines = 4, chart = false, label = "Loading" }: { line
   );
 }
 
+/** A passage's shape while it loads (spec §7.6: the section's own shape, not generic bars): three lines of
+ * the measure, blank (company.css `.blank-v`). */
+export function TextShape() {
+  return (
+    <div className="text-shape" aria-hidden="true">
+      <span className="blank-v w-480" /><span className="blank-v w-480" /><span className="blank-v w-240" />
+    </div>
+  );
+}
+
 /** `detail` as a sentence: reasons are fragments, some ending in a period. */
 export function sentence(detail: string): string {
   const t = detail.trim();
