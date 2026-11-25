@@ -291,6 +291,13 @@ gross profit as revenue or net sales less cost) is `value_source: "derived"` in 
 once by `store.DERIVED_SHOWN` / `shapes.value_source_shown`; gold keeps its own value_source (the
 point-in-time history reads it). So no reader seals one as a figure the filing states.
 
+**A figure from the press release** (165): a foreign filer's quarter read from its 6-K results
+release's table (gold's source tag `release:<section>/<table>/<row>/<column>`, read where no XBRL
+figure covers the period) is `value_source: "reported"` (the release states it) and its citation
+gains `release: {section, table, row, column}` (`shapes.release_cell`, counted from 0 like the stored
+tables), on `/financials`, the recap and `/components` (whose `how` is `release`); every other
+citation keeps exactly its keys. The web words it "from the press release" with the table and row.
+
 **How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
 and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
 margin over 100%, any margin over ±1,000%, growth of over 1,000% from under $10M or from a base under
@@ -1653,7 +1660,8 @@ row built from facts, and the derived metric's definition. One company, one date
   figure and citation; a left-out input says why: `inside_cash` or `not_reported`), `ttm` (`parts`:
   the four quarters, or the year a 10-K states), `sum` (a line tagged as parts, 038), `computed`
   (gross profit as revenue less cost, 039: `parts` are the two), `ytd` (a quarter from year-to-date
-  figures: the two facts), `reported`.
+  figures: the two facts), `release` (a quarter read from a 6-K results release's table, 165: no
+  XBRL facts; the citation's `release` names the cell), `reported`.
 - `facts` (quarter view): the fact selection, every mapped tag with a value for the period, its
   `priority`, whether it is a `line` or only part of a sum, its filing, how many `filings` stated it,
   and which gold `used`. `gold.figure_facts` is SECURITY DEFINER (query_api has two columns of

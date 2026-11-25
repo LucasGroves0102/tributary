@@ -10,6 +10,7 @@ import { change, currencyOf, day, inWords, money, moneyRow, pct } from "../forma
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { memberTree, treeOrder } from "../chart/segments";
+import { RELEASE_TAG, releaseText } from "./components";
 import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
@@ -788,7 +789,9 @@ function cellTitle(label: string, r: FinancialRow): string {
   if (r.derivation || r.splits?.length) return perShareTitle(label, r);
   const src = r.citation.xbrl_tag?.startsWith("derived:")
     ? computedText(r.citation.xbrl_tag)
-    : r.value_source === "derived"
+    : r.citation.xbrl_tag?.startsWith(RELEASE_TAG) && r.value_source !== "derived"
+      ? `${releaseText(r.citation.xbrl_tag)} (the company reports its quarters only in 6-K results releases; no XBRL figure covers this one)`
+      : r.value_source === "derived"
       ? `derived (${r.citation.source_accessions?.length ? `from ${r.citation.source_accessions.join(", ")}` : "computed"})`
       : `reported, ${r.citation.xbrl_tag}`;
   return `${label}, ${r.fiscal_period ?? day(r.period_end, true)} (period ended ${day(r.period_end, true)}). ` +

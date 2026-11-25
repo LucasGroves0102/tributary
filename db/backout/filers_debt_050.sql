@@ -20,12 +20,12 @@
 SET LOCAL lock_timeout = '30s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: analyst_fixes_155.sql,
--- point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql,
--- readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql,
--- annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql,
--- filing_xbrl_facts_055.sql) and this one hasn't, and unless the login owns the functions (the
--- migrate login; header).
+-- nothing, unless every newer backout has run (newest first: release_figures_165.sql,
+-- analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql,
+-- screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql,
+-- rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql,
+-- currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql) and this one
+-- hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -84,6 +84,7 @@ BEGIN
         ('ops.company_backlog(text)', '97bd3cf942ea7f5c87ed866c0ba563d8'),
         ('ops.company_rule_version(text)', '60744ba7ead2e38d3dc3791e5630df38'),
         ('ops.rebuild_soon(text[])', 'c5a3427c2fac8f4cfdddb3ad14021fd7'),
+        ('ops.release_backlog(text)', NULL),
         ('silver.refresh_filing_facts(text[])', '2f5e5eeefb1edf917bfb879e7071190d'),
         ('silver.refresh_financial_facts(text[])', 'b407aac7dbda2938ba7ebed789e3f2e3')
     ) v(fn, want) LOOP
@@ -96,7 +97,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql');
+                'changed.', w.fn, 'release_figures_165.sql, analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql, rebuild_speed_063.sql, currency_speed_061.sql, annual_currency_060.sql, banks_058.sql, currency_readings_057.sql, ifrs_currencies_056.sql, filing_xbrl_facts_055.sql');
         END IF;
     END LOOP;
 END

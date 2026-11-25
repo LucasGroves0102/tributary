@@ -52,6 +52,7 @@ from query_api.shapes import (
     newest_windows,
     percent_change,
     period,
+    release_citation,
     value_source_shown,
 )
 from query_api.store import Store
@@ -792,7 +793,8 @@ def _recap_value(r: dict, cik: str | None) -> dict:
             "citation": {"accession_no": r["accession_no"], "form": r["form"],
                          "filed": r["filed"], "xbrl_tag": r["source_tag"],
                          "source_accessions": r["source_accessions"],
-                         "filing_url": filing_url(cik, r["accession_no"])},
+                         "filing_url": filing_url(cik, r["accession_no"]),
+                         **release_citation(r.get("source_tag"))},  # 165
             "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]}}
 
 

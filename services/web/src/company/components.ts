@@ -58,6 +58,7 @@ export const HOW: Record<ComponentsHow, string> = {
   ytd: "A quarter the filing doesn't state on its own: the year to date less the year to date a quarter earlier.",
   reported: "As the filing tags it.",
   none: "No debt on file: the filing tags none, no filing in the year before did, and its interest expense is under 0.25% of total assets, so Tributary reads none.",
+  release: "From the press release: a quarter the company reports only in its 6-K results release, read from the release's own table (no XBRL figure covers it).",
 };
 
 export const LEFT_OUT: Record<"inside_cash" | "not_reported", string> = {
@@ -87,9 +88,23 @@ export function factSource(f: ComponentFact): string {
   return `${f.taxonomy}:${f.tag} · ${f.form ?? "filing"} filed ${day(f.filed, true)}${f.filings > 1 ? ` (stated in ${f.filings} filings, the latest used)` : ""}`;
 }
 
+/** 165: gold's source tag of a figure read from a 6-K results release's table. */
+export const RELEASE_TAG = "release:";
+
+/** "from the press release: EX-99.1, table 1, row 2" for "release:EX-99.1/0/1/1" (counted from 0
+ * in the tag, from 1 here). */
+export function releaseText(tag: string): string {
+  const [section, ...cell] = tag.slice(RELEASE_TAG.length).split("/");
+  const [table, row] = cell.map(Number);
+  return Number.isFinite(table) && Number.isFinite(row)
+    ? `from the press release: ${section}, table ${table! + 1}, row ${row! + 1}`
+    : "from the press release";
+}
+
 /** The tag a figure's own row cites, worded: a sum's parts, a computed line, else the tag. */
 export function tagText(tag: string | null): string {
   if (!tag) return "computed";
+  if (tag.startsWith(RELEASE_TAG)) return releaseText(tag);
   if (tag === "derived:no-debt") return "none on file: the filing tags no debt";
   if (tag === "derived:net_sales-cost_of_revenue") return "computed: net sales less cost of revenue";
   if (tag.startsWith("derived:")) return "computed: revenue less cost of revenue";

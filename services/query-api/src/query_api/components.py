@@ -17,6 +17,8 @@ What "made of" means, by how gold built the figure (`how`):
 - `none`: a long-term debt of zero where the filings show none (155, `derived:no-debt`): no parts.
 - `ytd`: a quarter derived from year-to-date figures (a fiscal Q4 = the 10-K's year less nine
   months): the two facts.
+- `release`: a foreign filer's figure read from its 6-K results release's table (165, a
+  `release:` tag; the citation's `release` names the table and cell): no XBRL facts.
 - `reported`: a figure as tagged.
 For each figure that comes from facts, `facts` is the fact selection (039's gold.best_facts):
 every mapped tag with a value for that period, its priority, whether it is a line or only part of
@@ -33,7 +35,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
 
-from query_api.shapes import filing_url, period, value_source_shown
+from query_api.shapes import RELEASE, filing_url, period, release_citation, value_source_shown
 from query_api.store import Store
 
 CompanyId = Annotated[str, Path(pattern=r"^\d{10}$", description="canonical company_id")]
@@ -77,6 +79,8 @@ def how_built(row: dict) -> str:
         return "computed"
     if tag == NO_DEBT:
         return "none"
+    if tag.startswith(RELEASE) and row.get("value_source") != "derived":
+        return "release"  # 165: read from a results release's table
     if "+" in tag:
         return "sum"
     if row.get("value_source") == "derived":
@@ -97,7 +101,8 @@ def _figure(r: dict) -> dict:
         "how": how_built(r),
         "citation": {"accession_no": r["accession_no"], "form": r["form"], "filed": r["filed"],
                      "xbrl_tag": r["source_tag"], "source_accessions": r["source_accessions"],
-                     "filing_url": filing_url(r.get("filer_cik"), r["accession_no"])},
+                     "filing_url": filing_url(r.get("filer_cik"), r["accession_no"]),
+                     **release_citation(r["source_tag"])},  # 165
     }
 
 

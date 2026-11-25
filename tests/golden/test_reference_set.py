@@ -22,6 +22,7 @@ filing: fix the pipeline, never the CSV. Skipped unless TEST_DATABASE_URL is set
 import csv
 import gzip
 import os
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -32,6 +33,7 @@ pytestmark = pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"),
                                 reason="TEST_DATABASE_URL not set")
 
 HERE = Path(__file__).parent
+MIGRATIONS = HERE.parent.parent / "db" / "migrations"
 ROWS = list(csv.DictReader((HERE / "reference_set.csv").open(newline="")))
 COMPANIES = list(csv.DictReader((HERE / "reference_companies.csv").open(newline="")))
 USER = "reference-set"
@@ -177,3 +179,43 @@ def test_printed_figure(gold, r):
 def expected(r: dict) -> str:
     return {"eps_diluted": "annual_per_share", "eps_diluted_adjusted": "adjusted"}.get(
         r["metric"], "annual")
+
+
+def temp_copy(migration: str, name: str, as_name: str) -> str:
+    """A function's body as `migration` wrote it, created as pg_temp.<as_name>."""
+    sql = (MIGRATIONS / migration).read_text()
+    m = re.search(rf"^CREATE (?:OR REPLACE )?FUNCTION {re.escape(name)}\(.*?^\$\$;\n", sql,
+                  re.M | re.S)
+    assert m, (migration, name)
+    return re.sub(r"^CREATE (?:OR REPLACE )?FUNCTION \S+?\(",
+                  f"CREATE OR REPLACE FUNCTION pg_temp.{as_name}(", m.group(0), count=1)
+
+
+@pytest.mark.parametrize("day", [None, "2016-06-30", "2020-03-31", "2024-12-31"])
+def test_165_changes_nothing_without_release_figures(gold, day):
+    """The scope of 165's rules bump (its header, 4): with no release figures, gold.usable_facts
+    gives exactly 155's rows and gold.knowledge_facts 086's for every reference company, today and
+    as of past days, so every view and history gold builds is unchanged: a company built at 155 is
+    built at 165."""
+    gold.execute(temp_copy("155_analyst_fixes_1.sql", "gold.usable_facts", "usable_facts_155"))
+    gold.execute(temp_copy("086_financials_known.sql", "gold.knowledge_facts",
+                           "knowledge_facts_086"))
+    assert gold.execute("SELECT count(*) FROM silver.release_figures").fetchone()[0] == 0
+    ids = [c["company_id"] for c in COMPANIES if c["ciks"]]
+    args = {"ids": ids, "day": day}
+    rows = gold.execute("SELECT count(*) FROM gold.usable_facts(%(ids)s, %(day)s::date)",
+                        args).fetchone()[0]
+    assert rows > 10_000
+    assert gold.execute(
+        "SELECT count(*) FROM ((SELECT * FROM gold.usable_facts(%(ids)s, %(day)s::date)"
+        "  EXCEPT ALL SELECT * FROM pg_temp.usable_facts_155(%(ids)s, %(day)s::date))"
+        " UNION ALL (SELECT * FROM pg_temp.usable_facts_155(%(ids)s, %(day)s::date)"
+        "  EXCEPT ALL SELECT * FROM gold.usable_facts(%(ids)s, %(day)s::date))) x",
+        args).fetchone()[0] == 0
+    if day is None:
+        assert gold.execute(
+            "SELECT count(*) FROM unnest(%(ids)s::text[]) c(id) CROSS JOIN LATERAL ("
+            " (SELECT * FROM gold.knowledge_facts(c.id)"
+            "  EXCEPT ALL SELECT * FROM pg_temp.knowledge_facts_086(c.id))"
+            " UNION ALL (SELECT * FROM pg_temp.knowledge_facts_086(c.id)"
+            "  EXCEPT ALL SELECT * FROM gold.knowledge_facts(c.id))) x", args).fetchone()[0] == 0

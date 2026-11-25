@@ -65,7 +65,7 @@ from query_api.sandbox import (
     sandbox_workspaces,
 )
 from query_api.screener import MetricColumn, ScreenError, metric_column, metric_datasets
-from query_api.shapes import currency_of, filing_url
+from query_api.shapes import currency_of, filing_url, release_citation
 from query_api.shapes import period as _period
 from query_api.sheets import add_sheet_routes
 from query_api.status import add_status_routes
@@ -573,7 +573,8 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                 "citation": {"accession_no": r["accession_no"], "form": r["form"],
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],
-                             "filing_url": filing_url(r.get("filer_cik"), r["accession_no"])},
+                             "filing_url": filing_url(r.get("filer_cik"), r["accession_no"]),
+                             **release_citation(r["source_tag"])},  # 165
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
             } for r in rows
         ]}

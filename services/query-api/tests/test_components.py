@@ -50,6 +50,26 @@ def test_how_a_figure_was_built():
     assert how_built(row("revenue", "1", tag="us-gaap:Revenues", source="derived")) == "ytd"
     assert how_built(row("revenue", "1", inputs={"quarters": []}, source="ttm")) == "ttm"
     assert how_built(row("revenue", "1", tag="us-gaap:Revenues")) == "reported"
+    # 165: read from a 6-K results release's table; a quarter derived from releases' year to date
+    # stays a year-to-date difference
+    assert how_built(row("revenue", "1", tag="release:EX-99.1/0/1/1")) == "release"
+    assert how_built(row("revenue", "1", tag="release:EX-99.1/3/3/10", source="derived")) == "ytd"
+
+
+def test_a_release_figure_cites_its_table_and_cell():
+    from query_api.shapes import release_cell, release_citation
+
+    figure = shape(NVDA, "revenue", "quarter",
+                   row("revenue", "1494243000000", tag="release:EX-99.1/0/1/1"), {}, {}, None, set())
+    assert figure["figure"]["how"] == "release"
+    assert figure["figure"]["citation"]["release"] == {"section": "EX-99.1", "table": 0, "row": 1,
+                                                       "column": 1}
+    assert release_cell("us-gaap:Revenues") is None and release_citation(None) == {}
+    assert release_cell("release:EX-99.1/x/1/1") is None
+    # every other citation keeps exactly its keys
+    other = shape(NVDA, "revenue", "quarter", row("revenue", "1", tag="us-gaap:Revenues"), {}, {},
+                  None, set())
+    assert "release" not in other["figure"]["citation"]
 
 
 def test_net_debt_opens_into_debt_less_cash_and_investments_with_their_tags():

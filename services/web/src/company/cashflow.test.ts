@@ -154,6 +154,8 @@ describe("a standardised line opens into its parts (F5)", () => {
     expect([roleMark("+"), roleMark("-"), roleMark("denominator")]).toEqual(["+", "−", "÷ by"]);
     expect(tagText("us-gaap:DebtSecuritiesCurrent+EquitySecuritiesFvNi")).toBe("us-gaap: DebtSecuritiesCurrent + EquitySecuritiesFvNi (added up)");
     expect(tagText("derived:revenue-cost_of_revenue")).toBe("computed: revenue less cost of revenue");
+    // 165: a figure read from a 6-K results release's table, its table and row counted from 1
+    expect(tagText("release:EX-99.1/0/1/1")).toBe("from the press release: EX-99.1, table 1, row 2");
     expect(figureText("0.751", "ratio")).toBe("75.1%");
     const fact = (tag: string, priority: number, used: boolean, line = true) => ({
       tag, taxonomy: "us-gaap", priority, line, period_start: null, period_end: "2026-07-26", value: "1", accession_no: "a",

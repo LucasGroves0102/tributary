@@ -43,6 +43,29 @@ PCT_TINY_BASE = "the earlier figure is under a fifth of this one, too small a ba
 TINY_BASE = Decimal("5")
 
 
+RELEASE = "release:"  # 165: gold's source tag of a figure read from a results release's table
+
+
+def release_cell(source_tag: str | None) -> dict | None:
+    """Where a figure read from a 6-K results release came from (migration 165: gold's source tag
+    'release:<section>/<table>/<row>/<column>', each counted from 0 as silver.filing_tables and
+    its rows are): its section ("EX-99.1"), table, row and column. None for every other tag."""
+    if not source_tag or not source_tag.startswith(RELEASE):
+        return None
+    section, *cell = source_tag[len(RELEASE):].rsplit("/", 3)
+    if len(cell) != 3 or not all(n.isdigit() for n in cell):
+        return None
+    table, row, column = (int(n) for n in cell)
+    return {"section": section, "table": table, "row": row, "column": column}
+
+
+def release_citation(source_tag: str | None) -> dict:
+    """A citation's additive `release` key (165): only a figure read from a results release has
+    one, so every other citation stays byte for byte as it was."""
+    cell = release_cell(source_tag)
+    return {"release": cell} if cell else {}
+
+
 def value_source_shown(value_source: str | None, source_tag: str | None) -> str | None:
     """How a figure reads to every reader (155; store.DERIVED_SHOWN is the SQL twin): one gold read
     or computed (a `derived:` tag: the no-debt zero, gross profit less cost) is 'derived', never a

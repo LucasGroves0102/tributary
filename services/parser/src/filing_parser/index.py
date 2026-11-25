@@ -3,8 +3,9 @@
 Each run asks ops.section_index_pending for work and processes it in transactions of --batch
 filings. Per filing: (re)index when its sections are new or re-parsed (checkpoint row in
 ops.section_index, passages via gold.refresh_section_search, the parser-output checks via
-ops.check_sections, migration 072, and a 10-K's or 10-Q's statement lines via statements.py,
-migration 074), then, for 10-K and 10-Q, compare
+ops.check_sections, migration 072, a 10-K's or 10-Q's statement lines via statements.py,
+migration 074, and a 6-K results release's figures via releases.py, migration 165), then, for 10-K
+and 10-Q, compare
 Risk Factors and MD&A with the comparable filings (ops.section_index_priors) and replace its
 gold.section_diffs / gold.section_changes rows. Everything for a filing commits together, so a
 stopped run resumes where it left off and a re-run changes nothing.
@@ -32,7 +33,7 @@ from dataclasses import dataclass
 import psycopg
 from psycopg.types.json import Jsonb
 
-from filing_parser import statements
+from filing_parser import releases, statements
 from filing_parser.diff import ALGORITHM, Diff, diff
 from tributary_telemetry.logs import configure_logging
 
@@ -57,6 +58,7 @@ class Stats:
     errors: int = 0
     section_findings: int = 0  # the parser-output checks' findings on the filings indexed
     statement_lines: int = 0   # 074: statement lines read from the 10-K/10-Qs indexed
+    release_figures: int = 0   # 165: figures read from the 6-K results releases indexed
     completed: bool = False
     locked_out: bool = False  # another run holds the lock: nothing was done
 
@@ -124,6 +126,7 @@ def process(conn: psycopg.Connection, accessions: list[str], reindex: set[str],
             count_passages(conn, fresh)
             stats.section_findings += check_sections(conn, fresh)
             stats.statement_lines += read_statements(conn, fresh)
+            stats.release_figures += read_releases(conn, fresh)
         priors = conn.execute(
             "SELECT p.accession_no, i.company_id, i.form, p.prior_accession_no,"
             "       p.year_ago_accession_no"
@@ -201,20 +204,11 @@ def write_statements(conn: psycopg.Connection, accessions: list[str]) -> int:
     if not docs:
         return 0
     ids = [d[0] for d in docs]
-    tables: dict[tuple[str, str], list] = {}
-    for acc, parser, key, n, rows, before in conn.execute(
-            "SELECT t.accession_no, t.parser, t.section_key, t.table_no, t.rows,"
-            " substr(s.text, greatest(t.char_start - 600, 0) + 1, least(t.char_start, 600))"
-            " FROM silver.filing_tables t"
-            " JOIN silver.filing_sections s USING (accession_no, section_key, parser)"
-            " WHERE t.accession_no = ANY(%s)"
-            " ORDER BY t.accession_no, t.parser, s.char_start, t.table_no", (ids,)):
-        tables.setdefault((acc, parser), []).append((key, n, rows, before))
+    tables = served_tables(conn, ids)
     conn.execute("DELETE FROM silver.statement_reads WHERE accession_no = ANY(%s)", (ids,))
     total = 0
     for acc, cik, form, period, filed in docs:
-        served = tables.get((acc, "rust")) or tables.get((acc, "python")) or []
-        lines = statements.read(served, form, period)
+        lines = statements.read(tables.get(acc, []), form, period)
         conn.execute(
             "INSERT INTO silver.statement_reads (accession_no, cik, form, period, filed, reader,"
             " lines) VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -230,6 +224,87 @@ def write_statements(conn: psycopg.Connection, accessions: list[str]) -> int:
                       x.section_key, x.table_no, x.row_no, x.titled, x.loss_label)
                      for i, x in enumerate(lines)])
         total += len(lines)
+    return total
+
+
+def served_tables(conn: psycopg.Connection, ids: list[str]) -> dict[str, list]:
+    """Each filing's tables as gold serves its sections (rust's when it has any, else python's),
+    in document order: (section key, table number, rows, the 600 characters of text before)."""
+    tables: dict[tuple[str, str], list] = {}
+    for acc, parser, key, n, rows, before in conn.execute(
+            "SELECT t.accession_no, t.parser, t.section_key, t.table_no, t.rows,"
+            " substr(s.text, greatest(t.char_start - 600, 0) + 1, least(t.char_start, 600))"
+            " FROM silver.filing_tables t"
+            " JOIN silver.filing_sections s USING (accession_no, section_key, parser)"
+            " WHERE t.accession_no = ANY(%s)"
+            " ORDER BY t.accession_no, t.parser, s.char_start, t.table_no", (ids,)):
+        tables.setdefault((acc, parser), []).append((key, n, rows, before))
+    return {acc: tables.get((acc, "rust")) or tables.get((acc, "python")) or [] for acc in ids}
+
+
+FIGURE_COLUMNS = ("metric, period_start, period_end, months, value, currency, scale, scale_named,"
+                  " label, section_key, table_no, row_no, col_no, titled, attributable")
+
+
+def read_releases(conn: psycopg.Connection, accessions: list[str]) -> int:
+    """The release reader (releases.py, migration 165) on the filings just indexed: a 6-K's
+    figures into silver.release_figures. Inside the filing's transaction; a read that raises leaves
+    the filing indexed, unread (the catch-up reads it later)."""
+    try:
+        with conn.transaction():
+            return write_releases(conn, accessions)
+    except psycopg.Error:
+        if conn.broken:
+            raise
+        log.exception("release figures failed for %d filings; the catch-up retries",
+                      len(accessions))
+        return 0
+
+
+def write_releases(conn: psycopg.Connection, accessions: list[str]) -> int:
+    """Read and store these filings' release figures (the 6-Ks among them; a 6-K without a period
+    of report reads from its filing date, rule 3): every 6-K a silver.release_reads row, figures or
+    none, with what was left out and why. The company's gold is then due (ops.company_backlog). A
+    6-K this READER read to the same figures before (a re-parse that changed no table) keeps its
+    rows and read_at: nothing becomes due, no history replays."""
+    docs = conn.execute(
+        "SELECT d.accession_no, d.cik, d.form, coalesce(d.period_of_report, d.filed), d.filed,"
+        " (SELECT c.fiscal_year_end FROM silver.company_ciks k"
+        "  JOIN silver.companies c ON c.company_id = k.company_id WHERE k.cik = d.cik LIMIT 1)"
+        " FROM bronze.filing_documents d"
+        " WHERE d.accession_no = ANY(%s) AND d.form IN ('6-K', '6-K/A')", (accessions,)).fetchall()
+    if not docs:
+        return 0
+    ids = [d[0] for d in docs]
+    tables = served_tables(conn, ids)
+    stored: dict[str, tuple[str, set]] = {
+        acc: (reader, set()) for acc, reader in conn.execute(
+            "SELECT accession_no, reader FROM silver.release_reads WHERE accession_no = ANY(%s)",
+            (ids,))}
+    for row in conn.execute(
+            f"SELECT accession_no, {FIGURE_COLUMNS} FROM silver.release_figures"
+            " WHERE accession_no = ANY(%s)", (ids,)):
+        stored[row[0]][1].add(tuple(row))
+    total = 0
+    for acc, cik, form, period, filed, fiscal_year_end in docs:
+        r = releases.read(tables.get(acc, []), period, releases.fye_month(fiscal_year_end))
+        rows = [(acc, f.metric, releases.period_start(f.period_end, f.months), f.period_end,
+                 f.months, f.value, f.currency, f.scale, f.scale_named, f.label, f.section_key,
+                 f.table_no, f.row_no, f.col_no, f.titled, f.attributable) for f in r.figures]
+        total += len(rows)
+        if stored.get(acc) == (releases.READER, set(rows)):
+            continue  # read to the same figures before: kept as they were
+        conn.execute("DELETE FROM silver.release_reads WHERE accession_no = %s", (acc,))
+        conn.execute(
+            "INSERT INTO silver.release_reads (accession_no, cik, form, period, filed, reader,"
+            " figures, left_out) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+            (acc, cik, form, r.period, filed, releases.READER, len(r.figures), Jsonb(r.left)))
+        if rows:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    f"INSERT INTO silver.release_figures (accession_no, {FIGURE_COLUMNS})"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    rows)
     return total
 
 
@@ -375,10 +450,11 @@ def main(argv: Iterable[str] | None = None) -> None:
             return
         stats = run(conn, args.limit, args.batch)
         log.info("%s: %d filings, %d indexed (%d passages), %d diffed (%d section diffs,"
-                 " %d changes, %d errors; %d parser findings, %d statement lines) in %.0fs",
+                 " %d changes, %d errors; %d parser findings, %d statement lines, %d release"
+                 " figures) in %.0fs",
                  outcome(stats), stats.filings, stats.indexed, stats.passages, stats.diffed,
                  stats.section_diffs, stats.changes, stats.errors, stats.section_findings,
-                 stats.statement_lines, time.monotonic() - started)
+                 stats.statement_lines, stats.release_figures, time.monotonic() - started)
         if stats.completed:
             from filing_parser import catchup  # imports this module
 
