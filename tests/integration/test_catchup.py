@@ -125,7 +125,7 @@ def test_the_exporter_query_runs_as_ops_reader(conn):
     conn.execute("SET LOCAL ROLE ops_reader")
     rows = {r[0]: r[1:] for r in conn.execute(query)}
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
-                         "check_segments", "check_sections", "statements", "known"}
+                         "check_segments", "check_sections", "statements", "known", "releases"}
     assert rows["gold"][:5] == (3, 0, 0, 1, 0)
     assert rows["parser"][4] == 0  # the fixture unpaused it; paused = 1 keeps the alert quiet
     assert all(v is not None for r in rows.values() for v in r)

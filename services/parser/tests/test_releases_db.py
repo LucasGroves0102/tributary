@@ -14,6 +14,8 @@ import pytest
 
 from filing_parser import catchup, index, releases
 
+Jsonb = pytest.importorskip("psycopg.types.json").Jsonb
+
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not DSN, reason="TEST_DATABASE_URL not set")
@@ -62,7 +64,7 @@ def stored(conn, acc: str = ACC) -> None:
             conn.execute(
                 "INSERT INTO silver.filing_tables (accession_no, section_key, parser, table_no,"
                 " char_start, char_end, rows) VALUES (%s, %s, 'rust', %s, %s, %s, %s)",
-                (acc, key, t["table_no"], start, start + 1, json.dumps(t["rows"])))
+                (acc, key, t["table_no"], start, start + 1, Jsonb(t["rows"])))
 
 
 def figures(conn) -> dict[tuple, tuple]:
