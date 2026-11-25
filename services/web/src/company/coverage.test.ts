@@ -19,6 +19,11 @@ describe("coverage notes", () => {
       "Revenue starts in 2017", "this registration's filings are those of the company Church & Dwight combined with"],
     [gap("metric_missing", "trust", "out_of_scope", { metrics: [{ metric: "operating_cash_flow", last: "2013-12-31" }] }),
       "A trust's statements", "is a commodity trust: it states its net assets, not the balance-sheet totals and cash flows Tributary reads, so there is no operating cash flow after Dec 31, 2013."],
+    // 165: a commodity pool's short history and latest figures, as its missing metrics
+    [gap("history_short", "trust", "out_of_scope", { figures_from: "2024-03-31", first_xbrl_report: "2020-05-08" }),
+      "A trust's statements", "is a commodity trust: it states its net assets and the gains on what it holds, not the operating statements Tributary reads, so its figures start in 2024."],
+    [gap("figures_behind", "trust", "out_of_scope", { form: "10-Q", period_end: "2026-09-30", filed: "2026-11-13", figures_to: "2025-12-31" }),
+      "Figures behind its latest report", "is a commodity trust's: it states net assets, not the operating statements Tributary reads."],
     [gap("metric_missing", "partners_capital", "fixable", { metrics: [{ metric: "stockholders_equity", last: "2015-12-31" }] }),
       "Equity as partners' capital", "files its equity as partners' or members' capital"],
     [gap("no_figures", "bank_regulator", "not_in_sec_data"),

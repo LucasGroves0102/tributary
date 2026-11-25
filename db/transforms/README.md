@@ -58,7 +58,8 @@ the parser image's `parser-peers` job, not in SQL.
 | `ops.check_sections(text[])` (parser-output checks per document; a 20-F laid out by a cross-reference index or split into one `20-F` section has no core items), `ops.check_sections_version()`, `ops.section_key_valid(form, key)` (20-F, 40-F, 6-K keys), `ops.core_section_keys(form)` (a 20-F's 3.D, 4, 5, 18) | `095_foreign_filers.sql` (before: `072_data_trust_checks.sql`) |
 | `ops.section_check_backlog(int)`, `ops.public_parser_quality()` | `072_data_trust_checks.sql` |
 | `ops.refresh_extremes(int)`, `ops.extreme_columns()` (the screener's columns), view `ops.extremes_report` | `072_data_trust_checks.sql` |
-| `ops.coverage_found()` (the coverage sweep's rule: every listed company's gaps, cause and reason), `ops.refresh_coverage()`, views `ops.coverage_report` / `coverage_summary`, `ops.public_coverage_gaps()`, `ops.rebuild_soon(text[])` | `076_coverage.sql` |
+| `ops.coverage_found()` (the coverage sweep's rule: every listed company's gaps, cause and reason; a commodity pool's history and latest figures out of scope) | `165_release_figures.sql` (before: `081_coverage_notes.sql`, `076_coverage.sql`) |
+| `ops.refresh_coverage()`, views `ops.coverage_report` / `coverage_summary`, `ops.public_coverage_gaps()`, `ops.rebuild_soon(text[])` | `076_coverage.sql` |
 | `ops.figures_landed_at()` (the newest coverage run: when watched screens are checked) | `110_figures_landed.sql` |
 
 ## Documents

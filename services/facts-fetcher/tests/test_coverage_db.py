@@ -76,6 +76,9 @@ def test_figures_behind_the_latest_report(listed):
     listed.execute("UPDATE bronze.submission_filings SET is_xbrl = false"
                    " WHERE accession_no = '0001045810-99-000001'")
     assert found(listed)[(NVDA, "figures_behind")][:2] == ("no_xbrl", "not_in_sec_data")
+    # 165: a commodity pool's latest figures are out of scope, as its missing metrics are (081)
+    listed.execute("UPDATE silver.companies SET sic = '6221' WHERE company_id = %s", (NVDA,))
+    assert found(listed)[(NVDA, "figures_behind")][:2] == ("trust", "out_of_scope")
 
 
 def test_an_unlinked_re_registration_and_its_history(listed):
@@ -87,6 +90,10 @@ def test_an_unlinked_re_registration_and_its_history(listed):
     assert gaps[(COST, "re_registration")][:2] == ("unlinked", "fixable")
     assert gaps[(COST, "re_registration")][2]["moved_on"] == str(moved)
     assert gaps[(COST, "history_short")][:2] == ("re_registration", "fixable")
+    # 165: at a commodity pool the short history is out of scope
+    listed.execute("UPDATE silver.companies SET sic = '6221' WHERE company_id = %s", (COST,))
+    assert found(listed)[(COST, "history_short")][:2] == ("trust", "out_of_scope")
+    listed.execute("UPDATE silver.companies SET sic = '5331' WHERE company_id = %s", (COST,))
     # the predecessor linked: its CIK reported up to the move
     listed.execute("INSERT INTO silver.company_ciks (cik, company_id) VALUES ('0009000009', %s)",
                    (COST,))

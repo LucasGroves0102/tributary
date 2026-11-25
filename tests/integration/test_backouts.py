@@ -30,6 +30,7 @@ RESTORES = {
         "gold.knowledge_facts(text)": "086_financials_known.sql",
         "ops.company_backlog(text)": "086_financials_known.sql",
         "ops.release_backlog(text)": None,
+        "ops.coverage_found()": "081_coverage_notes.sql",
     },
     "analyst_fixes_155.sql": {
         "gold.usable_facts(text[],date)": "085_point_in_time_pipeline.sql",

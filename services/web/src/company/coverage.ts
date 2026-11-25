@@ -97,6 +97,12 @@ export function coverageWords(g: CoverageGap, name: string, nameOf: (id: string)
           text: `Before ${year(d.revenue_from)}, this registration's filings are those of the company ${name} combined with, not of the business its figures follow, so its revenue starts in ${year(d.revenue_from)}.`,
         };
       }
+      if (g.cause === "trust") {
+        return {
+          title: "A trust's statements",
+          text: `${name} is a commodity trust: it states its net assets and the gains on what it holds, not the operating statements Tributary reads, so its figures start in ${year(d.figures_from)}.`,
+        };
+      }
       if (g.cause === "revenue_tag") {
         return {
           title: `Revenue starts in ${year(d.revenue_from)}`,
@@ -129,7 +135,7 @@ export function coverageWords(g: CoverageGap, name: string, nameOf: (id: string)
     case "figures_behind":
       return {
         title: "Figures behind its latest report",
-        text: `Figures run to ${on(d.figures_to)}; ${name}'s ${d.form ?? "report"} for the period ending ${on(d.period_end)}, filed ${on(d.filed)}, ${g.cause === "no_xbrl" ? "has no structured data to read" : "isn't in them yet"}.`,
+        text: `Figures run to ${on(d.figures_to)}; ${name}'s ${d.form ?? "report"} for the period ending ${on(d.period_end)}, filed ${on(d.filed)}, ${g.cause === "no_xbrl" ? "has no structured data to read" : g.cause === "trust" ? "is a commodity trust's: it states net assets, not the operating statements Tributary reads" : "isn't in them yet"}.`,
       };
     case "statements_exhibit":
       return g.cause === "ex13"

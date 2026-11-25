@@ -1218,4 +1218,13 @@ the spec, `READER`) into `silver.release_figures`, and gold reads those.
   built at 155 as built at 165; a release read makes its company's gold due (`ops.company_backlog`)
   and its history replays from its first release's day (`gold.knowledge_facts`). Budget in the
   migration's header: a few hourly runs to read the 6-Ks, 977 gold rebuilds, 67 history replays,
-  ~50 MB. Backout: `release_figures_165.sql`.
+  ~50 MB.
+- Coverage (read time, no rebuild): a commodity pool or trust (SIC 6221) is out of scope for
+  `history_short` and `figures_behind` too (cause `trust`), as 081 made it for `metric_missing`: its
+  figures are net assets and gains on what it holds. 11 gaps on hermes were `fixable` (8 and 3).
+  The rest of the fixable coverage gaps, measured from every company's raw companyfacts (the scan in
+  the branch's report): of 362 `revenue_tag`, 164 have no revenue-like tag at all in those years
+  (pre-revenue biotechs, SPAC shells) and 198 an industry or own line gold doesn't read; telling them
+  apart in SQL needs revenue evidence tags in silver (silver's own evidence, no cost of revenue and no
+  operating profit, is 92% right: it would hide real gaps), i.e. re-projecting the ~3,100 CIKs that
+  carry such tags. Left for the owner. Backout: `release_figures_165.sql`.

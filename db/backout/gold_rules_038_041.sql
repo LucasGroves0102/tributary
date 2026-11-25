@@ -82,6 +82,7 @@ BEGIN
         ('ops.check_financials(text[])', '40644268e3fce350dde68de157bacd60'),
         ('ops.company_backlog(text)', '97bd3cf942ea7f5c87ed866c0ba563d8'),
         ('ops.company_rule_version(text)', '60744ba7ead2e38d3dc3791e5630df38'),
+        ('ops.coverage_found()', '096f77959baa05c70f1dfd1e0c31b974'),
         ('ops.rebuild_soon(text[])', 'c5a3427c2fac8f4cfdddb3ad14021fd7'),
         ('ops.release_backlog(text)', NULL),
         ('silver.refresh_filing_facts(text[])', '2f5e5eeefb1edf917bfb879e7071190d'),
