@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
 import { parseStatementView, statementQuery, type StatementView } from "./company/statementView";
 import { compareQuery, parseCompare, type CompareState } from "./compare/state";
 import { parseSearch, searchQuery, type SearchState } from "./search/state";
+import { transition } from "./motion";
 import type { ProjectStep } from "./types";
 
 /** An analysis project's guided steps, in order (analysis/project.ts STEPS has their labels). */
@@ -290,10 +292,18 @@ export function go(route: Route): void {
   window.location.hash = href(route);
 }
 
+/** The address as a route. A change of page runs as a view transition (motion.ts): the update is
+ * committed synchronously inside it, so the old page is captured before and the new one after. */
 export function useRoute(): Route {
   const [route, setRoute] = useState(() => parse(window.location.hash));
+  const current = useRef(route);
   useEffect(() => {
-    const onChange = () => setRoute(parse(window.location.hash));
+    const onChange = () => {
+      const next = parse(window.location.hash);
+      const prev = current.current;
+      current.current = next;
+      transition(prev, next, () => flushSync(() => setRoute(next)));
+    };
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
