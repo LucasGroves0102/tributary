@@ -5,7 +5,9 @@ import { excerptBlocks } from "../reader/text";
 import { Folio, TodaysView } from "../components/Folio";
 import { Mark, MarkLegend, type MarkKind } from "../components/Mark";
 import { FigureButton, useSourceCard, type SourceInfo } from "../components/SourceCard";
+import { onGridKey } from "../components/ledgerGrid";
 import { ErrorPanel, sentence } from "../components/States";
+import { TableScroll } from "../components/TableScroll";
 import { currencyOf, day, exactAmount, ledgerUnit, paren } from "../format";
 import { href } from "../route";
 import type { EventsResponse, FinancialRow, ScreenerRow, Tier, ValueSource } from "../types";
@@ -612,12 +614,14 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
             : `No revenue reported: ${name}'s filings state no revenue figure yet, or none could be read. Statements shows what it does report.`}
         </p>
       ) : table ? (
-        <table className="led ov-bars-t landed">
+        <TableScroll label="Revenue by quarter">
+        <table className="led ov-bars-t landed" onKeyDown={onGridKey}>
           <thead><tr><th className="first">Quarter</th><th>{unit.unit}</th><th>Source</th></tr></thead>
           <tbody>
-            {bars.map((r) => <BarRow key={r.period_end} r={r} text={unit.text(Number(r.value))} companyId={companyId} />)}
+            {bars.map((r, i) => <BarRow key={r.period_end} r={r} text={unit.text(Number(r.value))} companyId={companyId} first={i === bars.length - 1} />)}
           </tbody>
         </table>
+        </TableScroll>
       ) : (
         <div className="qbars landed" role="img"
           aria-label={`Revenue by quarter, ${unit.unit}: ${bars.map((r) => `${shortQuarter(r.fiscal_period) ?? day(r.period_end)} ${unit.text(Number(r.value))}${r.value_source === "derived" ? " derived" : ""}`).join(", ")}`}>
@@ -654,12 +658,12 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
   );
 }
 
-function BarRow({ r, text, companyId }: { r: FinancialRow; text: string; companyId: string }) {
+function BarRow({ r, text, companyId, first }: { r: FinancialRow; text: string; companyId: string; first: boolean }) {
   const { props, card } = useSourceCard(() => rowCard(r, "Revenue", companyId), { hover: false });
   return (
     <tr>
       <td className="first">{shortQuarter(r.fiscal_period) ?? day(r.period_end)}</td>
-      <td className={r.value_source === "derived" ? "derived" : undefined} tabIndex={0} data-cell="" {...props}>
+      <td className={r.value_source === "derived" ? "derived" : undefined} tabIndex={first ? 0 : -1} data-cell="" {...props}>
         <span className="v">{text}</span>
         {card}
       </td>

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useDirectory } from "../companies/directory";
 
 import { failureReason, screener, SCREENER_CSV_ROWS, screenerCsv, sectors as fetchSectors } from "../api";
 import { coRegistrantNote } from "../compare/peers";
@@ -154,6 +155,12 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   // the chosen columns, then the user's own metrics the API evaluated (B2d)
   const columns = useMemo(() => [...chosen, ...(data?.columns ?? []).filter((c) => c.own).map(ownColumn)], [chosen, data]);
   const rows = useMemo(() => (data ? data.rows.map((r) => screenRow(r, columns)) : []), [data, columns]);
+  // the names on screen, so a company opened from its row is named at once (its header renders before its
+  // figures arrive, and its name travels from the row into the page title: motion.ts)
+  const directory = useDirectory(token);
+  useEffect(() => {
+    directory.learn(rows.map((r) => ({ companyId: r.companyId, name: r.name, ticker: r.ticker ?? null })));
+  }, [directory, rows]);
   const metricIds = screen.metric ?? [];
   const metricMenu = ownMetrics && ownMetrics.length > 0 ? (
     <MenuButton label="Your metrics" title={`Your own formulas as columns, up to ${MAX_METRICS} (Your data)`} items={ownMetrics.map((m) => ({

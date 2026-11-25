@@ -195,8 +195,12 @@ app calls on load needs a mock in `e2e/mockApi.ts`.
   `vi.spyOn(globalThis, "setTimeout")` catches the UNDO_MS timer (fake timers hang `settle()`).
 - jsdom has no ResizeObserver, so LayerChart draws its standard size in tests. `lazy.test.ts` lists
   the screens in order (Settings and ApiDocs after Status).
+- A figure's source card (`components/SourceCard`) is portalled to the body: click the figure (or its
+  ledger cell) and read `document.querySelector(".source-card")`; click again to close it. The company
+  header's `···` menu is `button[aria-label="More actions"]`; Statements' range, basis and per-share basis
+  are its view menu's `menuitemcheckbox`es (`.view-menu`).
 - A cell's text is its figure: tests compare `td.textContent` (a negative statement cell reads
-  "($0.24B)"), read a computed figure's how from `dd.title`, find ledger rows by `data-key` and header
+  "($0.24B)"), read a figure's how from its card, find ledger rows by `data-key` and header
   facts by `.co-listing`. A seal's hidden `.seal-source` counts in a parent's text, so `.story` tests
   use `toContain`. A component rendered alone has no `SealSprite` (harmless).
 - Fixtures that are real API answers are regenerated, never hand-edited: `models/fixtures`

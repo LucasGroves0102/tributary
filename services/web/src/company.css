@@ -132,6 +132,8 @@ h1.co-name {
 .tabs.co-tabs {
   position: relative;
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   flex-wrap: nowrap;
   gap: 2px;
   margin: 0;
@@ -190,8 +192,9 @@ html[data-motion="reduced"] .tab-ink {
 /* As of: Today | Pick a day, and the day typed in a field */
 .co-asof {
   display: flex;
+  flex: none;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   padding-bottom: 4px;
   font-size: 13px;
@@ -499,6 +502,11 @@ html[data-motion="reduced"] .tab-ink {
 /* the latest quarter: a ledger (ui.css .led); the quarter's own column in weight */
 .recap td.current b {
   font-weight: 650;
+}
+
+/* the recap fits the lead column at 1280: its labels take only their room */
+.t.led.recap td.first {
+  min-width: 120px;
 }
 
 .recap td.gain {
@@ -832,6 +840,7 @@ html[data-motion="reduced"] .tab-ink {
 
   .co-asof {
     padding: 8px 0;
+    flex-wrap: wrap;
   }
 
   .fig-hero {

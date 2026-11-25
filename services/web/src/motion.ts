@@ -147,7 +147,8 @@ export function transition(prev: Route | null, next: Route, update: () => void):
   if (kind === "none" || keyboard || typeof document === "undefined" || document.visibilityState === "hidden") {
     running?.skipTransition();
     update();
-    if (kind !== "none") settle(kind);
+    // the next frame: the page's title (an effect) has caught up with it
+    if (kind !== "none") requestAnimationFrame(() => settle(kind));
     return;
   }
   const start = (document as Document & { startViewTransition?: (cb: () => void) => ViewTransition }).startViewTransition;
@@ -184,7 +185,7 @@ export function transition(prev: Route | null, next: Route, update: () => void):
     return;
   }
   fallback(kind, source, update);
-  settle(kind);
+  requestAnimationFrame(() => settle(kind));
 }
 
 /** The same choreography without View Transitions: the new content fades in (and slides on a depth
