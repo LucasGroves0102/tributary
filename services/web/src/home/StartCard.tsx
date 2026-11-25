@@ -38,7 +38,6 @@ export function StartCard({ token, readable, workspaces, alerts, label }: {
       <div className="card-b">
         <div className="start-main">
           <div className="grow">
-            <span className="eyebrow">Start here</span>
             <h2 id="start-h">Start an analysis</h2>
             <p className="muted small">
               One company in eight guided steps: what it sells, its numbers, the latest earnings and what changed, peers, a model,

@@ -2,7 +2,7 @@ import type { Readable } from "../access";
 import { recentDataNotes } from "../api";
 import { NoteItem } from "../company/DataNotes";
 import { useLoad } from "../company/useLoad";
-import { ErrorPanel, Skeleton } from "../components/States";
+import { ErrorPanel, TextShape } from "../components/States";
 import { ago } from "../format";
 import { href } from "../route";
 import { useChecksRan } from "./useFeedStatus";
@@ -49,7 +49,7 @@ export function RecentNotes({ token, name, filingsFor, catalogOpen = false, comp
         </span>
       </div>
       {!load || load.state === "loading" ? (
-        <Skeleton lines={3} label="Loading data notes" />
+        <div className="skel notes-shape" role="status" aria-busy="true"><span className="visually-hidden">Loading data notes…</span><TextShape /></div>
       ) : load.state === "error" ? (
         <ErrorPanel what="data notes" detail={load.message} onRetry={load.retry} />
       ) : load.state === "denied" ? null : load.data.notes.length === 0 ? (

@@ -1,0 +1,921 @@
+/* Noor's build spec (.interface-design/system.md), batch 1: the shared components, the shell, the
+   company page and the motion system. Tokens only (tokens.css); positions set from script go through
+   the CSSOM (the CSP refuses inline style attributes). Loaded after styles.css and seal.css. */
+
+/* --- base -------------------------------------------------------------------------------------- */
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* codes: tickers, form types, CIK, accession numbers, item numbers, key caps (§2.1) */
+.code {
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.serif {
+  font-family: var(--serif);
+}
+
+.pencil {
+  color: var(--pencil);
+}
+
+.gain {
+  color: var(--gain);
+}
+
+.loss {
+  color: var(--loss);
+}
+
+/* --- marks: ✓ Σ d (§5.1) ------------------------------------------------------------------------ */
+
+.mk {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+  line-height: 1;
+  font-size: 13px;
+  font-weight: 600;
+  font-style: normal;
+  color: var(--ink-2);
+}
+
+.mk-ok {
+  color: var(--seal);
+}
+
+.mk-ok .seal-tick {
+  width: 12px;
+  height: 12px;
+}
+
+.mk-sum::before {
+  content: "Σ";
+}
+
+.mk-d::before {
+  content: "d";
+  font-style: italic;
+  font-weight: 500;
+}
+
+.mk-hero {
+  width: 22px;
+  height: 22px;
+  font-size: 20px;
+  align-self: flex-start;
+  margin-top: 10px;
+}
+
+.mk-hero.mk-ok .seal-tick {
+  width: 18px;
+  height: 18px;
+}
+
+/* the tick everywhere a seal used to sit: seal red, no wax */
+.seal-tick {
+  color: var(--seal);
+}
+
+.seal-ledger {
+  width: 12px;
+  height: 12px;
+}
+
+.seal-lead {
+  width: 16px;
+  height: 16px;
+}
+
+.seal-logo {
+  width: 22px;
+  height: 22px;
+}
+
+.mk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+.mk-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- a figure that opens its source (§4 Figure + mark) ------------------------------------------ */
+
+.fig {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: inherit;
+  cursor: pointer;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.fig.derived .v {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.fig[aria-expanded="true"] {
+  background: var(--well);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fig:hover {
+    background: var(--well);
+    transition-duration: 0s;
+  }
+}
+
+@media (pointer: coarse) {
+  .fig {
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
+.fig-hero {
+  font-size: 48px;
+  line-height: 56px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  margin-left: -6px;
+}
+
+/* --- source card (§4): a non-modal popover, 368px --------------------------------------------- */
+
+.pop {
+  position: absolute;
+  z-index: 80;
+  background: var(--sheet);
+  border-radius: var(--r-pop);
+  box-shadow: var(--float);
+}
+
+.source-card {
+  width: 368px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+}
+
+.source-card:focus {
+  outline: none;
+}
+
+.source-card p {
+  margin: 0;
+}
+
+.sc-title {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+
+.sc-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px !important;
+}
+
+.sc-value b {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.sc-value b.derived {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.sc-agree {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.sc-agree.sc-ok {
+  color: var(--seal);
+}
+
+.sc-where {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+
+.sc-note {
+  margin-top: 8px !important;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.sc-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px !important;
+}
+
+.sc-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.sc-foot a.sc-edgar {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* --- notice (§4) ------------------------------------------------------------------------------- */
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 40px;
+  margin: 16px 0 0;
+  padding: 8px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+.notice-label {
+  flex: none;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.notice-text {
+  min-width: 0;
+}
+
+.notice-act {
+  flex: none;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.notice-act a {
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+@container main (max-width: 600px) {
+  .notice {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .notice-text {
+    flex: 1 1 100%;
+    order: 2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* --- segmented control (§2.5): a well track, a sheet thumb that slides ------------------------- */
+
+.choices {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  max-width: 100%;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--r-track);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+  font-family: var(--sans);
+}
+
+.choices > button {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color var(--t-hover-out) linear;
+}
+
+.choices > button + button {
+  border-left: 0;
+}
+
+.choices > button[data-state="on"] {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.choices > button:disabled {
+  color: var(--disabled);
+  opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .choices > button:hover:not(:disabled):not([data-state="on"]) {
+    background: transparent;
+    color: var(--ink);
+  }
+}
+
+.choices > button:focus-visible {
+  outline-offset: 0;
+}
+
+.choices-thumb {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  height: 28px;
+  width: 0;
+  border-radius: var(--r-control);
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule-2);
+  transition: transform var(--t-tab) var(--ease-move), width var(--t-tab) var(--ease-move);
+}
+
+.choices-thumb.no-anim,
+html[data-motion="reduced"] .choices-thumb {
+  transition: none;
+}
+
+@media (pointer: coarse) {
+  .choices > button,
+  .choices-thumb {
+    height: 40px;
+  }
+}
+
+/* --- menus and tooltips (§4: sheet, 6px, --float, origin-aware) -------------------------------- */
+
+.menu {
+  background: var(--sheet);
+  border: 0;
+  border-radius: var(--r-pop);
+  box-shadow: var(--float);
+  padding: 4px;
+  min-width: 208px;
+  font-family: var(--sans);
+  font-size: 13px;
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  animation: pop-in var(--t-pop-in) var(--ease-enter);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-control);
+  color: var(--ink);
+  cursor: pointer;
+  outline: none;
+}
+
+.menu-item[data-highlighted] {
+  background: var(--well);
+  color: var(--ink);
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--rule);
+}
+
+.tip {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--r-control);
+  font-size: 12px;
+  line-height: 18px;
+  padding: 6px 10px;
+  box-shadow: var(--float);
+  animation: pop-in var(--t-pop-in) var(--ease-enter);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+html[data-motion="reduced"] .menu,
+html[data-motion="reduced"] .tip {
+  animation: fade-in 100ms linear;
+}
+
+/* --- section title (§4: title case over a 1px ink rule): every Folio ------------------------------ */
+
+.folio {
+  display: block;
+  padding: 0;
+  margin: 0 0 40px;
+  border-top: 0;
+}
+
+.folio.lead {
+  padding-top: 0;
+}
+
+.rubric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+  text-align: left;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.rubric h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  font-family: var(--sans);
+}
+
+.rubric p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  margin: 0;
+  color: var(--pencil);
+}
+
+.rubric .aside {
+  display: inline;
+  color: var(--pencil);
+}
+
+.rubric .aside::before {
+  content: "· ";
+}
+
+.rubric a {
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+@container main (max-width: 1100px) {
+  .folio {
+    display: block;
+  }
+
+  .rubric {
+    text-align: left;
+    padding-top: 0;
+  }
+
+  .rubric h2,
+  .rubric p {
+    display: flex;
+  }
+
+  .rubric .aside {
+    display: inline;
+  }
+
+  .rubric p::before {
+    content: none;
+  }
+}
+
+/* --- the ledger table (§4) ---------------------------------------------------------------------- */
+
+table.led {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.led th {
+  padding: 0 0 8px 12px;
+  border-bottom: 1px solid var(--ink);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-align: right;
+  vertical-align: bottom;
+  white-space: nowrap;
+  background: var(--paper);
+}
+
+.led th .pe,
+.led th .src {
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.led th .src {
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.led th .src i {
+  font-stretch: 100%;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.led th.first {
+  text-align: left;
+  padding-left: 0;
+  padding-right: 12px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.led td {
+  height: 32px;
+  padding: 0 0 0 12px;
+  border-bottom: 1px solid var(--rule);
+  text-align: right;
+  white-space: nowrap;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.led td.first {
+  text-align: left;
+  padding: 0 12px 0 0;
+  color: var(--ink);
+  white-space: normal;
+  min-width: 180px;
+}
+
+.led td.first,
+.led th.first {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--paper);
+}
+
+.led td[data-cell] {
+  cursor: pointer;
+}
+
+.led td[data-cell]:focus-visible {
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+.led td[data-cell][aria-expanded="true"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+}
+
+.led td.derived,
+.led th.derived .src {
+  font-style: italic;
+}
+
+.led tr.sub td.first {
+  padding-left: 16px;
+  color: var(--ink-2);
+}
+
+.led tr.total td {
+  font-weight: 650;
+  border-top: 1px solid var(--ink);
+}
+
+.led tr.grand td {
+  border-bottom: 3px double var(--ink);
+}
+
+.led tr.ratio td {
+  height: 28px;
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .led tbody tr:hover td {
+    background: var(--sheet);
+    transition-duration: 0s;
+  }
+}
+
+@media (pointer: coarse) {
+  .led td {
+    height: 40px;
+  }
+}
+
+.led-fn {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+/* --- loading hands over to content (§7.6) -------------------------------------------------------- */
+
+/* a blank value: a well block the width of the value to come; nothing shimmers */
+.blank-v {
+  display: inline-block;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--well);
+  vertical-align: middle;
+}
+
+[data-loading="slow"] .blank-v {
+  animation: still-working 1.2s ease-in-out infinite alternate;
+}
+
+html[data-motion="reduced"] [data-loading="slow"] .blank-v {
+  animation: none;
+}
+
+@keyframes still-working {
+  to {
+    opacity: 0.55;
+  }
+}
+
+/* values that landed fade in over 120ms in place: colour from transparent, no tween, no shift */
+.landed .v,
+.landed .mk,
+.landed .qbars,
+.landed .fig,
+.ledger dd .fig,
+.t.led td[data-cell] {
+  animation: values-in var(--t-values) var(--ease-enter);
+}
+
+@keyframes values-in {
+  from {
+    color: transparent;
+    opacity: 0;
+  }
+}
+
+html[data-motion="reduced"] .landed .v,
+html[data-motion="reduced"] .landed .mk,
+html[data-motion="reduced"] .landed .qbars,
+html[data-motion="reduced"] .landed .fig,
+html[data-motion="reduced"] .ledger dd .fig,
+html[data-motion="reduced"] .t.led td[data-cell] {
+  animation-timing-function: linear;
+}
+
+/* the generic skeleton still used by screens not yet redrawn: well blocks, no shimmer */
+.skel-line,
+.skel-chart {
+  background: var(--well) !important;
+  animation: none !important;
+}
+
+/* --- View Transitions (§7.7): what moves and what never does ------------------------------------- */
+
+.top {
+  view-transition-name: topbar;
+}
+
+.side {
+  view-transition-name: rail;
+}
+
+.ai-drawer {
+  view-transition-name: assist;
+}
+
+.vt-head {
+  view-transition-name: page-head;
+}
+
+.vt-content {
+  view-transition-name: content;
+}
+
+.vt-entity {
+  view-transition-name: entity-title;
+}
+
+::view-transition-group(*) {
+  animation-duration: var(--t-shared);
+  animation-timing-function: var(--ease-move);
+}
+
+::view-transition-old(root) {
+  display: none;
+}
+
+::view-transition-group(root) {
+  animation: none;
+}
+
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-group(topbar),
+::view-transition-group(rail),
+::view-transition-group(assist),
+::view-transition-new(topbar),
+::view-transition-new(rail),
+::view-transition-new(assist) {
+  animation: none;
+}
+
+::view-transition-old(topbar),
+::view-transition-old(rail),
+::view-transition-old(assist) {
+  display: none;
+}
+
+::view-transition-group(page-head),
+::view-transition-group(content) {
+  animation: none;
+}
+
+::view-transition-old(page-head),
+::view-transition-old(content) {
+  animation: vt-out var(--t-out) var(--ease-enter) both;
+}
+
+::view-transition-new(page-head),
+::view-transition-new(content) {
+  animation: vt-in var(--t-in) var(--ease-enter) var(--t-delay-in) both;
+}
+
+html[data-nav="forward"]::view-transition-new(page-head),
+html[data-nav="forward"]::view-transition-new(content) {
+  animation-name: vt-in-fwd;
+}
+
+html[data-nav="back"]::view-transition-new(page-head),
+html[data-nav="back"]::view-transition-new(content) {
+  animation-name: vt-in-back;
+}
+
+/* the head waits until a travelling title has passed through it */
+html[data-title]::view-transition-new(page-head) {
+  animation-delay: 100ms;
+}
+
+/* a tab change: the company's header stays put; only the panel cross-fades in place */
+html[data-nav="tab"]::view-transition-old(page-head) {
+  display: none;
+}
+
+html[data-nav="tab"]::view-transition-new(page-head) {
+  animation: none;
+}
+
+html[data-nav="tab"]::view-transition-new(content) {
+  animation-name: vt-in;
+}
+
+::view-transition-old(entity-title),
+::view-transition-new(entity-title) {
+  height: 100%;
+}
+
+::view-transition-old(entity-title):only-child {
+  animation: vt-out var(--t-out) var(--ease-enter) both;
+}
+
+::view-transition-new(entity-title):only-child {
+  animation: vt-in var(--t-in) var(--ease-enter) var(--t-delay-in) both;
+}
+
+/* reduced motion: nothing travels and nothing overlaps; the old view goes at once, the new fades in */
+html[data-motion="reduced"]::view-transition-group(*) {
+  animation-duration: 0s;
+}
+
+html[data-motion="reduced"]::view-transition-old(page-head),
+html[data-motion="reduced"]::view-transition-old(content),
+html[data-motion="reduced"]::view-transition-old(entity-title) {
+  animation: none;
+  display: none;
+}
+
+html[data-motion="reduced"]::view-transition-new(page-head),
+html[data-motion="reduced"]::view-transition-new(content),
+html[data-motion="reduced"]::view-transition-new(entity-title) {
+  animation: vt-in 120ms linear both;
+}
+
+html[data-motion="reduced"][data-nav="tab"]::view-transition-new(page-head) {
+  animation: none;
+}
+
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-in-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(var(--shift));
+  }
+}
+
+@keyframes vt-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--shift)));
+  }
+}

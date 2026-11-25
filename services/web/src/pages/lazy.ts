@@ -3,7 +3,7 @@
  * them in the background once the browser is idle, so moving to one is still instant. Sizes per
  * chunk are in services/web/DESIGN.md ("Performance"). */
 
-import { lazy } from "react";
+import { lazy, type ComponentType } from "react";
 
 const screens = {
   chart: () => import("./ChartBuilder"),
@@ -28,33 +28,58 @@ const screens = {
   connect: () => import("../connect/Connect"),
 };
 
-export const ChartBuilder = lazy(() => screens.chart().then((m) => ({ default: m.ChartBuilder })));
-export const Companies = lazy(() => screens.companies().then((m) => ({ default: m.Companies })));
-export const Company = lazy(() => screens.company().then((m) => ({ default: m.Company })));
-export const Compare = lazy(() => screens.compare().then((m) => ({ default: m.Compare })));
-export const Search = lazy(() => screens.search().then((m) => ({ default: m.Search })));
-export const About = lazy(() => screens.about().then((m) => ({ default: m.About })));
-export const Status = lazy(() => screens.status().then((m) => ({ default: m.Status })));
-export const ApiDocs = lazy(() => screens.api().then((m) => ({ default: m.ApiDocs })));
-export const Settings = lazy(() => screens.settings().then((m) => ({ default: m.Settings })));
-export const WorkspacePage = lazy(() => screens.workspace().then((m) => ({ default: m.WorkspacePage })));
-export const ReportView = lazy(() => screens.report().then((m) => ({ default: m.ReportView })));
-export const ThesisPage = lazy(() => screens.thesis().then((m) => ({ default: m.ThesisPage })));
-export const ModelPage = lazy(() => screens.model().then((m) => ({ default: m.ModelPage })));
-export const AnalysisPage = lazy(() => screens.analysis().then((m) => ({ default: m.AnalysisPage })));
-export const FilingReader = lazy(() => screens.reader().then((m) => ({ default: m.FilingReader })));
-export const AlertsPage = lazy(() => screens.alerts().then((m) => ({ default: m.AlertsPage })));
-export const PortfolioPage = lazy(() => screens.portfolio().then((m) => ({ default: m.PortfolioPage })));
-export const DataPage = lazy(() => screens.data().then((m) => ({ default: m.DataPage })));
-export const Connect = lazy(() => screens.connect().then((m) => ({ default: m.Connect })));
+type Screens = typeof screens;
+type Module<K extends keyof Screens> = Awaited<ReturnType<Screens[K]>>;
+
+/** The modules already here (prefetched, or opened once). */
+const loaded = new Map<keyof Screens, unknown>();
+
+function load<K extends keyof Screens>(key: K): Promise<Module<K>> {
+  return screens[key]().then((m) => {
+    loaded.set(key, m);
+    return m as Module<K>;
+  });
+}
+
+/** A screen's lazy component. Once its module is here, the component resolves at once (a thenable that
+ * answers synchronously), so a page change into it is one synchronous commit: the view transition
+ * (motion.ts) captures the new page, not a loading fallback that hides the old one. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function screen<K extends keyof Screens, T extends ComponentType<any>>(key: K, pick: (m: Module<K>) => T) {
+  return lazy<T>(() => {
+    const m = loaded.get(key) as Module<K> | undefined;
+    if (m) return { then: (done: (v: { default: T }) => void) => done({ default: pick(m) }) } as unknown as Promise<{ default: T }>;
+    return load(key).then((x) => ({ default: pick(x) }));
+  });
+}
+
+export const ChartBuilder = screen("chart", (m) => m.ChartBuilder);
+export const Companies = screen("companies", (m) => m.Companies);
+export const Company = screen("company", (m) => m.Company);
+export const Compare = screen("compare", (m) => m.Compare);
+export const Search = screen("search", (m) => m.Search);
+export const About = screen("about", (m) => m.About);
+export const Status = screen("status", (m) => m.Status);
+export const ApiDocs = screen("api", (m) => m.ApiDocs);
+export const Settings = screen("settings", (m) => m.Settings);
+export const WorkspacePage = screen("workspace", (m) => m.WorkspacePage);
+export const ReportView = screen("report", (m) => m.ReportView);
+export const ThesisPage = screen("thesis", (m) => m.ThesisPage);
+export const ModelPage = screen("model", (m) => m.ModelPage);
+export const AnalysisPage = screen("analysis", (m) => m.AnalysisPage);
+export const FilingReader = screen("reader", (m) => m.FilingReader);
+export const AlertsPage = screen("alerts", (m) => m.AlertsPage);
+export const PortfolioPage = screen("portfolio", (m) => m.PortfolioPage);
+export const DataPage = screen("data", (m) => m.DataPage);
+export const Connect = screen("connect", (m) => m.Connect);
 
 /** Every screen's module, loaded (tests render lazy screens without waiting on imports). */
-export const loadScreens = () => Promise.all(Object.values(screens).map((load) => load()));
+export const loadScreens = () => Promise.all((Object.keys(screens) as (keyof Screens)[]).map((k) => load(k)));
 
 /** Loads every screen's chunk when the browser is idle (or after a short delay without
  * requestIdleCallback). Failures are ignored: the screen loads again when opened. */
 export function prefetchScreens(): void {
-  const run = () => Object.values(screens).forEach((load) => void load().catch(() => {}));
+  const run = () => (Object.keys(screens) as (keyof Screens)[]).forEach((k) => void load(k).catch(() => {}));
   const w = window as Window & { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
   if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 });
   else setTimeout(run, 2000);

@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 import { parseScreen, screenQuery, type ScreenFilters } from "./companies/screen";
 import { parseStatementView, statementQuery, type StatementView } from "./company/statementView";
 import { compareQuery, parseCompare, type CompareState } from "./compare/state";
 import { parseSearch, searchQuery, type SearchState } from "./search/state";
+import { transition } from "./motion";
 import type { ProjectStep } from "./types";
 
 /** An analysis project's guided steps, in order (analysis/project.ts STEPS has their labels). */
@@ -54,6 +56,8 @@ export type Route =
       at?: number;
       /** words to highlight (a search) */
       q?: string;
+      /** What changed: the filing's changes against its comparable filing, in the reader (`?view=changes`) */
+      mode?: "changes";
     }
   | { view: "chart" }
   | { view: "compare"; compare?: CompareState }
@@ -198,6 +202,7 @@ export function parse(hash: string): Route {
       section: c && SECTION.test(c) ? c : null,
       ...(at && /^\d{1,9}$/.test(at) ? { at: Number(at) } : {}),
       ...(q ? { q } : {}),
+      ...(params.get("view") === "changes" ? { mode: "changes" as const } : {}),
     };
   }
   // a page name this app doesn't have: say so rather than show Home under a wrong address; the
@@ -252,6 +257,7 @@ export function href(route: Route): string {
       const params = new URLSearchParams();
       if (route.at !== undefined) params.set("at", String(route.at));
       if (route.q) params.set("q", route.q);
+      if (route.mode === "changes") params.set("view", "changes");
       return `#/filing/${route.companyId}/${route.accessionNo}` +
         (route.section ? `/${encodeURIComponent(route.section)}` : "") +
         (params.size ? `?${params}` : "");
@@ -290,10 +296,18 @@ export function go(route: Route): void {
   window.location.hash = href(route);
 }
 
+/** The address as a route. A change of page runs as a view transition (motion.ts): the update is
+ * committed synchronously inside it, so the old page is captured before and the new one after. */
 export function useRoute(): Route {
   const [route, setRoute] = useState(() => parse(window.location.hash));
+  const current = useRef(route);
   useEffect(() => {
-    const onChange = () => setRoute(parse(window.location.hash));
+    const onChange = () => {
+      const next = parse(window.location.hash);
+      const prev = current.current;
+      current.current = next;
+      transition(prev, next, () => flushSync(() => setRoute(next)));
+    };
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);

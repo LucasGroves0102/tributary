@@ -1,0 +1,632 @@
+/* The shell (.interface-design/system.md §3, §4): a 48px top bar over a 232px rail, the page, and the
+   assistant panel. The shell never moves (§7.2): only the rail's drawer and the panel slide. */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: var(--topbar-h) auto;
+  min-height: 100vh;
+  background: var(--paper);
+}
+
+.app > .top {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.app > .side {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.app > .main {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+/* pages lay out by the room they have (`@container main`): the open panel takes 400px at 1200 and up */
+.main {
+  min-width: 0;
+  container: main / inline-size;
+}
+
+.app.with-ai > .main {
+  margin-right: var(--drawer-w);
+}
+
+.page {
+  padding: 24px 32px 64px;
+  max-width: calc(1144px + 64px);
+  gap: 24px;
+}
+
+@container main (max-width: 767px) {
+  .page {
+    padding: 16px 16px 48px;
+  }
+}
+
+/* --- top bar --------------------------------------------------------------------------------- */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: var(--topbar-h);
+  padding: 0 16px 0 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--sans);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.top .brand {
+  width: var(--rail-w);
+  height: var(--topbar-h);
+  padding: 0 20px;
+}
+
+.wordmark {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink);
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.menu-btn {
+  display: none;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  width: clamp(200px, 30vw, 440px);
+  height: 32px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--pencil);
+  font-size: 13px;
+  text-align: left;
+}
+
+.search-box .sb-long {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-ic {
+  flex: none;
+}
+
+.top-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.tb {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.tb[aria-pressed="true"],
+.tb[data-state="open"],
+.fresh[open] > summary.tb {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+}
+
+.tb .count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.who-chip {
+  color: var(--ink-2);
+}
+
+.who-chip .more-caret {
+  display: none;
+}
+
+.who-select {
+  height: 32px;
+  font-size: 13px;
+}
+
+.fresh {
+  position: relative;
+}
+
+.fresh > summary {
+  list-style: none;
+  color: var(--ink-2);
+}
+
+.fresh > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fresh .live {
+  margin-right: 0;
+}
+
+.live.quiet {
+  background: var(--disabled);
+}
+
+.fresh-pop {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  width: 320px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  animation: pop-in var(--t-pop-in) var(--ease-enter);
+  transform-origin: 100% 0;
+}
+
+.fresh-pop p {
+  margin: 0 0 8px;
+}
+
+.fresh-pop p:last-child {
+  margin: 0;
+}
+
+.fresh-pop a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+html[data-motion="reduced"] .fresh-pop {
+  animation: fade-in 100ms linear;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tb:hover,
+  .icon-btn:hover,
+  .search-box:hover,
+  .nav a:hover,
+  .wl a:hover {
+    background: var(--well);
+    transition-duration: 0s;
+  }
+}
+
+/* --- rail ------------------------------------------------------------------------------------ */
+
+.side {
+  position: sticky;
+  top: var(--topbar-h);
+  height: calc(100vh - var(--topbar-h));
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--paper);
+  border-right: 1px solid var(--rule);
+  font-family: var(--sans);
+}
+
+.side-top {
+  flex: none;
+  padding: 12px 12px 0;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-control);
+  font-size: 14px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.nav a[aria-current="page"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font-weight: 600;
+}
+
+.nav .cnt {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.nav .cnt.new {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.side-lists {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 16px;
+}
+
+.side .sect {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 16px 0 4px;
+  padding: 0 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.side .sect-n {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.side .sect button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .side .sect button:hover:not(:disabled) {
+    background: var(--well);
+  }
+}
+
+.side .side-links .cover-link.link {
+  padding: 0;
+  font-weight: 400;
+}
+
+.wl a {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0 4px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-control);
+  font-size: 13px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.wl a .code {
+  font-size: 13px;
+}
+
+.wl-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+.wl a[aria-current="page"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.newf {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.side-note {
+  margin: 4px 10px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.side-foot {
+  flex: none;
+  padding: 12px 22px 16px;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.side-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.side .cover-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 12px;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.side .cover-link[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.side .credit {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 0;
+  color: var(--pencil);
+}
+
+.side .credit a {
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.side-signout {
+  display: none;
+}
+
+.scrim {
+  display: none;
+}
+
+/* --- the assistant panel (§4, §7.4): 400px of sheet with a hairline at its left. It slides in over the
+   room the content gave up at once (the content never animates its width) and slides away to close;
+   opened with Ctrl J it is instant; under reduced motion it fades. -------------------------------- */
+
+.ai-drawer {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  z-index: 15;
+  width: var(--drawer-w);
+  max-width: 100vw;
+  background: var(--sheet);
+  border-left: 1px solid var(--rule);
+  animation: panel-in var(--t-panel-in) var(--ease-move);
+}
+
+.ai-drawer.closing {
+  animation: panel-out var(--t-panel-out) var(--ease-enter) forwards;
+  pointer-events: none;
+}
+
+.ai-drawer.instant {
+  animation: none;
+}
+
+html[data-motion="reduced"] .ai-drawer {
+  animation: fade-in 120ms linear;
+}
+
+html[data-motion="reduced"] .ai-drawer.closing {
+  animation: fade-out 120ms linear forwards;
+}
+
+@keyframes panel-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes panel-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* --- widths (§3) ------------------------------------------------------------------------------ */
+
+@media (max-width: 1199px) {
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app > .main {
+    grid-column: 1;
+  }
+
+  .app.with-ai > .main {
+    margin-right: 0;
+  }
+
+  .menu-btn {
+    display: inline-grid;
+  }
+
+  .top {
+    padding-left: 8px;
+    gap: 12px;
+  }
+
+  .top .brand {
+    width: auto;
+    padding: 0 4px 0 0;
+  }
+
+  .side {
+    position: fixed;
+    left: 0;
+    top: var(--topbar-h);
+    bottom: 0;
+    z-index: 30;
+    width: 280px;
+    max-width: 85vw;
+    height: auto;
+    box-shadow: var(--float);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform var(--t-panel-out) var(--ease-enter), visibility 0s linear var(--t-panel-out);
+  }
+
+  .side.open {
+    transform: none;
+    visibility: visible;
+    transition: transform var(--t-panel-in) var(--ease-move), visibility 0s;
+  }
+
+  html[data-motion="reduced"] .side {
+    transform: none;
+    opacity: 0;
+    transition: opacity 120ms linear, visibility 0s linear 120ms;
+  }
+
+  html[data-motion="reduced"] .side.open {
+    opacity: 1;
+    transition: opacity 120ms linear, visibility 0s;
+  }
+
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-h) 0 0 0;
+    z-index: 25;
+    background: var(--scrim);
+  }
+
+  .top .who {
+    display: none;
+  }
+
+  .side-signout {
+    display: inline-flex;
+    margin: 0 0 12px;
+  }
+
+  .ai-drawer {
+    box-shadow: var(--float);
+  }
+}
+
+@media (max-width: 767px) {
+  .top {
+    gap: 4px;
+    padding-right: 8px;
+  }
+
+  .search-box {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+    background: none;
+    box-shadow: none;
+    color: var(--ink);
+  }
+
+  .search-box .sb-long,
+  .search-box kbd,
+  .tb kbd,
+  .fresh {
+    display: none;
+  }
+
+  .wordmark {
+    font-size: 18px;
+  }
+
+  .ai-drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+}
+
+@media (pointer: coarse) {
+  .tb,
+  .icon-btn,
+  .nav a,
+  .wl a,
+  .search-box {
+    min-height: 40px;
+  }
+
+  .icon-btn {
+    width: 40px;
+  }
+}

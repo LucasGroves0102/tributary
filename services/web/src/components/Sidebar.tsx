@@ -1,27 +1,30 @@
 import { useEffect, useRef, type ReactNode } from "react";
 
-import { accountName, readableTotal } from "../access";
-import { FormMark } from "./FormMark";
-import { ago, day, localClock } from "../format";
+import { readableTotal } from "../access";
 import { sinceLabel, type WatchRow } from "../home/data";
-import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import type { Workspace } from "../home/useWorkspace";
-import { href, NAV, type Route } from "../route";
+import { href, NAV, type NavView, type Route } from "../route";
 import type { Me } from "../types";
-import { Seal } from "./Seal";
-import { Spark } from "./Spark";
 import { Skeleton } from "./States";
 
-const NEXT_FILINGS = 4;
+export { edgarOpen } from "./TopBar";
+
+/** The rail's screens in the spec's order (§4), by their short names; the rest (Ask) stay a g-key and a
+ * palette entry away. */
+const RAIL: { view: NavView; label: string }[] = [
+  { view: "home", label: "Home" },
+  { view: "companies", label: "Companies" },
+  { view: "compare", label: "Compare" },
+  { view: "chart", label: "Charts" },
+  { view: "analysis", label: "Analysis" },
+  { view: "portfolio", label: "Portfolio" },
+  { view: "data", label: "Your data" },
+];
 
 interface Props {
   route: Route;
   me: Me | null;
   workspace: Workspace;
-  /** the newest filing's text parsed, among those the user can read */
-  lastIngested: string | null;
-  /** the newest filing in the index, whoever's (useFeedStatus) */
-  listed?: string | null;
   onAdd: () => void;
   onExport: () => void;
   /** opens the keyboard shortcut sheet */
@@ -32,20 +35,23 @@ interface Props {
   open?: boolean;
   /** the server offers "Connect your data": Settings' link says so */
   connections?: boolean;
-  /** this is a temporary demo sandbox: how long until it resets ("3h 20m") */
-  sandboxResetsIn?: string | null;
-  /** a phone's top bar has no room for it */
+  /** the way out on a narrow screen, where the top bar has no account chip */
   onSignOut?: () => void;
   /** "End demo" for a sandbox */
   signOutLabel?: string;
 }
 
-/** Which nav entry a route belongs to: a company or filing is under Companies. */
+/** Which rail entry a route belongs to: a company or filing is under Companies. */
 function section(route: Route): Route["view"] {
   return route.view === "company" || route.view === "filing" ? "companies" : route.view;
 }
 
-export function Sidebar({ route, me, workspace, lastIngested, listed = null, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, sandboxResetsIn = null, onSignOut, signOutLabel = "Sign out" }: Props) {
+/** The rail (.interface-design/system.md §4), 232px on the paper with a hairline at its right, still on
+ * every page change: the screens, then Watching (code, name and a "new" label for a new filing), then
+ * Workspaces; its foot holds Data status, the API, Settings and the shortcuts. Under 1200px a drawer
+ * over a scrim, from the top bar's Menu. Three parts: the screens stay put, the lists scroll, the foot
+ * is always whole. */
+export function Sidebar({ route, me, workspace, onAdd, onExport, onShortcuts, workspaces, open = false, connections = false, onSignOut, signOutLabel = "Sign out" }: Props) {
   // the phone menu always opens at the top of its lists
   const lists = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -55,196 +61,125 @@ export function Sidebar({ route, me, workspace, lastIngested, listed = null, onA
   const active = section(route);
   const newCount = workspace.fresh.length;
   const newTitle = `${newCount} new ${newCount === 1 ? "filing" : "filings"} on ${workspace.freshScope} ${sinceLabel(workspace.since, workspace.firstVisit)}`;
-  const next = rows
-    .filter((r) => r.next?.expected_date)
-    .sort((a, b) => a.next!.expected_date!.localeCompare(b.next!.expected_date!))
-    .slice(0, NEXT_FILINGS);
+  const keys = new Map(NAV.map((n) => [n.view, n.key]));
 
   return (
     <aside id="side-nav" className={open ? "side open" : "side"} aria-label="Navigation">
       <div className="side-top">
-      <div className="brand">
-        <Seal size="logo" />
-        <span className="wordmark">Tributary</span>
-        {sandboxResetsIn && (
-          <span className="env" title={`A temporary demo sandbox: it and what you save in it are deleted in ${sandboxResetsIn}`}>
-            demo
-          </span>
-        )}
-      </div>
-
-      <nav className="nav" aria-label="Screens">
-        {NAV.map((n) => (
-          <a
-            key={n.view}
-            href={href({ view: n.view })}
-            className={active === n.view ? "on" : undefined}
-            aria-current={active === n.view ? "page" : undefined}
-          >
-            <span className="grow">{n.label}</span>
-            {n.view === "home" && newCount > 0 && (
-              <span className="cnt new" title={newTitle}>
-                {newCount}
-              </span>
-            )}
-            {n.view === "companies" && me && (
-              <span className="cnt" title={COMPANIES_COUNTED}>
-                {readableTotal(me).toLocaleString("en-US")}
-              </span>
-            )}
-            <kbd>g{n.key}</kbd>
-          </a>
-        ))}
-      </nav>
+        <nav className="nav" aria-label="Screens">
+          {RAIL.map((n) => (
+            <a
+              key={n.view}
+              href={href({ view: n.view })}
+              className={active === n.view ? "on" : undefined}
+              aria-current={active === n.view ? "page" : undefined}
+              aria-keyshortcuts={keys.get(n.view) ? `g ${keys.get(n.view)}` : undefined}
+            >
+              <span className="grow">{n.label}</span>
+              {n.view === "home" && newCount > 0 && (
+                <span className="cnt new" title={newTitle}>
+                  {newCount}
+                </span>
+              )}
+              {n.view === "companies" && me && (
+                <span className="cnt" title={COMPANIES_COUNTED}>
+                  {readableTotal(me).toLocaleString("en-US")}
+                </span>
+              )}
+            </a>
+          ))}
+        </nav>
       </div>
 
       <div className="side-lists" ref={lists}>
-      <div className="sect">
-        <span className="grow">Watchlist{watchlist.state === "ok" && <span className="sect-n">{rows.length}</span>}</span>
-        <button onClick={onExport} title="Export CSV" aria-label="Export watchlist CSV">
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M6 1v7M3 5.5 6 8.5l3-3M1.5 11h9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <button onClick={onAdd} title="Add company" aria-label="Add company to watchlist">
-          +
-        </button>
-      </div>
-      <div className="wl">
-        {watchlist.state === "ok" && rows.length > 0 && (
-          <p className="wl-head" aria-hidden="true">
-            <span>Revenue</span>
-            <span title="Revenue over the last twelve months against the twelve months a year earlier: the company's growth, not its share price">Growth</span>
-          </p>
-        )}
-        {watchlist.state === "loading" && <Skeleton lines={3} label="Loading watchlist" />}
-        {watchlist.state === "unavailable" && (
-          <p className="side-note">Watchlists are offline; your companies are under Companies.</p>
-        )}
-        {watchlist.state === "error" && <p className="side-note">Couldn't load the watchlist.</p>}
-        {watchlist.state === "ok" && rows.length === 0 && (
-          <p className="side-note">Press + to follow a company's filings here.</p>
-        )}
-        {rows.map((r) => (
-          <WatchLink key={r.companyId} row={r} current={route} since={sinceLabel(workspace.since, workspace.firstVisit)} />
-        ))}
-      </div>
+        <div className="sect">
+          <span className="grow">Watching{watchlist.state === "ok" && <span className="sect-n">{rows.length}</span>}</span>
+          <button className="icon-btn" onClick={onExport} title="Export CSV" aria-label="Export watchlist CSV">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M6 1v7M3 5.5 6 8.5l3-3M1.5 11h9" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button className="icon-btn" onClick={onAdd} title="Add company" aria-label="Add company to watchlist">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M6 1.5v9M1.5 6h9" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div className="wl">
+          {watchlist.state === "loading" && <Skeleton lines={3} label="Loading watchlist" />}
+          {watchlist.state === "unavailable" && (
+            <p className="side-note">Watchlists are offline; your companies are under Companies.</p>
+          )}
+          {watchlist.state === "error" && <p className="side-note">Couldn't load the watchlist.</p>}
+          {watchlist.state === "ok" && rows.length === 0 && (
+            <p className="side-note">Press + to follow a company's filings here.</p>
+          )}
+          {rows.map((r) => (
+            <WatchLink key={r.companyId} row={r} current={route} since={sinceLabel(workspace.since, workspace.firstVisit)} />
+          ))}
+        </div>
 
-      {next.length > 0 && (
-        <>
-          <div className="sect">
-            <span className="grow">Next filings (est.)</span>
-          </div>
-          <div className="up">
-            {next.map((r) => (
-              <a
-                key={r.companyId}
-                href={href({ view: "company", companyId: r.companyId })}
-                title={`${r.name}: ${r.next!.form} for the period ending ${day(r.next!.period_end, true)}. ${r.next!.basis}`}
-              >
-                <b>{r.ticker ?? r.name}</b>
-                <FormMark form={r.next!.form} expected title={null} />
-                <span className="grow" />
-                <span className="num">~{day(r.next!.expected_date!)}</span>
-              </a>
-            ))}
-          </div>
-        </>
-      )}
-
-      {workspaces}
+        {workspaces}
       </div>
 
       <div className="side-foot">
-      <details className="fresh" title={FRESHNESS_EXPLAINED}>
-        <summary>
-          {listed ? (
-            <>
-              <span className={edgarOpen() ? "live" : "live quiet"} />
-              Newest filing listed {ago(listed)}
-            </>
-          ) : (
-            "Data freshness"
+        {onSignOut && (
+          <button className="btn side-signout" onClick={onSignOut}>
+            {signOutLabel}
+          </button>
+        )}
+        <div className="side-links">
+          <a className="cover-link" href={href({ view: "status" })} aria-current={route.view === "status" ? "page" : undefined}
+            title="Freshness, completeness, checks">
+            Data status
+          </a>
+          {/* the API, its spreadsheet add-ins and the AI connection, from inside the app (Riley, test 10, finding 38) */}
+          <a className="cover-link" href={href({ view: "api" })} aria-current={route.view === "api" ? "page" : undefined}
+            title="Using the API: keys, spreadsheets, and your own AI model">
+            API
+          </a>
+          {/* always: Settings holds filing alerts (F6), the theme and "Connect your data" (#60) */}
+          <a className="cover-link" href={href({ view: "settings" })} aria-current={route.view === "settings" ? "page" : undefined}
+            title={connections ? "Filing alerts, the theme and your market data" : "Filing alerts and the theme"}>
+            Settings
+          </a>
+          {onShortcuts && (
+            <button className="link cover-link" onClick={onShortcuts}>
+              Shortcuts <kbd>?</kbd>
+            </button>
           )}
-        </summary>
-        {listed && !edgarOpen() && (
-          <>
-            EDGAR's feed slows after 5:30 pm ET and on weekends
-            <br />
-          </>
-        )}
-        {lastIngested ? `Newest filing text parsed ${ago(lastIngested)}` : !listed && "Filings: nothing you can read yet"}
-        <br />
-        {watchlist.state === "ok"
-          ? `Watchlist values as of ${localClock(watchlist.data.as_of)}`
-          : "Values appear as they're filed"}
-        {me && (
-          <>
-            <br />
-            Signed in as {accountName(me)}
-            <br />
-            {readableTotal(me).toLocaleString("en-US")} readable {readableTotal(me) === 1 ? "company" : "companies"}
-          </>
-        )}
-      </details>
-      {onSignOut && (
-        <button className="btn sm side-signout" onClick={onSignOut}>
-          {signOutLabel}
-        </button>
-      )}
-      <div className="side-links">
-      <a className="cover-link" href={href({ view: "about" })} aria-current={route.view === "about" ? "page" : undefined}
-        title="No prices, consensus or transcripts">
-        What Tributary covers
-      </a>
-      <a className="cover-link" href={href({ view: "status" })} aria-current={route.view === "status" ? "page" : undefined}
-        title="Freshness, completeness, checks">
-        Data status
-      </a>
-      {/* the API, its spreadsheet add-ins and the AI connection, from inside the app (Riley, test 10, finding 38) */}
-      <a className="cover-link" href={href({ view: "api" })} aria-current={route.view === "api" ? "page" : undefined}
-        title="API keys, spreadsheets, and your own AI model">
-        Using the API
-      </a>
-      {/* always: Settings holds filing alerts (F6) as well as "Connect your data" (#60) */}
-      <a className="cover-link" href={href({ view: "settings" })} aria-current={route.view === "settings" ? "page" : undefined}
-        title={connections ? "Filing alerts and your market data" : "Filing alerts"}>
-        Settings
-      </a>
-      {onShortcuts && (
-        <button className="link cover-link" onClick={onShortcuts}>
-          Keyboard shortcuts <span className="kbd">?</span>
-        </button>
-      )}
-      </div>
-          <div className="credit">
-        Built by{" "}
-        <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>
-        <a href="https://github.com/LucasGroves0102/tributary#architecture" target="_blank" rel="noreferrer">
-          How it works
-        </a>
-        <a href="https://github.com/LucasGroves0102/tributary" target="_blank" rel="noreferrer">GitHub</a>
-      </div>
+        </div>
+        <p className="credit">
+          <a className="cover-link" href={href({ view: "about" })} aria-current={route.view === "about" ? "page" : undefined}
+            title="No prices, consensus or transcripts">
+            What Tributary covers
+          </a>
+          <span>
+            Built by <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>
+            {" · "}
+            <a href="https://github.com/LucasGroves0102/tributary#architecture" target="_blank" rel="noreferrer">How it works</a>
+            {" · "}
+            <a href="https://github.com/LucasGroves0102/tributary" target="_blank" rel="noreferrer">GitHub</a>
+          </span>
+        </p>
       </div>
     </aside>
   );
 }
 
+/** A watched company: its code, its name, and "new" when it filed since the last visit. No figures. */
 function WatchLink({ row, current, since }: { row: WatchRow; current: Route; since: string }) {
-  const yoy = row.cells.revenue_growth_ttm!;
   const on = current.view === "company" && current.companyId === row.companyId;
   return (
     <a
       href={href({ view: "company", companyId: row.companyId })}
       className={on ? "on" : undefined}
-      title={`${row.name}: revenue by quarter over the last ${row.revenue.length || 12} quarters, and revenue growth over the twelve months (not the share price)`}
+      aria-current={on ? "page" : undefined}
+      title={row.isNew ? `${row.name}: a new filing ${since}` : row.name}
     >
-      <i className={row.isNew ? "d" : "d off"} title={row.isNew ? `New filing ${since}` : undefined} />
-      <b>{row.ticker ?? row.name}</b>
-      <Spark values={row.revenue} label={`${row.name} quarterly revenue`} />
-      <span className={`num small ${yoy.value === null ? "faint" : yoy.value >= 0 ? "pos" : "neg"}`} title={yoy.title}>
-        {yoy.value === null ? "" : yoy.text}
-      </span>
+      <b className="code">{row.ticker ?? ""}</b>
+      <span className="wl-name" data-entity-name="">{row.name}</span>
+      {row.isNew ? <span className="newf">new</span> : <span />}
     </a>
   );
 }
@@ -254,14 +189,3 @@ function WatchLink({ row, current, since }: { row: WatchRow; current: Route; sin
 export const COMPANIES_COUNTED =
   "Companies you can read: every company with XBRL financials (quarterly or annual) or a stored filing's text. " +
   "Data status counts the ones with quarterly financials, and its checks every company with XBRL figures.";
-
-/** EDGAR business hours (6:00 am-5:30 pm ET, weekdays), when filings reach its feed within
- * minutes; after them the feed goes quiet until the next morning. */
-export function edgarOpen(now = new Date()): boolean {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hourCycle: "h23",
-  }).formatToParts(now);
-  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
-  return !["Sat", "Sun"].includes(get("weekday")) && minutes >= 6 * 60 && minutes < 17 * 60 + 30;
-}

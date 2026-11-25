@@ -233,6 +233,33 @@ export function howFiled(key: string, source: Pick<ValueSource, "form" | "period
   return { filed: true };
 }
 
+/** A key stat's mark (.interface-design/system.md §5.1), from the same facts as howFiled: ✓ when its
+ * filing states it as shown; Σ for twelve months of quarters added up (a TTM from a 10-Q, TTM EPS from
+ * /per-share's four quarters); d for a figure worked out from a filing (a fiscal Q4, a split-adjusted
+ * year); none for a ratio or a difference. Words the API's sources only; nothing is computed here. */
+export function statMark(s: Pick<KeyStat, "key" | "source" | "how" | "value" | "status">): "ok" | "sum" | "d" | null {
+  if ((s.value === null && s.status !== "other_currency") || !s.source) return null;
+  const metric = s.key.replace(/_(ttm|q)$/, "");
+  if (COMPUTED_FROM[metric]) return null;
+  if (s.how) return s.key.endsWith("_ttm") && s.how.startsWith("the four quarters") ? "sum" : "d";
+  if (s.key.endsWith("_ttm") && !ANNUAL_FORM.test(s.source.form)) return "sum";
+  if (s.key.endsWith("_q") && !BALANCES.has(metric) && ANNUAL_FORM.test(s.source.form)) return "d";
+  return "ok";
+}
+
+/** "FY2027 Q2" → "Q2 FY27", a quarter's short name under a figure (§5.3). */
+export function shortQuarter(fiscalPeriod: string | null | undefined): string | null {
+  const m = /^(FY|CY)(\d{2})(\d{2}) (Q[1-4])$/.exec(fiscalPeriod ?? "");
+  return m ? `${m[4]} ${m[1]}${m[3]}` : (fiscalPeriod ?? null);
+}
+
+/** Where a statement figure sits in its filing, in words: the form's financial statements. */
+export function statementPlace(form: string): string {
+  if (/^10-Q/.test(form)) return "Part I, Item 1: the financial statements";
+  if (/^10-K/.test(form)) return "Item 8: the financial statements";
+  return "the filing's financial statements";
+}
+
 /** Whether a key stat is stated in its filing as shown (a seal), or how it was worked out. */
 export function statFiled(s: Pick<KeyStat, "key" | "source" | "how">): { filed: true } | { filed: false; how: string } {
   return s.how ? { filed: false, how: s.how } : howFiled(s.key, s.source);
@@ -599,8 +626,11 @@ export interface TableCell {
   inputs?: Record<string, number>;
   /** the filing on EDGAR (the secondary link) */
   url: string | null;
-  /** the filing the value comes from, opened in the reader (the value's own link) */
-  source?: { accessionNo: string; form: string };
+  /** the filing the value comes from, opened in the reader (the value's own link); its filing date and XBRL
+   * tag (a `derived:` tag reads as derived) */
+  source?: { accessionNo: string; form: string; filed?: string; tag?: string | null };
+  /** per-share: the figure isn't the filing's own (split-adjusted from `as_filed`), so it is derived */
+  adjusted?: boolean;
 }
 
 /** A 10-K or 10-Q in the filing index whose period isn't in the figures yet (H9). */
@@ -872,7 +902,8 @@ export function metricTable(
               raw: sign < 0 ? negated(String(r.value)) : String(r.value),
               derived: r.value_source === "derived",
               url: r.citation.filing_url,
-              source: { accessionNo: r.citation.accession_no, form: r.citation.form },
+              source: { accessionNo: r.citation.accession_no, form: r.citation.form, filed: r.citation.filed, tag: r.citation.xbrl_tag },
+              ...(r.as_filed != null && Number(r.as_filed) !== Number(r.value) ? { adjusted: true } : {}),
               ...(opensIntoParts(r) ? { opens: true } : {}),
               ...(r.inputs && !("quarters" in r.inputs) ? { inputs: numericInputs(r.inputs) } : {}),
             };
@@ -1077,8 +1108,27 @@ const RECAP_LABELS: Record<string, [string, Fmt]> = {
   stockholders_equity: ["Stockholders' equity", "usd"],
 };
 
+/** A recap column's head (§4 ledger): its quarter, its period end and the filing it is printed in. */
+export interface RecapHead {
+  label: string;
+  end: string | null;
+  /** "10-Q Aug 26, 2026" */
+  source: string | null;
+  derived: boolean;
+}
+
+/** The recap's balances: a change in one is uncoloured (up is not good or bad by itself, §2.3). */
+const RECAP_BALANCES = new Set(["cash", "total_assets", "long_term_debt", "stockholders_equity"]);
+
 export interface RecapRow {
   label: string;
+  metric: string;
+  /** the API's unit: "USD", "USD/shares", "ratio" */
+  unit: string;
+  /** the change columns are coloured by direction (a flow or a margin), not for a balance */
+  colour: boolean;
+  /** the three figures behind current, prior and year-ago, for their cards */
+  values: [RecapValue | null, RecapValue | null, RecapValue | null];
   current: string;
   prior: string;
   qoq: RecapDelta | null;
@@ -1113,7 +1163,7 @@ function src(v: RecapValue | null): string {
 /** Quarter values (TTM ones are for ratios the quarter lacks) vs the prior and year-ago
  * quarter; column labels from the values' fiscal periods. `only`: these metrics, in RECAP_LABELS
  * order (the Earnings view's income-statement lines). */
-export function recapRows(recap: Recap, only?: readonly string[]): { labels: [string, string, string]; rows: RecapRow[] } {
+export function recapRows(recap: Recap, only?: readonly string[]): { labels: [string, string, string]; heads: [RecapHead, RecapHead, RecapHead]; rows: RecapRow[] } {
   const quarter = recap.metrics.filter((m) => m.span === "quarter" && RECAP_LABELS[m.metric] && (!only || only.includes(m.metric)));
   const first = quarter.find((m) => m.prior_quarter && m.year_ago) ?? quarter[0];
   const lab = (v: RecapValue | null | undefined, fallback: string) => v?.fiscal_period ?? (v ? calendarLabel(v.period_end) : fallback);
@@ -1121,6 +1171,15 @@ export function recapRows(recap: Recap, only?: readonly string[]): { labels: [st
     lab(first?.current, "This quarter"),
     lab(first?.prior_quarter, "Prior quarter"),
     lab(first?.year_ago, "Year ago"),
+  ];
+  const head = (v: RecapValue | null | undefined, label: string): RecapHead => ({
+    label,
+    end: v?.period_end ?? null,
+    source: v ? `${v.citation.form} ${day(v.citation.filed, true)}` : null,
+    derived: v?.value_source === "derived",
+  });
+  const heads: [RecapHead, RecapHead, RecapHead] = [
+    head(first?.current, labels[0]), head(first?.prior_quarter, labels[1]), head(first?.year_ago, labels[2]),
   ];
   const order = Object.keys(RECAP_LABELS);
   const rows = quarter
@@ -1134,6 +1193,10 @@ export function recapRows(recap: Recap, only?: readonly string[]): { labels: [st
       const unusable = m.current?.not_meaningful;
       return {
         label,
+        metric: m.metric,
+        unit: m.unit,
+        colour: !RECAP_BALANCES.has(m.metric),
+        values: [m.current ?? null, m.prior_quarter ?? null, m.year_ago ?? null] as RecapRow["values"],
         current: show(m.current),
         prior: show(m.prior_quarter),
         qoq: unusable || m.prior_quarter?.not_meaningful ? null : delta(m.prior_quarter, m.unit),
@@ -1143,7 +1206,7 @@ export function recapRows(recap: Recap, only?: readonly string[]): { labels: [st
           src(m.current), src(m.prior_quarter), src(m.year_ago)].filter(Boolean).join("\n"),
       };
     });
-  return { labels, rows };
+  return { labels, heads, rows };
 }
 
 // --- segments ----------------------------------------------------------------------------------

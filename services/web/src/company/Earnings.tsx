@@ -4,7 +4,7 @@ import { earnings, recap } from "../api";
 import { PinButton } from "../analysis/Pin";
 import { quoteLines, quoteTable, type Passage } from "../analysis/project";
 import { NO_DATA } from "../blanks";
-import { day } from "../format";
+import { day, sentenceCase } from "../format";
 import { href } from "../route";
 import type { EarningsQuarter, EarningsRelease, ReleasePassage } from "../types";
 import { recapRows } from "./data";
@@ -201,7 +201,7 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
             ))}
             {tables.map((p) => (
               <details key={p.char_start} className="release-table-box">
-                <summary>{p.heading ?? "Reconciliation"}</summary>
+                <summary title={p.heading ?? undefined}>{p.heading ? sentenceCase(p.heading) : "Reconciliation"}</summary>
                 {p.parts
                   ? <ReleaseParts parts={p.parts} heading={p.heading} label={p.heading ?? "Reconciliation"} skipHeading />
                   : <pre className="release-table" tabIndex={0}>{p.text.split("\n").slice(1).join("\n")}</pre>}

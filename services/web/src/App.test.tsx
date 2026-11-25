@@ -154,7 +154,7 @@ afterEach(() => {
 describe("Home", () => {
   it("shows the watchlist with units, periods and sources", async () => {
     await render();
-    expect($(".crumb")?.textContent).toBe("Home");
+    expect(document.title).toBe("Home · Tributary");
     const rows = [...container.querySelectorAll("table.watchlist tbody tr")];
     expect(rows).toHaveLength(2);
     const nvda = rows[0]!;
@@ -192,8 +192,9 @@ describe("Home", () => {
     expect(container.textContent).toContain("Expected filings");
     const side = [...container.querySelectorAll(".side .wl a")];
     expect(side.map((a) => a.querySelector("b")?.textContent)).toEqual(["NVDA", "TSLA"]);
-    expect(side[0]!.querySelector("svg.spark")).not.toBeNull();
-    expect(side[1]!.querySelector("svg.spark")).toBeNull();
+    expect(side.map((a) => a.querySelector(".wl-name")?.textContent)).toEqual(["Nvidia", "Tesla"]);
+    // Watching names the company and says "new" for a new filing; its figures are on Home's watchlist
+    expect(side[0]!.querySelector("svg.spark")).toBeNull();
   });
 
   it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
@@ -261,7 +262,7 @@ describe("Home", () => {
     const start = $(".start-card")!;
     expect(start.querySelector("h2")?.textContent).toBe("Start an analysis");
     expect(start.querySelector('input[aria-label="Company to analyse"]')).not.toBeNull();
-    expect([...container.querySelectorAll(".page > .card h2, .page > section.card h2")].map((h) => h.textContent?.split(" ")[0]))
+    expect([...container.querySelectorAll(".page section.card h2")].map((h) => h.textContent?.split(" ")[0]))
       .toEqual(["Start", "Watchlist", "New", "Recent"]);
     expect($(".status-strip")).toBeNull();
     expect(container.textContent).not.toContain("Expected filings");
@@ -345,23 +346,24 @@ describe("new chart", () => {
   });
 });
 
-it("names Settings in the breadcrumb", async () => {
+it("names Settings in the tab's title and the page's heading", async () => {
   await render("#/settings");
-  expect($(".crumb [aria-current]")?.textContent).toBe("Settings");
+  expect(document.title).toBe("Settings · Tributary");
+  expect($("h1")?.textContent).toBe("Settings");
 });
 
 it("#60: links Settings from the sidebar even with no data connections offered", async () => {
   await render("#/");
   const link = [...document.querySelectorAll<HTMLAnchorElement>(".side-links a")].find((a) => a.textContent === "Settings");
   expect(link?.getAttribute("href")).toBe("#/settings");
-  expect(link?.title).toBe("Filing alerts");
+  expect(link?.title).toBe("Filing alerts and the theme");
 });
 
 describe("navigation", () => {
   it("routes to every screen", async () => {
     await render("#/chart");
     expect($("h1")?.textContent).toBe("Chart builder");
-    expect($('.nav a[aria-current="page"]')?.textContent).toContain("Chart builder");
+    expect($('.nav a[aria-current="page"]')?.textContent).toContain("Charts");
     window.location.hash = "#/compare";
     await settle();
     expect($("h1")?.textContent).toBe("Compare");
@@ -374,7 +376,7 @@ describe("navigation", () => {
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
     window.location.hash = `#/company/${NVDA}`;
     await settle();
-    expect($(".crumb")?.textContent).toBe("Companies/Nvidia (NVDA)");
+    expect(document.title).toBe("Nvidia (NVDA) · Tributary");
     expect($('.nav a[aria-current="page"]')?.textContent).toContain("Companies");
   });
 
@@ -407,12 +409,12 @@ describe("navigation", () => {
   it("shows no demo badge on a real account or a persona", async () => {
     await render();
     expect($(".brand .env")).toBeNull();
-    expect($(".side .fresh")?.textContent).toContain("Signed in as alice");
+    expect($(".top .fresh")?.textContent).toContain("Signed in as alice");
   });
 
   it("says a filing's text is parsed about a minute after EDGAR, not hours (live fetch since 2026-11-09)", async () => {
     await render();
-    const title = $(".side .fresh")?.getAttribute("title") ?? "";
+    const title = $(".top .fresh")?.getAttribute("title") ?? "";
     expect(title).toContain("about a minute later for a 10-K, 10-Q or material 8-K");
     expect(title).not.toContain("6 hours for the rest");
   });
@@ -421,7 +423,7 @@ describe("navigation", () => {
     await render(`#/company/${APPLE}`);
     // the watchlist and /v1/me don't hold Apple: the name comes from the shared directory
     await settle();
-    expect($(".crumb")?.textContent).toBe("Companies/Apple (AAPL)");
+    expect(document.title).toBe("Apple (AAPL) · Tributary");
     expect(chip()).toBe("Apple (AAPL) · Overview");
     expect($(".top")?.textContent).not.toContain(APPLE);
     expect($(".ai")?.textContent).not.toContain(APPLE);
@@ -442,7 +444,7 @@ describe("navigation", () => {
     expect($('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(before);
     // also from the sidebar footer
-    const button = [...container.querySelectorAll(".side button")].find((b) => b.textContent?.startsWith("Keyboard shortcuts"))!;
+    const button = [...container.querySelectorAll(".side button")].find((b) => b.textContent?.startsWith("Shortcuts"))!;
     await act(async () => (button as HTMLElement).click());
     expect($('[role="dialog"]')).not.toBeNull();
     await act(async () => ($(".sheet-overlay") as HTMLElement).click());
@@ -539,7 +541,8 @@ describe("navigation", () => {
     await key("Enter", {}, input);
     await settle();
     expect(window.location.hash).toBe("#/search?q=export+controls");
-    expect($(".crumb")?.textContent).toBe("Search filings: “export controls”");
+    expect(document.title).toBe("Search: “export controls” · Tributary");
+    expect($("h1")?.textContent).toContain("Search");
     // alice has no filings access anywhere: the page says so instead of searching
     expect(container.textContent).toContain("Searching filing text needs filings access");
     expect(vi.mocked(fetch).mock.calls.some(([u]) => String(u).includes("/v1/search"))).toBe(false);
@@ -594,7 +597,7 @@ describe("assistant drawer", () => {
   it("a question a page wrote for you leaves when you do, unless you edited it", async () => {
     await render(`#/company/${NVDA}`);
     // Ask is in the header's More menu (a Radix DropdownMenu: ArrowDown on its button opens it)
-    await act(async () => { [...container.querySelectorAll<HTMLButtonElement>(".co-head button")].find((b) => b.textContent === "More")!
+    await act(async () => { container.querySelector<HTMLButtonElement>('.co-head button[aria-label="More actions"]')!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
     await act(async () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((i) => i.textContent === "Ask")!.click());
     await settle();
@@ -670,19 +673,20 @@ it("a named user keeps the full index: other companies' pages, search and unlabe
 
 it("says what Tributary covers, from the sidebar footer and the assistant's empty state", async () => {
   await render();
-  expect($(".side .cover-link")?.getAttribute("href")).toBe("#/about");
+  const about = () => [...container.querySelectorAll(".side .cover-link")].find((a) => a.textContent === "What Tributary covers");
+  expect(about()?.getAttribute("href")).toBe("#/about");
   expect([...container.querySelectorAll(".ai-m .empty a")].map((a) => a.getAttribute("href"))).toContain("#/about");
   expect($(".ai-m .empty")?.textContent).toContain("consensus estimates");
   window.location.hash = "#/about";
   await settle();
   expect($("h1")?.textContent).toBe("What Tributary covers");
-  expect($(".crumb")?.textContent).toBe("What Tributary covers");
+  expect(document.title).toBe("What Tributary covers · Tributary");
   const text = $(".about")!.textContent!;
   for (const limit of ["No stock prices or market data", "No consensus estimates", "No earnings-call transcripts",
     "Expected filing dates are estimates", "n/a (bank)", "5:30 pm ET",
     "A model gives market cap, P/E and EV multiples from a price you type"]) expect(text).toContain(limit);
   expect(text).not.toContain("So no market cap");
-  expect($(".side .cover-link")?.getAttribute("aria-current")).toBe("page");
+  expect(about()?.getAttribute("aria-current")).toBe("page");
 });
 
 it("links the data status page from the sidebar footer and shows it in the shell", async () => {
@@ -692,36 +696,31 @@ it("links the data status page from the sidebar footer and shows it in the shell
   window.location.hash = "#/status";
   await settle();
   expect($("h1")?.textContent).toBe("Data status");
-  expect($(".crumb")?.textContent).toBe("Data status");
+  expect(document.title).toBe("Data status · Tributary");
   expect(link?.getAttribute("aria-current")).toBe("page");
   expect($(".status-home")).toBeNull();
 });
 
-it("follows the system's theme until the user chooses Light or Dark, remembers the choice per user, and System forgets it", async () => {
-  await render();
-  // no choice: the page follows the system (tokens.css), and the button says so
+it("follows the system's theme until the user chooses Light or Dark in Settings, remembers the choice per user, and System forgets it", async () => {
+  await render("#/settings");
+  await settle();
+  // no choice: the page follows the system (tokens.css), and Settings says so
   expect(document.documentElement.dataset.theme).toBeUndefined();
-  const button = () => $(".theme-btn") as HTMLButtonElement;
-  expect(button().textContent).toBe("Theme System");
-  // the three by name in a menu (Riley 72: a blind cycle), opened with ArrowDown in jsdom
-  const pick = async (name: string) => {
-    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
-    await act(async () => { button().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
-    for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
-    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')];
-    expect(items.map((i) => i.textContent)).toEqual(["Light", "Dark", "System (your device's setting)"]);
-    await act(async () => items.find((i) => i.textContent?.startsWith(name))!.click());
-    await act(async () => { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-  };
+  const theme = () => $('[aria-label="Theme"]')!;
+  const on = () => theme().querySelector('[aria-checked="true"]')?.textContent;
+  expect(on()).toBe("System");
+  // the three by name (Riley 72: never a blind cycle)
+  expect([...theme().querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Light", "Dark", "System"]);
+  const pick = async (name: string) => act(async () => [...theme().querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === name)!.click());
   await pick("Light");
   expect(document.documentElement.dataset.theme).toBe("light");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("light");
-  expect(button().textContent).toBe("Theme Light");
+  expect(on()).toBe("Light");
   await pick("Dark");
   expect(document.documentElement.dataset.theme).toBe("dark");
   expect(window.localStorage.getItem("tributary.theme.alice")).toBe("dark");
   await pick("System");
-  expect(button().textContent).toBe("Theme System");
+  expect(on()).toBe("System");
   expect(document.documentElement.dataset.theme).toBeUndefined();
   expect(window.localStorage.getItem("tributary.theme.alice")).toBeNull();
 });
@@ -731,10 +730,10 @@ describe("the sidebar", () => {
     await render();
     const part = (s: string) => $(`.side > ${s}`)!;
     expect(part(".side-top").querySelector("nav.nav")).not.toBeNull();
-    expect(part(".side-top").querySelector(".brand")).not.toBeNull();
+    // the logo is the top bar's, over the rail (spec §3)
+    expect($(".top .brand")).not.toBeNull();
     expect(part(".side-lists").querySelector(".wl")).not.toBeNull();
-    expect(part(".side-foot").querySelector(".fresh")).not.toBeNull();
-    expect(part(".side-foot").querySelector(".cover-link")).not.toBeNull();
+    expect(part(".side-foot").querySelector(".side-links .cover-link")).not.toBeNull();
     // nothing outside those three: nothing else scrolls with the lists
     expect($(".side")!.children.length).toBe(3);
   });
@@ -776,6 +775,6 @@ describe("narrow screens", () => {
     await key("ArrowDown", {}, rows[0]!);
     expect(document.activeElement).toBe(rows[1]);
     await key("Enter", {}, rows[1]!);
-    expect($(".crumb")?.textContent).toContain("Tesla");
+    expect(window.location.hash).toBe(`#/company/${TSLA}`);
   });
 });

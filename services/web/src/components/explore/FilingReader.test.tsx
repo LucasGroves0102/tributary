@@ -92,7 +92,7 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-async function render(sectionKey: string | null, extra: { at?: number; q?: string; onRead?: (s: string | null) => void } = {}) {
+async function render(sectionKey: string | null, extra: { at?: number; q?: string; onRead?: (s: string | null) => void; mode?: "changes" } = {}) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -121,6 +121,25 @@ it("shows the outline by part, the section, the prior filing's section and asks 
   expect($(".section-nav")?.textContent).toContain("I-2 · MD&A");
   await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Ask about this section")!.click());
   expect(onAsk).toHaveBeenCalledWith("Summarize Risk Factors in this 10-Q.");
+});
+
+it("What changed is a mode of the reader: the filing's changes in the page's place, the outline counting them", async () => {
+  await render("II-1A");
+  const modes = container.querySelector('[aria-label="Read the filing or what changed"]')!;
+  expect(modes.querySelector('[aria-checked="true"]')?.textContent).toBe("Read");
+  expect([...modes.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Read", "What changed 3"]);
+  await act(async () => [...modes.querySelectorAll("button")].find((b) => b.textContent?.startsWith("What changed"))!.click());
+  expect(window.location.hash).toBe(`#/filing/${NVDA}/${ACC}/II-1A?view=changes`);
+  act(() => root.unmount());
+  await render("II-1A", { mode: "changes" });
+  expect($('[aria-label="Read the filing or what changed"] [aria-checked="true"]')?.textContent).toBe("What changed 3");
+  // the page shows the filing's changes, not the section's text; the search is Read's
+  expect($(".changes-page .changes")).not.toBeNull();
+  expect($(".section-text h2")).toBeNull();
+  expect($('input[aria-label="Search this filing"]')).toBeNull();
+  expect(paths().some((u) => u.pathname.endsWith(`/filings/${ACC}/changes`) && u.searchParams.get("view") === "ranked")).toBe(true);
+  const counted = [...container.querySelectorAll(".toc .cnt.changed")].map((c) => [c.closest("a")?.textContent?.includes("Risk Factors"), c.textContent]);
+  expect(counted).toEqual([[true, "3"]]);
 });
 
 it("shows What changed side by side: prior on the left, this filing on the right", async () => {

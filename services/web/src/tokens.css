@@ -1,46 +1,35 @@
-/* Design tokens: "Seal" (.interface-design/system.md). An annual report kept as a ledger: white page,
-   black serif, red rubrics and ledger rules, a red wax seal on figures taken from a filing; gold only on
-   the seal. Light is the base; the visitor's system picks dark unless they chose (theme.ts sets
+/* Design tokens: Noor's build spec (.interface-design/system.md §2, §7.3). Paper, ink and pencil; one
+   seal red for the tick and the logo; green and rust for a change's direction only; yellow for inserted
+   text only. Light is the base; the visitor's system picks dark unless they chose (theme.ts sets
    data-theme on <html> only for an explicit choice). The two dark blocks must stay identical
-   (tokens.test.ts checks). Components use only these custom properties, never raw colours. */
+   (tokens.test.ts checks), and every pair the spec measures is checked there too. Components use only
+   these custom properties, never raw colours. */
 
 :root,
 :root[data-theme="light"] {
-  --page: #fbfaf8;
+  --paper: #f4f4ef;
   --sheet: #ffffff;
-  --sheet-2: #f4f1ed;
-  --ink: #161314;
-  --ink-2: #4c4646;
-  --ink-3: #706965;
-  --rule: #e6e0db;
-  --rule-2: #d3cbc4;
-  --red: #b3111e;
-  --red-ink: #ffffff;
-  --red-soft: #f7e9e9;
-  /* the action: primary buttons and links are the ink (decided 2026-11-15, Riley's audit: red was the
-     seal, rubrics, links, buttons, 10-K marks and errors at once). Red stays for the seal, the margin
-     rubrics and red-letter days; an error has its own token. To give actions the red back, point
-     --action at the red here and in both dark blocks. */
-  --action: #161314;
-  --action-ink: #ffffff;
-  --error: #b3111e;
-  --error-soft: #f7e9e9;
-  --up: #1d6944;
-  --up-soft: #e6f0ea;
-  --warn: #8f4e14;
-  --warn-soft: #f6ece2;
-  --red-rule: rgb(179 17 30 / 0.36);
-  --red-wash: rgb(179 17 30 / 0.05);
-  /* a table's column rules: the ledger's red hairline on paper; on the dark page a warm grey (Riley, test 10,
-     findings 96 and 104: red rules between every column were heavy on near-black) */
-  --col-rule: rgb(179 17 30 / 0.36);
-  --overlay: rgb(22 19 20 / 0.32);
-  --lift: 0 1px 2px rgb(0 0 0 / 0.04), 0 18px 50px rgb(20 8 8 / 0.09);
-  --edge-shadow: rgb(22 19 20 / 0.2);
-  /* chart series, in layer order: the ink first, then the inks a printed report would use beside it,
-     ordered so the first six read apart (ink, slate, umber, plum, teal, rose; Riley 122: teal beside
-     olive and ink beside warm grey looked alike in Compare);
-     never the accent red (it means "act here" or "may change") */
+  --well: #ecede7;
+  --ink: #111513;
+  --ink-2: #39413d;
+  --pencil: #5c6560;
+  --disabled: #8e9691;
+  --rule: #dee2dc;
+  --rule-2: #7f8781;
+  --seal: #a3121d;
+  /* the logo's disk keeps the brand red in both themes */
+  --logo: #b3111e;
+  --gain: #0e6b41;
+  --loss: #a8460b;
+  --ins-bg: #ffec99;
+  --ins-line: #8a6a00;
+  --bar: #c9cfc9;
+  --bar-edge: #858d87;
+  --bar-latest: #111513;
+  --scrim: rgb(17 21 19 / 0.28);
+  --float: 0 0 0 1px rgb(17 21 19 / 0.1), 0 14px 36px -10px rgb(17 21 19 / 0.28);
+  /* chart series, in layer order: ink first, then inks a printed report would use beside it (Compare,
+     the chart builder). Each ≥ 3:1 on the sheet; the spec's CVD check of a new palette is still to come. */
   --series-0: #5c5350;
   --series-1: #3d5a80;
   --series-2: #9a5a17;
@@ -54,31 +43,26 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --page: #131011;
-    --sheet: #1a1617;
-    --sheet-2: #231e1f;
-    --ink: #ede6dc;
-    --ink-2: #b9b0a6;
-    --ink-3: #958c83;
-    --rule: #2f2829;
-    --rule-2: #433a3b;
-    --red: #e05a63;
-    --red-ink: #1a0d0f;
-    --red-soft: #2a191c;
-    --action: #ede6dc;
-    --action-ink: #131011;
-    --error: #e05a63;
-    --error-soft: #2a191c;
-    --up: #6cc495;
-    --up-soft: #18281f;
-    --warn: #dc9a5e;
-    --warn-soft: #2c2117;
-    --red-rule: rgb(224 90 99 / 0.42);
-    --red-wash: rgb(224 90 99 / 0.07);
-    --col-rule: #3d3435;
-    --overlay: rgb(0 0 0 / 0.55);
-    --lift: 0 0 0 1px rgb(255 255 255 / 0.06), 0 18px 50px rgb(0 0 0 / 0.5);
-    --edge-shadow: rgb(0 0 0 / 0.55);
+    --paper: #0e100f;
+    --sheet: #151816;
+    --well: #1c201d;
+    --ink: #e8ebe7;
+    --ink-2: #bcc4be;
+    --pencil: #98a29c;
+    --disabled: #5d6661;
+    --rule: #252a27;
+    --rule-2: #69736d;
+    --seal: #f7889c;
+    --logo: #b3111e;
+    --gain: #5cc68e;
+    --loss: #ee9a5a;
+    --ins-bg: #4a3f12;
+    --ins-line: #e6c13a;
+    --bar: #2c332f;
+    --bar-edge: #5f6862;
+    --bar-latest: #e8ebe7;
+    --scrim: rgb(0 0 0 / 0.5);
+    --float: 0 0 0 1px rgb(232 235 231 / 0.12), 0 18px 44px -10px rgb(0 0 0 / 0.75);
     --series-0: #cdc3b8;
     --series-1: #8fa8d6;
     --series-2: #d99a55;
@@ -92,31 +76,26 @@
 }
 
 :root[data-theme="dark"] {
-  --page: #131011;
-  --sheet: #1a1617;
-  --sheet-2: #231e1f;
-  --ink: #ede6dc;
-  --ink-2: #b9b0a6;
-  --ink-3: #958c83;
-  --rule: #2f2829;
-  --rule-2: #433a3b;
-  --red: #e05a63;
-  --red-ink: #1a0d0f;
-  --red-soft: #2a191c;
-  --action: #ede6dc;
-  --action-ink: #131011;
-  --error: #e05a63;
-  --error-soft: #2a191c;
-  --up: #6cc495;
-  --up-soft: #18281f;
-  --warn: #dc9a5e;
-  --warn-soft: #2c2117;
-  --red-rule: rgb(224 90 99 / 0.42);
-  --red-wash: rgb(224 90 99 / 0.07);
-  --col-rule: #3d3435;
-  --overlay: rgb(0 0 0 / 0.55);
-  --lift: 0 0 0 1px rgb(255 255 255 / 0.06), 0 18px 50px rgb(0 0 0 / 0.5);
-  --edge-shadow: rgb(0 0 0 / 0.55);
+  --paper: #0e100f;
+  --sheet: #151816;
+  --well: #1c201d;
+  --ink: #e8ebe7;
+  --ink-2: #bcc4be;
+  --pencil: #98a29c;
+  --disabled: #5d6661;
+  --rule: #252a27;
+  --rule-2: #69736d;
+  --seal: #f7889c;
+  --logo: #b3111e;
+  --gain: #5cc68e;
+  --loss: #ee9a5a;
+  --ins-bg: #4a3f12;
+  --ins-line: #e6c13a;
+  --bar: #2c332f;
+  --bar-edge: #5f6862;
+  --bar-latest: #e8ebe7;
+  --scrim: rgb(0 0 0 / 0.5);
+  --float: 0 0 0 1px rgb(232 235 231 / 0.12), 0 18px 44px -10px rgb(0 0 0 / 0.75);
   --series-0: #cdc3b8;
   --series-1: #8fa8d6;
   --series-2: #d99a55;
@@ -129,70 +108,142 @@
 }
 
 :root {
-  /* The names the rest of the stylesheet grew up with, read from Seal's. A screen restyled for Seal
-     uses Seal's names; the others keep working through these until their own pass. */
-  --bg: var(--page);
+  /* The names the older screens grew up with, read from the spec's. A screen rebuilt to the spec uses
+     the spec's names (--paper --sheet --well --ink --ink-2 --pencil --rule --rule-2 --seal --gain
+     --loss); the others keep working through these until their own pass. */
+  --page: var(--paper);
+  --sheet-2: var(--well);
+  --ink-3: var(--pencil);
+  --red: var(--seal);
+  --red-ink: var(--paper);
+  --red-soft: var(--well);
+  /* the action is the ink: one primary button per header, ink on paper */
+  --action: var(--ink);
+  --action-ink: var(--paper);
+  /* an error says "look here" in words and weight: never a colour of its own (each colour has one job) */
+  --error: var(--ink);
+  --error-soft: var(--well);
+  --up: var(--gain);
+  --up-soft: var(--well);
+  --warn: var(--ink-2);
+  --warn-soft: var(--well);
+  /* the old red hairlines and the current column's wash: the spec has no red line or box */
+  --red-rule: var(--rule);
+  --red-wash: transparent;
+  --col-rule: var(--rule);
+  --overlay: var(--scrim);
+  --lift: var(--float);
+  --edge-shadow: rgb(17 21 19 / 0.2);
+  --bg: var(--paper);
   --panel: var(--sheet);
-  --panel-2: var(--sheet-2);
+  --panel-2: var(--well);
   --line: var(--rule);
   --line-2: var(--rule-2);
   --text: var(--ink);
   --text-2: var(--ink-2);
-  --text-3: var(--ink-3);
-  /* the older screens' accent is the action now, not the red */
-  --accent: var(--action);
-  --accent-soft: var(--sheet-2);
-  --on-accent: var(--action-ink);
-  /* a link reads as the ink with a rule under it (underline colour; currentColor on hover) */
+  --text-3: var(--pencil);
+  --accent: var(--ink);
+  --accent-soft: var(--well);
+  --on-accent: var(--paper);
+  /* a link is the ink with a hairline under it; currentColor on hover */
   --link: var(--ink);
-  --link-rule: color-mix(in srgb, var(--ink) 38%, transparent);
+  --link-rule: var(--rule-2);
   --focus: var(--ink);
-  --pos: var(--up);
-  --pos-soft: var(--up-soft);
-  /* an error or a figure that doesn't tie: says "look here", never "a loss" (.neg is ink) */
-  --neg: var(--error);
-  --neg-soft: var(--error-soft);
+  --pos: var(--gain);
+  --pos-soft: var(--well);
+  --neg: var(--ink);
+  --neg-soft: var(--well);
   --shadow: none;
-  --popover-shadow: var(--lift);
+  --popover-shadow: var(--float);
 
-  /* Type: self-hosted (main.tsx imports them; the CSP allows fonts only from this origin). Source
-     Serif 4 reads: names, headings, sentences, figures. Archivo works: controls, navigation, meta. */
+  /* Type (§2.1): two families, self-hosted (main.tsx; the CSP allows fonts only from this origin).
+     Archivo for the interface and every figure; Source Serif 4 only for the filing's own words. */
   --serif: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
   --sans: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
   --font: var(--sans);
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  /* notes 12, meta 13.5, body and tables 15, list titles 16, section headings and the lead
-     sentence 22, a company's name 46, the front door's headline 60 */
+  --mono: var(--sans);
+  --fs-micro: 11px;
+  --fs-meta-12: 12px;
+  --fs-ui: 13px;
+  --fs-body: 14px;
+  --fs-section: 16px;
+  --fs-figure: 20px;
+  --fs-title: 28px;
+  --fs-quote: 15px;
+  --fs-reader: 17px;
+  --fs-display: 56px;
+  /* the older names, on the spec's steps (no fractional sizes, nothing under 11) */
   --fs-xs: 12px;
   --fs-sm: 13px;
-  --fs-meta: 13.5px;
+  --fs-meta: 13px;
   --fs-base: 14px;
-  --fs-md: 15px;
+  --fs-md: 14px;
   --fs-lg: 16px;
-  --fs-xl: 22px;
-  --fs-name: 46px;
-  --fs-hero: 60px;
+  --fs-xl: 20px;
+  --fs-name: 28px;
+  --fs-hero: 48px;
 
-  /* Spacing (4px grid, plus the dense 6/10 steps) */
+  /* Spacing (§2.2): 4 8 12 16 24 32 40 48 64 */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 40px;
+  --s-8: 48px;
+  --s-9: 64px;
+  /* the older steps, moved onto the scale (2 stays for hairline offsets) */
   --sp-1: 2px;
   --sp-2: 4px;
-  --sp-3: 6px;
+  --sp-3: 8px;
   --sp-4: 8px;
-  --sp-5: 10px;
+  --sp-5: 12px;
   --sp-6: 12px;
-  --sp-7: 14px;
-  --sp-8: 18px;
-  --sp-9: 28px;
+  --sp-7: 16px;
+  --sp-8: 16px;
+  --sp-9: 24px;
 
-  /* square corners: a ledger has none. Only round things (dots, the seal) are round. */
-  --radius-sm: 0;
-  --radius: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
+  /* Radius (§2.4): 3 controls, 4 a segmented track, 6 popovers and dialogs; tables and sections 0 */
+  --r-control: 3px;
+  --r-track: 4px;
+  --r-pop: 6px;
+  --radius-sm: 3px;
+  --radius: 3px;
+  --radius-md: 3px;
+  --radius-lg: 6px;
 
-  --press: 120ms cubic-bezier(0.23, 1, 0.32, 1);
-  --rubric-w: 190px;
-  --sidebar-w: 200px;
-  --drawer-w: 372px;
-  --topbar-h: 52px;
+  /* Controls (§2.5): one height */
+  --control-h: 32px;
+
+  /* Motion (§7.3). Nothing longer than 280ms; exits faster than entrances; no ease-in, no spring. */
+  --ease-enter: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.32, 0.72, 0, 1);
+  --t-press: 120ms;
+  --t-hover-out: 80ms;
+  --t-out: 90ms;
+  --t-in: 160ms;
+  --t-delay-in: 60ms;
+  --t-pop-in: 140ms;
+  --t-pop-out: 90ms;
+  --t-tab: 180ms;
+  --t-shared: 260ms;
+  --t-frame: 280ms;
+  --t-panel-in: 240ms;
+  --t-panel-out: 180ms;
+  --t-values: 120ms;
+  --shift: 12px;
+  --press: var(--t-press) var(--ease-enter);
+
+  /* Frame (§3) */
+  --topbar-h: 48px;
+  --rail-w: 232px;
+  --sidebar-w: 232px;
+  --drawer-w: 400px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --control-h: 40px;
+  }
 }

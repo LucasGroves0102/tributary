@@ -16,21 +16,6 @@
   display: inline-block;
 }
 
-.seal-logo {
-  width: 30px;
-  height: 30px;
-}
-
-.seal-lead {
-  width: 20px;
-  height: 20px;
-}
-
-.seal-ledger {
-  width: 14px;
-  height: 14px;
-}
-
 /* a seal on a figure opens its filing: a 24px target round a 14px mark */
 .seal-link {
   display: inline-flex;
@@ -60,266 +45,8 @@
   transform: scale(0.94);
 }
 
-/* the source, on hover or focus of a seal (Radix Tooltip; it places itself through the CSSOM) */
-.tip {
-  z-index: 70;
-  max-width: min(380px, calc(100vw - 32px));
-  background: var(--ink);
-  color: var(--page);
-  font-family: var(--sans);
-  font-size: var(--fs-xs);
-  line-height: 1.45;
-  padding: 7px 10px;
-  box-shadow: var(--lift);
-  transform-origin: var(--radix-tooltip-content-transform-origin);
-  animation: seal-pop 140ms cubic-bezier(0.23, 1, 0.32, 1);
-  white-space: pre-line;
-}
-
-@keyframes seal-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-}
-
-/* --- Choices: one of a few views (components/Choices, a Radix toggle group) ------------------ */
-
-.choices {
-  display: inline-flex;
-  flex: none;
-  max-width: 100%;
-  border: 1px solid var(--ink);
-  overflow-x: auto;
-  font-family: var(--sans);
-}
-
-.choices > button {
-  flex: none;
-  border: 0;
-  background: transparent;
-  padding: 4px 11px;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background-color var(--press), color var(--press);
-}
-
-.choices > button + button {
-  border-left: 1px solid var(--rule-2);
-}
-
-.choices > button:hover:not(:disabled):not([data-state="on"]) {
-  background: var(--sheet-2);
-  color: var(--ink);
-}
-
-.choices > button[data-state="on"] {
-  background: var(--ink);
-  color: var(--page);
-  font-weight: 600;
-}
-
-.choices > button:focus-visible {
-  outline-offset: -4px;
-  outline-color: var(--focus);
-}
-
-/* --- folio: a section with its rubric in the margin ------------------------------------------ */
-
-/* Margin rubrics: a 190px column of red labels (sans bold name, serif italic line) beside each
-   section, right-aligned; above the section when the page has less than 1100px. Sections are
-   ruled off from each other, 28px of air above each. */
-.folio {
-  display: grid;
-  grid-template-columns: var(--rubric-w) minmax(0, 1fr);
-  column-gap: 36px;
-  row-gap: 8px;
-  padding: var(--sp-9) 0 30px;
-  border-top: 1px solid var(--rule);
-}
-
-.folio.lead {
-  border-top: 0;
-  padding-top: 4px;
-}
-
-.rubric {
-  text-align: right;
-  color: var(--red);
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 14px;
-  line-height: 1.35;
-  padding-top: 5px;
-  min-width: 0;
-}
-
-.rubric h2 {
-  margin: 0;
-  font-family: var(--sans);
-  font-style: normal;
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--red);
-}
-
-.rubric p {
-  margin: 2px 0 0;
-}
-
-.rubric .aside {
-  display: block;
-  color: var(--ink-3);
-}
-
-/* a way on from a section, in its margin */
-.rubric a {
-  font-family: var(--sans);
-  font-style: normal;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.folio-body {
-  min-width: 0;
-}
-
-@container main (max-width: 1100px) {
-  .folio {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rubric {
-    text-align: left;
-    padding-top: 0;
-  }
-
-  .rubric h2,
-  .rubric p,
-  .rubric .aside {
-    display: inline;
-  }
-
-  .rubric p::before,
-  .rubric .aside::before {
-    content: " ";
-  }
-}
-
 /* --- the company's head ---------------------------------------------------------------------- */
 
-/* the page heading only: CompanySearch's picked value is a span.co-name too (it read 46px in the
-   chart builder's layer cards and Search's company filter) */
-h1.co-name {
-  margin: 0;
-  font-size: var(--fs-name);
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.02;
-  font-variation-settings: "opsz" 60;
-  overflow-wrap: anywhere;
-}
-
-.co-meta {
-  margin: 10px 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 26px;
-  font-family: var(--sans);
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-  line-height: 1.45;
-}
-
-.co-meta + .co-meta {
-  margin-top: 4px;
-  color: var(--ink-3);
-}
-
-.co-meta b {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.co-acts {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.co-acts .new-work {
-  display: contents;
-}
-
-/* "As of" (point in time): a date field under the actions; set, a quiet note on what it means */
-.co-asof {
-  margin-top: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 16px;
-}
-
-.co-asof-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--sans);
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-}
-
-.co-asof-note {
-  margin: 0;
-  color: var(--ink-2);
-  max-width: 72ch;
-}
-
-/* set, the mode that changes the figures is a band, not a grey line (Riley, test 10, 41) */
-.co-asof.on {
-  padding: 10px 12px;
-  background: var(--sheet-2);
-  border-left: 3px solid var(--ink);
-}
-
-.co-asof.on .co-asof-note {
-  color: var(--ink);
-}
-
-/* as of a past day, a section or tab that still shows today's data says so (Riley, test 10, 18-19) */
-.asof-today {
-  margin: 0 0 10px;
-  font-family: var(--sans);
-  font-size: var(--fs-meta);
-  color: var(--ink-2);
-  border-left: 3px solid var(--rule-2);
-  padding: 2px 0 2px 10px;
-}
-
-.asof-today.tab-today {
-  margin: 18px 0 0;
-}
-
-.asof-today-k {
-  font-weight: 600;
-  color: var(--ink);
-}
-
-/* results day (Riley, test 10, 21): the release is the news at the top */
-.results-out .results-line {
-  margin: 0 0 6px;
-}
-
-.co-head .save-form {
-  margin-top: 14px;
-  max-width: 560px;
-}
-
-/* More: a quiet caret drawn by CSS (a glyph rendered as a box on some systems) */
 .more-caret {
   width: 6px;
   height: 6px;
@@ -344,36 +71,13 @@ h1.co-name {
   background: var(--sheet-2);
 }
 
-/* a Radix menu (DropdownMenu, not modal): a sheet one level up, square, ruled */
+/* a Radix menu (DropdownMenu, not modal): ui.css draws it; its layer here */
 .menu {
   z-index: 70;
-  min-width: 190px;
-  padding: 4px 0;
-  background: var(--sheet);
-  border: 1px solid var(--rule-2);
-  border-top: 2px solid var(--ink);
-  box-shadow: var(--lift);
-  font-family: var(--sans);
-  font-size: var(--fs-base);
-  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
-  animation: seal-pop 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.menu-item {
-  padding: 7px 14px;
-  color: var(--ink);
-  cursor: pointer;
-  outline: none;
-  user-select: none;
-}
-
-.menu-item[data-highlighted] {
-  background: var(--sheet-2);
-  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .menu-item[data-disabled] {
-  color: var(--ink-3);
+  color: var(--disabled);
   cursor: default;
 }
 
@@ -389,8 +93,7 @@ h1.co-name {
 }
 
 .menu-item.danger[data-highlighted] {
-  background: var(--error-soft);
-  box-shadow: inset 2px 0 0 var(--error);
+  background: var(--well);
 }
 
 /* an option in a menu that stays on or off (components/MenuButton MenuCheck): a square box, ticked */
@@ -426,200 +129,6 @@ h1.co-name {
   text-align: center;
 }
 
-.tabs.co-tabs {
-  margin-top: 24px;
-  padding: 0;
-  border-top: 0;
-  border-bottom: 1px solid var(--rule);
-}
-
-@container main (max-width: 600px) {
-  h1.co-name {
-    font-size: 36px;
-  }
-
-  /* a phone's first screen: the name, its listing and the figures, not the filer category or the CIK
-     (Riley, test 10, finding 94); the tabs stay one row that scrolls sideways instead of wrapping to two */
-  .co-meta .co-minor {
-    display: none;
-  }
-
-  .co-meta {
-    gap: 2px 14px;
-    font-size: var(--fs-sm);
-  }
-
-  .co-acts {
-    margin-top: 12px;
-  }
-
-  .tabs.co-tabs {
-    margin-top: 14px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .tabs.co-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .tabs.co-tabs a {
-    flex: none;
-  }
-}
-
-/* --- the year, as a sentence ----------------------------------------------------------------- */
-
-.story {
-  margin: 0;
-  max-width: 60ch;
-  font-size: var(--fs-xl);
-  line-height: 1.5;
-  font-variation-settings: "opsz" 30;
-}
-
-.story b {
-  font-weight: 650;
-}
-
-.story .rise {
-  color: var(--up);
-  font-weight: 650;
-}
-
-@container main (max-width: 600px) {
-  .story {
-    font-size: 18px;
-  }
-}
-
-/* --- the ledger: key figures ------------------------------------------------------------------ */
-
-/* two columns of label / value rows (amounts, then rates), each value after a red rule */
-.ledger {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 40px;
-  max-width: 900px;
-  font-variant-numeric: lining-nums tabular-nums;
-}
-
-.ledger dl {
-  margin: 0;
-  min-width: 0;
-}
-
-.ledger dl > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  column-gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--rule);
-}
-
-.ledger dt {
-  color: var(--ink-2);
-  min-width: 0;
-}
-
-/* a figure not from the latest period says when it is from */
-.ledger dt .when {
-  display: block;
-  font-family: var(--sans);
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-}
-
-.ledger dd {
-  margin: 0;
-  min-width: 136px;
-  padding-left: 14px;
-  border-left: 1px solid var(--col-rule);
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: var(--ink);
-  text-align: right;
-}
-
-/* where a seal would be when there is none, so the figures stay in line */
-.ledger .seal-slot {
-  flex: none;
-  width: 14px;
-}
-
-.ledger dd.blank {
-  color: var(--ink-3);
-  font-weight: 400;
-}
-
-.ledger dd.old .figure {
-  color: var(--ink-3);
-  font-weight: 400;
-}
-
-/* a balance a later filing may have changed: the figure stays the ink (red read as a loss or an error,
-   Riley 33); the red is only its mark (CSS, so the text stays the figure) */
-.ledger dd.later .figure {
-  color: var(--ink);
-}
-
-.ledger dd.later .figure::after {
-  color: var(--red);
-}
-
-.ledger dd.later .figure::after {
-  content: "*";
-  margin-left: 1px;
-}
-
-.fnote {
-  margin-top: 12px;
-  max-width: 76ch;
-  display: grid;
-  gap: 5px;
-  font-size: var(--fs-sm);
-  color: var(--ink-3);
-}
-
-.fnote p {
-  margin: 0;
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.fnote .mark {
-  flex: none;
-  width: 14px;
-  color: var(--red);
-  font-weight: 700;
-  text-align: center;
-}
-
-.fnote .seal {
-  align-self: center;
-}
-
-.fnote .seal-slot {
-  flex: none;
-  width: 14px;
-}
-
-@container main (max-width: 680px) {
-  .ledger {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .ledger dd {
-    min-width: 116px;
-  }
-}
-
 /* --- red-letter days: filings since the last report ------------------------------------------ */
 
 ol.events {
@@ -631,9 +140,9 @@ ol.events {
 
 li.event {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
-  gap: 4px 18px;
-  padding: 14px 0;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 4px 12px;
+  padding: 12px 0;
   border-top: 0;
   border-bottom: 1px solid var(--rule);
 }
@@ -642,31 +151,17 @@ li.event:first-child {
   padding-top: 4px;
 }
 
+/* the day it was filed, 13/600 (spec §4 8-K row) */
 .event .day {
-  text-align: center;
-  line-height: 1;
-  padding-top: 2px;
+  font-size: 13px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 .event .day b {
-  display: block;
-  font-size: 34px;
-  font-weight: 650;
-  color: var(--ink);
-  font-variant-numeric: lining-nums;
-}
-
-.event .day span {
-  display: block;
-  margin-top: 3px;
-  font-family: var(--sans);
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-}
-
-/* a red-letter day: a filing that can change the figures (the API's `affects`) */
-.event.red .day b {
-  color: var(--red);
+  font-weight: 600;
 }
 
 .event-body {
@@ -675,10 +170,7 @@ li.event:first-child {
   gap: 6px;
 }
 
-/* a red-letter day's own 8-K mark is the red; the other days' marks keep the form's ink */
-.event.red .event-head .tag:first-child {
-  color: var(--red);
-}
+
 
 /* figures as of the report that a later 8-K may have changed: one line, the ledger's "*" beside it */
 .stale-line {
@@ -694,7 +186,7 @@ li.event:first-child {
 
 .stale-line .mark {
   flex: none;
-  color: var(--red);
+  color: var(--ink-2);
   font-weight: 700;
 }
 
@@ -703,7 +195,7 @@ li.event:first-child {
 /* a ledger's column rules, the bottom line double-ruled, the newest period washed */
 .t.ruled td + td,
 .t.ruled th + th {
-  border-left: 1px solid var(--col-rule);
+  border-left: 0;
 }
 
 .t.ruled td.first {
@@ -731,40 +223,31 @@ li.event:first-child {
 .t.ruled.now th:last-child,
 .t.ruled.now td:last-child,
 .t.ruled .current {
-  background: color-mix(in srgb, var(--red) 5%, var(--sheet));
+  background: transparent;
 }
 
 /* a table on a Seal page sits on the page's ground, not a sheet (a company tab's own sections too) */
 .folio .t th,
 .folio .t td.first,
-.company-page > section.card .t th,
-.company-page > section.card .t td.first,
-.company-page > section.card .t.filings td.actions {
+.co-panel > section.card .t th,
+.co-panel > section.card .t td.first,
+.co-panel > section.card .t.filings td.actions {
   background: var(--page);
 }
 
 .folio .t tbody tr:hover td.first,
-.company-page > section.card .t tbody tr:hover td.first,
-.company-page > section.card .t.filings tbody tr:hover td.actions {
+.co-panel > section.card .t tbody tr:hover td.first,
+.co-panel > section.card .t.filings tbody tr:hover td.actions {
   background: var(--sheet-2);
 }
 
 .folio .t.ruled.now th:last-child,
 .folio .t.ruled.now td:last-child,
 .folio .t.ruled .current {
-  background: color-mix(in srgb, var(--red) 5%, var(--page));
+  background: transparent;
 }
 
-@container main (max-width: 600px) {
-  li.event {
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 4px 12px;
-  }
 
-  .event .day b {
-    font-size: 26px;
-  }
-}
 
 /* --- the company page and its Overview ------------------------------------------------------ */
 
@@ -773,10 +256,9 @@ li.event:first-child {
 }
 
 /* a tab that isn't a Seal page yet (Earnings, Revenue, ...) sits under the head as it did */
-.company-page > .card,
-.company-page > .grid2,
-.company-page > section:not(.folio) {
-  margin-top: var(--sp-8);
+.co-panel > .card,
+.co-panel > .grid2 {
+  margin-top: 0;
 }
 
 .folios {
@@ -936,7 +418,7 @@ li.event:first-child {
 
 .ws-confirm {
   border-top: 2px solid var(--ink);
-  animation: seal-pop 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation: pop-in 180ms var(--ease-enter);
 }
 
 .ws-confirm .ws-confirm-q {
@@ -968,110 +450,47 @@ li.event:first-child {
   }
 }
 
-/* a computed figure's how, on focus (a tap or Tab) as well as the hover: the dd's own title, drawn by CSS so
-   the cell's text stays the figure (Riley, test 10, finding 55) */
-.ledger dd[tabindex] {
+/* --- a company tab's sections (the tabs batch 2 redraws): each card straight under the tab's panel reads
+   as a section of the spec (§4): no box, its heading a section title over a 1px ink rule, its line beside
+   it in pencil. A style only: the markup stays the card's. */
+.co-panel > section.card {
   position: relative;
-  cursor: help;
-}
-
-.ledger dd[tabindex]:focus {
-  outline: none;
-}
-
-.ledger dd[tabindex]:focus .figure {
-  text-decoration: underline dotted var(--ink-3);
-  text-underline-offset: 3px;
-}
-
-.ledger dd[tabindex]:focus::after {
-  content: attr(title);
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 5;
-  width: max-content;
-  max-width: 36ch;
-  padding: 8px 10px;
-  background: var(--sheet);
-  border: 1px solid var(--rule-2);
-  box-shadow: var(--lift);
-  color: var(--ink-2);
-  font-family: var(--sans);
-  font-size: var(--fs-sm);
-  font-weight: 400;
-  line-height: 1.45;
-  text-align: left;
-  white-space: pre-line;
-}
-
-/* --- a company tab's sections as the ledger reads them (Riley, test 10, finding 90) ------------------
-
-   Filings, Ratios, Segments, Revenue, Data notes, Peers and Price were bordered cards beside the
-   Overview's and Statements' margin rubrics: two layout systems on one page. A tab's own sections (a
-   card straight under the page) now read as a folio: ruled off, no box, the heading a rubric in the
-   margin with its line under it, the section beside it. A style only: the markup stays the card's. */
-.company-page > section.card {
-  position: relative;
-  min-height: 132px;
-  padding: var(--sp-9) 0 30px calc(var(--rubric-w) + 36px);
+  margin: 0 0 40px;
+  padding: 0;
   background: transparent;
   border: 0;
-  border-top: 1px solid var(--rule);
 }
 
-.company-page > section.card > .card-h {
+.co-panel > section.card > .card-h {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   min-height: 0;
-  padding: 0 0 var(--sp-4);
-  border-bottom: 0;
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
 }
 
-.company-page > section.card > .card-h:not(:has(> :not(h2, .sub))) {
-  padding: 0;
-}
-
-.company-page > section.card > .card-h > h2 {
-  position: absolute;
-  top: calc(var(--sp-9) + 5px);
-  left: 0;
-  width: var(--rubric-w);
-  text-align: right;
+.co-panel > section.card > .card-h > h2 {
   font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--red);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+  color: var(--ink);
 }
 
-.company-page > section.card > .card-h > .sub {
-  position: absolute;
-  top: calc(var(--sp-9) + 26px);
-  left: 0;
-  width: var(--rubric-w);
-  text-align: right;
-  font-family: var(--serif);
-  font-style: italic;
-  font-size: 14px;
-  line-height: 1.35;
-  color: var(--ink-3);
+.co-panel > section.card > .card-h > .sub {
+  font-family: var(--sans);
+  font-style: normal;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
 }
 
-.company-page > section.card > .card-b,
-.company-page > section.card > .foot,
-.company-page > section.card > .empty {
+.co-panel > section.card > .card-b,
+.co-panel > section.card > .foot,
+.co-panel > section.card > .empty {
   padding-left: 0;
   padding-right: 0;
-}
-
-@container main (max-width: 1100px) {
-  .company-page > section.card {
-    min-height: 0;
-    padding-left: 0;
-  }
-
-  .company-page > section.card > .card-h > h2,
-  .company-page > section.card > .card-h > .sub {
-    position: static;
-    width: auto;
-    text-align: left;
-  }
 }

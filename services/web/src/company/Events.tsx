@@ -33,7 +33,7 @@ export function EventsCard({ token, companyId, name, load: given, folio = false 
   const load = given === undefined ? own : given;
   const data = load?.state === "ok" ? load.data : null;
   const body = (
-    <Gate load={load} name={name} what="Filings">
+    <Gate load={load} name={name} what="Filings" shape={<EventsShape />}>
       {() => data === null ? (
         <p className="empty">8-Ks since the last report aren't available here yet. The company's Filings tab lists every 8-K.</p>
       ) : (
@@ -55,7 +55,7 @@ export function EventsCard({ token, companyId, name, load: given, folio = false 
         <h2 id={id}>Since the last report</h2>
         <span className="sub">{data ? windowLine(data) : "8-Ks filed after the latest 10-Q or 10-K period end"}</span>
       </div>
-      <Gate load={load} name={name} what="Filings">
+      <Gate load={load} name={name} what="Filings" shape={<EventsShape />}>
         {() => data === null ? (
           <p className="empty">8-Ks since the last report aren't available here yet. The company's Filings tab lists every 8-K.</p>
         ) : (
@@ -63,6 +63,20 @@ export function EventsCard({ token, companyId, name, load: given, folio = false 
         )}
       </Gate>
     </section>
+  );
+}
+
+/** The 8-K rows' shape while they load: a day and a few lines, blank. */
+function EventsShape() {
+  return (
+    <ol className="events" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <li key={i} className="event">
+          <div className="day"><span className="blank-v w-48" /></div>
+          <div className="event-body"><span className="blank-v w-240" /><span className="blank-v w-480" /></div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -117,19 +131,17 @@ function EventsBody({ companyId, data, brief = false }: { companyId: string; dat
   );
 }
 
-/** A red-letter day: the date it was filed, large, red when the filing can change the figures (the
- * API's `affects`); then what it is, its words and where to read it. */
+/** An 8-K row (.interface-design/system.md §4): the day it was filed, then what it is, its own words
+ * and where to read it. */
 function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
   const ex = e.excerpt;
   const cite = ex?.citation;
   const edgar = e.document_url ?? e.filing_url;
   const affects = e.affects.map((m) => METRIC_LABEL[m] ?? m);
-  const [y, , d] = e.filed.slice(0, 10).split("-");
   return (
     <li className={affects.length ? "event red" : "event"}>
       <div className="day">
-        <b aria-hidden="true">{Number(d)}</b>
-        <span aria-hidden="true">{day(e.filed).split(" ")[0]} {y}</span>
+        <b aria-hidden="true">{day(e.filed)}</b>
         <span className="event-date visually-hidden">{day(e.filed, true)}</span>
       </div>
       <div className="event-body">

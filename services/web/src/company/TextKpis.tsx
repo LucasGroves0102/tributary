@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { textKpis } from "../api";
 import { LayerChart } from "../chart/LayerChart";
 import { Folio } from "../components/Folio";
+import { TextShape } from "../components/States";
 import type { Source } from "../chart/series";
 import { day } from "../format";
 import { go, href } from "../route";
@@ -34,7 +35,7 @@ export function TextKpisCard({ token, companyId, name, canRead, compact = false,
   const body = !canRead ? (
     <p className="empty locked">These figures are read from {name}'s filing text, which your plan doesn't include.</p>
   ) : (
-    <Gate load={load} name={name} what="Filings">
+    <Gate load={load} name={name} what="Filings" shape={<TextShape />}>
       {() => <Body data={load?.state === "ok" ? load.data : null} companyId={companyId} name={name} compact={compact} />}
     </Gate>
   );

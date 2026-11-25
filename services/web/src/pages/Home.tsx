@@ -4,7 +4,7 @@ import { Choices } from "../components/Choices";
 import { FigureText } from "../components/FigureText";
 import { FormMark } from "../components/FormMark";
 import { toast } from "../components/Toasts";
-import { ErrorPanel, Skeleton } from "../components/States";
+import { ErrorPanel, LedgerShape } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day, periodPhrase, UNNAMED } from "../format";
 import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
@@ -45,7 +45,8 @@ interface Props {
 }
 
 /** Cards shown side by side when next to each other. */
-const HALF = new Set<HomeCardId>(["filings", "expected"]);
+/** Cards that sit beside the new filings when they follow them (spec §6 Home: the side column). */
+const SIDE = new Set<HomeCardId>(["expected", "notes"]);
 
 export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, recent, notes, layout, onCustomize, editor, columnPicker, readableCompanies = 0, onNewChart, start }: Props) {
   const { watchlist, rows, filings: allFilings, expected, since, firstVisit } = workspace;
@@ -135,20 +136,22 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
     }
   };
 
-  // visible cards in order; two half cards next to each other share a row
+  // visible cards in order (Customize); the new filings lead, and the side cards right after them (expected
+  // filings, data notes) sit in a side column beside them (spec §6: lead 7, side 5; stacked when narrow)
   const shown = (layout ?? defaultHome()).filter((c) => !c.hidden).map((c) => c.id);
   const blocks: ReactNode[] = [];
   for (let i = 0; i < shown.length; i++) {
     const id = shown[i]!;
-    const next = shown[i + 1];
-    if (HALF.has(id) && next && HALF.has(next)) {
-      blocks.push(
-        <div className="grid2" key={`${id}-${next}`}>
-          {card(id)}
-          {card(next)}
-        </div>,
-      );
-      i++;
+    if (id === "filings") {
+      const side: HomeCardId[] = [];
+      while (i + 1 < shown.length && SIDE.has(shown[i + 1]!)) side.push(shown[++i]!);
+      const aside = side.map((s) => card(s)).filter(Boolean);
+      blocks.push(aside.length ? (
+        <div className="home-split" key="filings">
+          <div className="home-lead">{card(id)}</div>
+          <div className="home-side">{side.map((s) => <Fragment key={s}>{card(s)}</Fragment>)}</div>
+        </div>
+      ) : <Fragment key={id}>{card(id)}</Fragment>);
     } else {
       const el = card(id);
       if (el) blocks.push(<Fragment key={id}>{el}</Fragment>);
@@ -303,7 +306,10 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
     action: { label: "Undo", onClick: () => void workspace.watch(id).catch(() => setError("Couldn't put it back. Add it again with + Add.")) },
   });
 
-  if (watchlist.state === "loading") return <Skeleton lines={4} label="Loading your watchlist" />;
+  if (watchlist.state === "loading") {
+    return <LedgerShape label="Loading your watchlist" first="Company" rows={4}
+      columns={["Last filing", ...workspace.columns.map((c) => c.label), "Next filing"]} />;
+  }
   if (watchlist.state === "unavailable") {
     return (
       <p className="empty">
@@ -364,7 +370,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
               <tr key={r.companyId} className="clk" {...navRow(i, r.name)} onClick={() => go({ view: "company", companyId: r.companyId })}>
                 <td className="first">
                   <a className="co" href={href({ view: "company", companyId: r.companyId })} onClick={(e) => e.stopPropagation()}>
-                    <b>{r.name}</b>
+                    <b data-entity-name="">{r.name}</b>
                     {r.ticker && <span className="faint mono">{r.ticker}</span>}
                   </a>
                 </td>
@@ -408,7 +414,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                     <span className="faint">no estimate</span>
                   )}
                 </td>
-                <td className="n" onClick={(e) => e.stopPropagation()}>
+                <td className="n actions" onClick={(e) => e.stopPropagation()}>
                   <button
                     className="btn sm ghost"
                     disabled={removing === r.companyId}
@@ -447,7 +453,7 @@ function sortWatch(rows: WatchRow[], key: string, desc: boolean): WatchRow[] {
 }
 
 function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boolean }) {
-  if (filings === null) return <Skeleton lines={5} label="Loading recent filings" />;
+  if (filings === null) return <LedgerShape label="Loading recent filings" first="Filed" columns={["Form", "Company"]} rows={5} />;
   if (filings.length === 0) {
     return (
       <p className="empty">
@@ -456,42 +462,53 @@ function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boo
       </p>
     );
   }
+  // grouped by the day filed (spec §6 Home): the date once, at the head of its day
+  const shown = filings.slice(0, FEED_ROWS);
   return (
     <ul className="feed">
-      {filings.slice(0, FEED_ROWS).map((f) => (
-        <li key={f.accessionNo} className={f.isNew ? "it new" : "it"}>
-          <span className="muted num">{day(f.filed)}</span>
-          <FormMark form={f.form} />
-          <span className="feed-name">
-            {f.isNew && bold ? <b>{f.name}</b> : f.name}
-            {f.periodEnd && <span className="muted feed-period">, {periodPhrase(f.form, f.periodEnd)}</span>}
-          </span>
-          <span className="row">
-            {f.readable ? (
-              <a
-                className="btn sm ghost"
-                href={href({ view: "filing", companyId: f.companyId, accessionNo: f.accessionNo, section: null })}
-              >
-                Read
-              </a>
-            ) : (
-              <a
-                className="btn sm ghost"
-                href={href({ view: "company", companyId: f.companyId, tab: "filings" })}
-                title="Reading filing text needs the pro plan and a grant for this company"
-              >
-                Open
-              </a>
-            )}
-          </span>
-        </li>
-      ))}
+      {shown.map((f, i) => {
+        const first = i === 0 || shown[i - 1]!.filed.slice(0, 10) !== f.filed.slice(0, 10);
+        return (
+          <li key={f.accessionNo} className={[f.isNew ? "it new" : "it", first && "day-first"].filter(Boolean).join(" ")}>
+            <span className="feed-date num">{first ? day(f.filed) : <span className="visually-hidden">{day(f.filed)}</span>}</span>
+            <FormMark form={f.form} />
+            <span className="feed-name">
+              {f.isNew && bold ? <b>{f.name}</b> : f.name}
+              {f.periodEnd && <span className="muted feed-period">, {periodPhrase(f.form, f.periodEnd)}</span>}
+            </span>
+            <span className="feed-act">
+              {f.readable ? (
+                <a
+                  className="btn sm ghost"
+                  href={href({ view: "filing", companyId: f.companyId, accessionNo: f.accessionNo, section: null })}
+                >
+                  Read
+                </a>
+              ) : (
+                <a
+                  className="btn sm ghost"
+                  href={href({ view: "company", companyId: f.companyId, tab: "filings" })}
+                  title="Reading filing text needs the pro plan and a grant for this company"
+                >
+                  Open
+                </a>
+              )}
+              {/* a 10-K or 10-Q opens on what changed in it (spec §6 Home) */}
+              {f.readable && /^10-[KQ]$/.test(f.form) && (
+                <a className="btn sm ghost" href={href({ view: "filing", companyId: f.companyId, accessionNo: f.accessionNo, section: null, mode: "changes" })}>
+                  What changed
+                </a>
+              )}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
 function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
-  if (expected === null) return <Skeleton lines={4} label="Loading expected filings" />;
+  if (expected === null) return <LedgerShape label="Loading expected filings" first="Date" columns={["Company", "Form", "Period end"]} rows={4} />;
   if (expected.length === 0) {
     return (
       <p className="empty">

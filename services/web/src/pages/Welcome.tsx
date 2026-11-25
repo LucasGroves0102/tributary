@@ -292,22 +292,31 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
             </div>
           )}
         </section>
+        {/* the proof as one ledger row, read live from Data status (spec §6 Front door) */}
         <section className="welcome-proof" aria-label="What's in Tributary">
           <Proof />
-          <h2 className="welcome-sect">What's in it</h2>
-          <ul className="welcome-list">
-            <li>Screen companies on revenue, growth, margins and debt, and save the screen.</li>
-            <li>Read 10-K, 10-Q and 8-K filings by section, and see what changed since the last one.</li>
-            <li>Chart any metric or your own formula; every point opens the filing behind it.</li>
-            <li>Compare a company with its peers, then build a guided analysis with a thesis and a model.</li>
-            <li>Ask the assistant: it answers from the filings and cites them. No stock prices, consensus estimates or call transcripts.</li>
-          </ul>
-          <p className="welcome-status">
-            <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is, live.
-          </p>
-          <p className="welcome-status">
-            <a href={href({ view: "api" })}>Using the API</a>: the same data from your own scripts, with a key.
-          </p>
+        </section>
+        <section className="welcome-more">
+          <div>
+            <h2 className="welcome-sect">What's in it</h2>
+            <ul className="welcome-list">
+              <li>Screen companies on revenue, growth, margins and debt, and save the screen.</li>
+              <li>Read 10-K, 10-Q and 8-K filings by section, and see what changed since the last one.</li>
+              <li>Chart any metric or your own formula; every point opens the filing behind it.</li>
+              <li>Compare a company with its peers, then build a guided analysis with a thesis and a model.</li>
+              <li>Ask the assistant: it answers from the filings and cites them.</li>
+            </ul>
+          </div>
+          <div>
+            <h2 className="welcome-sect">Not here, on purpose</h2>
+            <p className="welcome-not">No stock prices, consensus estimates or call transcripts: only what companies file with the SEC.</p>
+            <p className="welcome-status">
+              <a href={href({ view: "status" })}>Data status</a>: how fresh, complete and checked the data is, live.
+            </p>
+            <p className="welcome-status">
+              <a href={href({ view: "api" })}>Using the API</a>: the same data from your own scripts, with a key.
+            </p>
+          </div>
         </section>
       </div>
     </main>

@@ -1,0 +1,2584 @@
+/* Noor's build spec (.interface-design/system.md), batches 2 and 3: every page batch 1 didn't rebuild.
+   The rules every page shares come first (the page header, sections instead of cards, the ledger, fields
+   and chips), then each page's own. Tokens only (tokens.css); loaded last, after company.css. */
+
+/* --- the page and its header (§4 Page header) --------------------------------------------------- */
+
+/* (the company page keeps batch 1's own spacing: company.css) */
+.page:not(.company-page) {
+  gap: 40px;
+}
+
+/* title 28/36, the actions on its line: secondaries, then the one primary at the far right */
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 8px;
+  min-height: 36px;
+}
+
+.page-bar > h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 16px;
+}
+
+.page-bar > h1.grow {
+  flex: 1 1 auto;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* the meta beside a title (a count, a date): 13px pencil, never a second headline */
+.page-bar > .muted,
+.page-bar > .faint {
+  font-size: 13px;
+  color: var(--pencil);
+}
+
+/* a header's content follows 24px under it; sections stack 40 apart */
+.page > .page-bar + * {
+  margin-top: -16px;
+}
+
+.crumb {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+/* --- no cards (§2.4): a section is its title over a 1px ink rule, on the page's ground ------------- */
+
+/* (a report's embeds stay sheets: they print as the report's own figures on white) */
+.page .card:not(.report-embed),
+.page section.card:not(.report-embed) {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.page .card.pad {
+  padding: 0;
+}
+
+.page .card > .card-h,
+.page .card-h {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-height: 0;
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.page .card-h > h2,
+.page .card-h > h3 {
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.page .card-h .sub {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+/* a header's controls sit on its title's line, at the right */
+.page .card-h > .btn,
+.page .card-h > .grow + * {
+  align-self: center;
+}
+
+.page .card-b,
+.page .card-note,
+.page .card > .foot,
+.page .card > .empty,
+.page .card .pager {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.page .card-note {
+  border-bottom: 0;
+  padding-top: 0;
+  font-size: 13px;
+}
+
+.page .empty {
+  padding: 8px 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+.foot {
+  padding: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+/* --- the ledger table everywhere (§4 Ledger table) ---------------------------------------------- */
+/* header cells 12/500 ink-2 over a 1px ink rule; rows 32px with hairlines, no vertical rules; the name
+   column on the page's left edge; a row tints `sheet` on hover (on at once, off in 80ms) */
+
+.t:not(.led) th {
+  padding: 0 0 8px 12px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.t:not(.led) th.first,
+.t:not(.led) td.first {
+  padding-left: 0;
+  background: var(--paper);
+}
+
+.t:not(.led) th.first {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.t:not(.led) th .unit {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+.t:not(.led) td {
+  height: 32px;
+  padding: 4px 0 4px 12px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 20px;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.t:not(.led) td.n {
+  font-size: 13px;
+}
+
+.t:not(.led) td:last-child,
+.t:not(.led) th:last-child {
+  padding-right: 0;
+}
+
+.t:not(.led) tr:last-child td {
+  border-bottom: 1px solid var(--rule);
+}
+
+.t.ruled-n td.n + td.n,
+.t.ruled-n th.n + th.n {
+  border-left: 0;
+}
+
+.t tbody tr:hover td,
+.t tbody tr:hover td.first {
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t:not(.led) tbody tr:hover td,
+  .t:not(.led) tbody tr:hover td.first {
+    background: var(--sheet);
+    transition-duration: 0s;
+  }
+}
+
+@media (pointer: coarse) {
+  .t:not(.led) td {
+    height: 40px;
+  }
+}
+
+/* sorting turns the header ink and adds the arrow; no underline bar */
+.t th.sort {
+  cursor: pointer;
+}
+
+.t th[aria-sort="ascending"],
+.t th[aria-sort="descending"] {
+  box-shadow: none;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.t th.sort:hover {
+  color: var(--ink);
+}
+
+/* a selected or watched row: a 2px ink notch at its left edge */
+.t tr.watched td.first,
+.t tr.sel td.first {
+  box-shadow: inset 2px 0 0 var(--ink);
+  padding-left: 12px;
+}
+
+.t tr.watched td.first {
+  padding-left: 8px;
+}
+
+/* row actions: a fixed slot at the row's end, quiet; shown on hover on a fine pointer, always on a coarse one */
+.t td.actions {
+  text-align: right;
+}
+
+.t td.actions .btn.sm {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t.screen td.actions .btn {
+    opacity: 0;
+    transition: opacity var(--t-hover-out) linear;
+  }
+
+  .t.screen tr:hover td.actions .btn,
+  .t.screen tr:focus-within td.actions .btn,
+  .t.screen td.actions .btn.watching {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+}
+
+/* a reading in a cell: the dash and an 11px letter (§4 Readings), explained under the table */
+.rdg-cell {
+  white-space: nowrap;
+}
+
+.rdg-cell .rdg,
+.rdg-k .rdg {
+  margin-left: 1px;
+  font-size: 11px;
+  line-height: 0;
+  font-weight: 600;
+  font-style: normal;
+  color: var(--ink-2);
+}
+
+.led-legend {
+  margin: 8px 0 0;
+}
+
+.rdg-k {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* the loading ledger: its own headers, blank values (§7.6) */
+/* (clipped, never scrolled: a placeholder wider than a phone must not widen the page) */
+.ledger-shape {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ledger-shape .t.shape {
+  width: 100%;
+}
+
+.ledger-shape .t.shape td .blank-v {
+  vertical-align: middle;
+}
+
+.ledger-shape .t.shape td.n {
+  text-align: right;
+}
+
+.blank-v.w-40 { width: 40px; }
+.blank-v.w-56 { width: 56px; }
+.blank-v.w-104 { width: 104px; }
+.blank-v.w-120 { width: 120px; }
+.blank-v.w-140 { width: 140px; }
+
+/* --- fields and chips (§2.5) ------------------------------------------------------------------- */
+
+.field,
+select,
+input[type="date"] {
+  border: 0;
+  border-radius: var(--r-control);
+  background-color: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  font-size: 13px;
+}
+
+.field:hover,
+select:hover:not(:disabled),
+input[type="date"]:hover {
+  box-shadow: inset 0 0 0 1px var(--ink-2);
+}
+
+.field:focus,
+select:focus-visible,
+input[type="date"]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+textarea.field {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* labels sit above, 12/500 in ink-2 */
+.page label:not(.chk):not(.visually-hidden) {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* a chip: 32px, a rule-2 outline; an applied filter (or a chosen option) gets an ink outline */
+button.chip,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h);
+  max-width: 100%;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+button.chip.on,
+.chip.removable {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.chip.removable {
+  margin: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.chip:hover:not(:disabled) {
+    background: var(--well);
+  }
+}
+
+/* --- Companies (the screener, §6) --------------------------------------------------------------- */
+
+.page.screener-page {
+  gap: 24px;
+}
+
+.screener-page > .page-bar + * {
+  margin-top: 0;
+}
+
+/* the filters: one row of equal 32px controls, wrapping only when the page is narrow */
+.filter-band {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filter-toggle {
+  display: none;
+  align-self: flex-start;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--control-h);
+  padding: 0 0 0 10px;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.fchip.on {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.fchip:focus-within {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.page .fchip > label:not(.visually-hidden) {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.fchip > select,
+.fchip > input {
+  height: 30px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px 0 2px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fchip > select:hover:not(:disabled),
+.fchip > input:hover,
+.fchip > select:focus-visible,
+.fchip > input:focus,
+.fchip > input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.fchip > select {
+  field-sizing: content;
+  padding-right: 22px;
+  background-position: calc(100% - 13px) 55%, calc(100% - 8px) 55%;
+  max-width: 200px;
+}
+
+.fchip > input::placeholder {
+  color: var(--pencil);
+  font-weight: 400;
+}
+
+.fchip > input[type="number"] {
+  width: 4ch;
+  padding-right: 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.fchip > input[type="number"]::-webkit-inner-spin-button,
+.fchip > input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.fchip-u {
+  padding-right: 10px;
+  color: var(--pencil);
+}
+
+.fchip > input#f-ind {
+  width: 7ch;
+}
+
+.fchip-q {
+  padding-left: 10px;
+}
+
+.fchip-q > input {
+  width: 14ch;
+  font-weight: 500;
+}
+
+.fchip-glyph {
+  flex: none;
+  color: var(--pencil);
+}
+
+.fchip-chk {
+  height: var(--control-h);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.filter-clear {
+  margin-left: auto;
+}
+
+.applied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.applied-issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+@container main (max-width: 699px) {
+  .filter-toggle {
+    display: inline-flex;
+  }
+
+  .filter-row.folded {
+    display: none;
+  }
+
+  .fchip,
+  .fchip-chk {
+    height: 44px;
+  }
+
+  .fchip > select,
+  .fchip > input {
+    height: 42px;
+  }
+}
+
+/* the count over the table, the group-by control at its right */
+.screen-results {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.screen-count {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 32px;
+  margin: 0 0 16px;
+}
+
+.screen-total {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.screen-desc {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--pencil);
+}
+
+.screen-mine {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.screen-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-desc + .screen-group {
+  margin-left: auto;
+}
+
+.screen-group-k {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.screen-results .tw {
+  margin: 0;
+}
+
+/* the name column: name, then the ticker as a code; the industry under it in pencil */
+.t.screen td.first {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.t.screen .co b {
+  font-weight: 600;
+}
+
+.t.screen .co .ticker {
+  margin-left: 8px;
+  font-size: 12px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+.t.screen td.first .co-sub {
+  display: none;
+}
+
+.t.screen th.n.long {
+  min-width: 0;
+}
+
+.t.screen td.actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.t.screen td.actions .btn.sm {
+  padding: 0 6px;
+}
+
+.t.screen td.ind {
+  max-width: 160px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.t.screen td.ind .ind-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t.screen td.ind .sector-sub {
+  display: none;
+}
+
+.t.screen td.ind .sic-code {
+  font-size: 11px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+.t.screen td.n {
+  font-size: 13px;
+}
+
+.t.screen tr.group-head th {
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  text-align: left;
+}
+
+/* the industry column folds into a line under the name when the table has no room for it */
+@container tw (min-width: 1081px) {
+  .t.screen th.ind,
+  .t.screen td.ind {
+    display: table-cell;
+  }
+}
+
+@container tw (max-width: 1080px) {
+  .t.screen th.ind,
+  .t.screen td.ind {
+    display: none;
+  }
+
+  .t.screen td.first .co-sub {
+    display: block;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+}
+
+@container main (max-width: 599px) {
+  .t.screen td.first {
+    min-width: 150px;
+    max-width: 170px;
+  }
+
+  .t.screen .co {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .t.screen .co .ticker {
+    margin-left: 0;
+  }
+
+  .t.screen td.first .co-sub {
+    display: none;
+  }
+}
+
+.screen-results .pager {
+  padding: 12px 0 0;
+  border-top: 0;
+}
+
+.screen-results .foot {
+  max-width: 96ch;
+}
+
+.screen-updating {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* --- the filing reader (§4 Reader, §6) ----------------------------------------------------------- */
+/* the crumb, the title with its one primary, a meta row; then Read | What changed and the search; the
+   outline (208), the page (a sheet with a hairline, the filing's words in Source Serif 17/28 on a 660px
+   measure) */
+
+.page.reader {
+  gap: 24px;
+}
+
+.reader-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reader-head .crumb {
+  margin: 0 0 4px;
+}
+
+.crumb a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-2);
+}
+
+.reader-head h1 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.reader-head h1 .tag {
+  font-size: 13px;
+}
+
+.reader-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--pencil);
+}
+
+.reader-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.reader-search {
+  display: flex;
+  align-items: center;
+  flex: 1 1 360px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.reader-search .field {
+  flex: 1 1 auto;
+  max-width: 360px;
+  min-width: 0;
+}
+
+.reader-search .chk {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.filing-steps {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+
+.reader-body {
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 32px;
+}
+
+.toc-toggle {
+  display: none;
+}
+
+.toc {
+  gap: 0;
+  font-size: 13px;
+}
+
+.toc .grp {
+  margin: 0 0 16px;
+}
+
+.toc .grp-h {
+  padding: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pencil);
+}
+
+.toc a {
+  align-items: baseline;
+  gap: 0;
+  min-height: 32px;
+  padding: 6px 8px 6px 0;
+  border-radius: var(--r-control);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 20px;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.toc .key {
+  flex: none;
+  width: 30px;
+  min-width: 0;
+  padding-left: 8px;
+  font-size: 12px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .toc a:hover {
+    background: var(--sheet);
+    transition-duration: 0s;
+  }
+}
+
+.toc a[aria-current="page"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--ink);
+}
+
+.toc .cnt {
+  flex: none;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.toc .cnt.changed {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+/* the page: a sheet with a hairline; Tributary's labels in Archivo, the filing's words in the serif */
+.section-text {
+  padding: 24px 40px 32px;
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  background: var(--sheet);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 28px;
+  color: var(--ink);
+}
+
+/* the reader's measure: 660px of the filing's words (§2.1) */
+.section-text p {
+  max-width: 660px;
+}
+
+.section-text .section-h {
+  margin: 0 0 16px;
+  padding: 8px 0;
+  background: var(--sheet);
+  box-shadow: none;
+  font-family: var(--sans);
+}
+
+.section-text .section-h h2 {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.section-text .section-h .btn,
+.section-text .statements-elsewhere,
+.section-text .section-nav,
+.section-text .empty,
+.section-text .faint.small {
+  font-family: var(--sans);
+}
+
+.section-text .section-nav {
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+/* a filing's table keeps its own units and columns, in the interface face, on the page's ruling */
+.section-text .filing-table {
+  border: 0;
+  border-radius: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.section-text .filing-table .t th,
+.section-text .filing-table .t td.first {
+  background: var(--sheet);
+}
+
+.section-text mark {
+  background: var(--well);
+  box-shadow: inset 0 -2px 0 var(--ink-2);
+  border-radius: 0;
+}
+
+.section-text mark.cur {
+  background: var(--ins-bg);
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+
+.section-text p.hit {
+  background: transparent;
+  box-shadow: inset 2px 0 0 var(--ink-2);
+  margin-left: -16px;
+  padding: 0 0 0 14px;
+  border-radius: 0;
+}
+
+@container main (max-width: 900px) {
+  .reader-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .toc-toggle {
+    display: inline-flex;
+    justify-self: start;
+  }
+
+  .toc {
+    position: static;
+    max-height: none;
+  }
+
+  .toc.folded {
+    display: none;
+  }
+
+  .section-text {
+    padding: 16px 16px 24px;
+  }
+}
+
+/* --- What changed (blackline, §4): inserted text tinted and underlined, deleted text struck through in
+   pencil and still readable, a 2px change bar, the ranker's notes beside each change ---------------- */
+
+.changes-page {
+  padding-top: 16px;
+}
+
+.changes {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 22px;
+  container: changes / inline-size;
+}
+
+.changes-tools {
+  gap: 8px 16px;
+  padding: 0 0 16px;
+}
+
+.changes-basis,
+.changes-why,
+.changes-hidden {
+  margin: 0 0 4px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.changes-basis {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+/* the segmented controls inside (Against, Order, a Filings tab's forms): a well track, the chosen one a sheet */
+.seg {
+  display: inline-flex;
+  flex: none;
+  max-width: 100%;
+  padding: 2px;
+  gap: 0;
+  border: 0;
+  border-radius: var(--r-track);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.seg > button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.seg > button + button {
+  border-left: 0;
+}
+
+.seg > button.on,
+.seg > button[aria-pressed="true"] {
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule-2);
+  color: var(--ink);
+}
+
+@media (pointer: coarse) {
+  .seg > button {
+    height: 40px;
+  }
+}
+
+.diff {
+  gap: 0;
+}
+
+.changes .diff.card-b,
+.card-b.diff {
+  padding: 0;
+}
+
+.changes-count {
+  margin: 8px 0 16px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* one change: its head, its passage (serif, a change bar), the notes at the right */
+.diff p.new,
+.diff p.removed,
+.diff p.rewritten {
+  display: grid;
+  grid-template-columns: minmax(0, 660px) minmax(180px, 220px);
+  grid-template-areas:
+    "head notes"
+    "body notes"
+    "fold notes";
+  align-items: start;
+  column-gap: 32px;
+  margin: 0;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  line-height: 22px;
+}
+
+.diff p .change-head {
+  grid-area: head;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+
+.diff p .change-head b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.diff p .change-head .tag {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.diff p .change-head .tag::before {
+  content: "· ";
+  color: var(--pencil);
+}
+
+.change-n {
+  min-width: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.diff p .change-body {
+  grid-area: body;
+  display: block;
+  padding: 0 0 0 16px;
+  border-left: 2px solid var(--ink-2);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 28px;
+  color: var(--ink);
+}
+
+.diff p .fold-toggle {
+  grid-area: fold;
+  justify-self: start;
+  margin: 8px 0 0 16px;
+}
+
+.diff p .change-notes {
+  grid-area: notes;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 24px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.diff p .change-why,
+.diff p .change-links {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+/* the notes are the ranker's facts alone; "Why it ranks here" is said once, for a screen reader */
+.diff p .change-why .cw-k {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.diff p .change-why .cw {
+  display: block;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.diff p .change-why .cw-sep {
+  display: none;
+}
+
+.diff p .change-links a {
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.diff p .change-links a::after {
+  content: " →";
+}
+
+/* the blackline itself */
+.diff ins,
+.sbs-r ins {
+  background: var(--ins-bg);
+  color: var(--ink);
+  font-weight: inherit;
+  text-decoration: underline 2px var(--ins-line);
+  text-underline-offset: 4px;
+  text-decoration-skip-ink: none;
+}
+
+.diff del,
+.sbs-r del {
+  color: var(--pencil);
+  text-decoration: line-through 1px var(--pencil);
+}
+
+/* screen readers hear where an insertion and a deletion start and end (§4); the text stays the filing's */
+.diff ins::before,
+.diff ins::after,
+.diff del::before,
+.diff del::after,
+.sbs-r ins::before,
+.sbs-r ins::after,
+.sbs-r del::before,
+.sbs-r del::after {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(100%);
+  white-space: nowrap;
+}
+
+.diff ins::before,
+.sbs-r ins::before {
+  content: " [inserted: ";
+}
+
+.diff del::before,
+.sbs-r del::before {
+  content: " [deleted: ";
+}
+
+.diff ins::after,
+.diff del::after,
+.sbs-r ins::after,
+.sbs-r del::after {
+  content: "] ";
+}
+
+/* a wholly new passage is labelled and barred, not tinted; a removed one struck through in pencil */
+.diff p.removed .change-body {
+  color: var(--pencil);
+  text-decoration: line-through 1px var(--pencil);
+}
+
+.diff mark {
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--ink);
+  border-radius: 0;
+  padding: 0;
+}
+
+/* the notes fold under each change where there's no room beside them (§3) */
+@container changes (max-width: 720px) {
+  .diff p.new,
+  .diff p.removed,
+  .diff p.rewritten {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "body"
+      "fold"
+      "notes";
+  }
+
+  .diff p .change-notes {
+    padding: 12px 0 0 18px;
+  }
+}
+
+/* the side by side of one section's changes: prior | this filing, the same blackline */
+.sbs-r > div {
+  border-radius: 0;
+  padding: 8px 0 8px 16px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.sbs-r.new .new,
+.sbs-r.removed .old,
+.sbs-r.rewritten > div {
+  background: transparent;
+  border-left: 2px solid var(--ink-2);
+}
+
+.sbs-r.removed .old {
+  color: var(--pencil);
+  text-decoration: line-through 1px var(--pencil);
+}
+
+.sbs-h {
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+/* --- Search (§6): the words and one primary; the filters as one row of 32px controls; what was searched as
+   a notice; the results grouped by company, each passage's snippet in the filing's own serif ------------- */
+
+.page .search-form {
+  gap: 12px;
+}
+
+.search-form > .row:first-child {
+  gap: 8px;
+}
+
+.search-form > .row:first-child .field {
+  max-width: 640px;
+  height: var(--control-h);
+  font-size: 14px;
+}
+
+.search-form .row.wrap {
+  gap: 8px 16px;
+  font-size: 13px;
+}
+
+.search-form .row.wrap > label,
+.search-form .row.wrap > .row {
+  gap: 8px;
+}
+
+.search-form .row.wrap .faint {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.search-form > p.faint.small {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* what was searched: one line on a sheet with a hairline, the ways further back at its right */
+.search-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 40px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.search-scope .small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-2);
+}
+
+.results .result-co {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.results .result-co h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.results .result-co h2 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.result-filing {
+  margin: 0 0 16px;
+}
+
+.result-filing > .row {
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.result-filing > .row a {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.result-filing ul {
+  gap: 16px;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.result-filing li > a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.result-filing li > a b {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.result-filing .search-count {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* the filing's own words: serif 15/24, the searched words marked with an underline on a well tint */
+.snippet {
+  max-width: 720px;
+  margin: 4px 0 0;
+  padding-left: 16px;
+  border-left: 2px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.snippet mark {
+  background: var(--well);
+  box-shadow: inset 0 -2px 0 var(--ink-2);
+  border-radius: 0;
+  padding: 0;
+}
+
+.results .pager {
+  padding: 16px 0 0;
+  border-top: 0;
+}
+
+/* --- Home (§6): the start, then new filings leading with the side cards beside them, the watchlist ledger -- */
+
+.page .start-card {
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  padding: 0 0 24px;
+}
+
+.start-card .card-b {
+  padding: 0;
+  gap: 12px;
+}
+
+.start-card h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 650;
+}
+
+.start-main p {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+.start-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.start-projects {
+  gap: 4px 16px;
+  font-size: 13px;
+}
+
+.start-projects a {
+  color: var(--ink);
+  text-decoration-color: var(--rule-2);
+}
+
+/* lead (7) + side (5) of 12 columns, stacked when the content box is under 900 (§3) */
+.home-split {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.home-side {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  min-width: 0;
+}
+
+.home-lead {
+  min-width: 0;
+}
+
+@container main (max-width: 900px) {
+  .home-split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+}
+
+/* new filings: the day once at the head of its rows, the form as a code, the company, the way in */
+.feed .it {
+  grid-template-columns: 56px 48px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 40px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.feed .it.day-first {
+  border-top: 1px solid var(--ink-2);
+  margin-top: -1px;
+}
+
+.feed .it:first-child {
+  border-top: 0;
+}
+
+.feed .it:last-child {
+  border-bottom: 1px solid var(--rule);
+}
+
+.feed-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.feed .it .tag {
+  justify-self: start;
+}
+
+.feed-name {
+  color: var(--ink);
+}
+
+.feed-period {
+  color: var(--pencil);
+}
+
+.feed-act {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.feed .it.new .feed-name b {
+  font-weight: 650;
+}
+
+/* a home side card's table sits in its narrow column at its own measure */
+.home-side .t td,
+.home-side .t th {
+  white-space: nowrap;
+}
+
+/* the watchlist: a ledger with its row actions in a quiet slot */
+.t.watchlist td.actions .btn {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t.watchlist td.actions .btn {
+    opacity: 0;
+    transition: opacity var(--t-hover-out) linear;
+  }
+
+  .t.watchlist tr:hover td.actions .btn,
+  .t.watchlist tr:focus-within td.actions .btn {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+}
+
+.status-strip {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+}
+
+/* beside the filings, data notes read as one line each (§6 Home: a summary); the explanation, figures and
+   filings are on the company's Data notes tab, which each note's company links */
+.home-side .note p,
+.home-side .note-figs,
+.home-side .note-f {
+  display: none;
+}
+
+.home-side .notes .note {
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.home-side .card-h .sub {
+  flex-basis: 100%;
+}
+
+/* --- the company tabs batch 1 didn't draw (§6): Earnings, Revenue, Segments, Ratios, Filings, Data notes,
+   Peers. Their sections are batch 1's (title over an ink rule); here their insides. --------------------- */
+
+/* two sections side by side (Earnings' release and reported figures): lead and side, stacked when narrow */
+.co-panel > .grid2 {
+  gap: 24px 32px;
+  margin-bottom: 40px;
+}
+
+.co-panel > .grid2 > .card {
+  margin: 0;
+}
+
+.earnings-pick {
+  gap: 8px 16px;
+  margin: 0 0 24px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* the release's headline, the outlook and its notes: the release's own words, quoted (serif 15/24, the
+   figures 600, the source under it) */
+.release-headline {
+  padding-left: 16px;
+  border-left: 2px solid var(--ink-2);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.release-blocks {
+  gap: 24px;
+}
+
+.release-block {
+  padding-left: 16px;
+  border-left: 2px solid var(--ink-2);
+  gap: 8px;
+}
+
+.release-lines p.rl {
+  max-width: 720px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.release-lines p.rl.heading {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.release-lines p.rl.sub {
+  padding-left: 24px;
+}
+
+/* a reconciliation: a collapsible ledger, titled in sentence case */
+.release-table-box {
+  border-top: 1px solid var(--rule);
+  padding: 8px 0;
+}
+
+.release-table-box summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.release-table-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.release-table-box summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(-45deg);
+  transition: transform var(--t-tab) var(--ease-move);
+}
+
+.release-table-box[open] summary::before {
+  transform: rotate(45deg);
+}
+
+html[data-motion="reduced"] .release-table-box summary::before {
+  transition: none;
+}
+
+.release-table {
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.reader-link,
+.edgar-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.reader-link::after {
+  content: " →";
+}
+
+/* the Filings tab: the forms as a segmented control on its own row, the dates beside it */
+.filings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.t.filings td.actions {
+  width: 1%;
+}
+
+.t.filings td.items {
+  color: var(--ink-2);
+}
+
+.t.filings tr.year-h th {
+  padding: 16px 0 8px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+/* Peers: why as short pencil tags; the median a total row under an ink rule */
+.t.peers td.why {
+  font-size: 12px;
+  color: var(--pencil);
+  white-space: normal;
+  min-width: 160px;
+}
+
+.t.peers td.why a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-2);
+}
+
+.t tr.agg td {
+  background: transparent;
+  border-top: 1px solid var(--ink);
+  font-weight: 650;
+}
+
+.t tr.agg td .unit {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.t tr.sel td,
+.t tr.sel td.first {
+  background: transparent;
+}
+
+/* Data notes: a summary line, then the notes as a ledger of rows */
+.notes-summary {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink);
+}
+
+.notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes .note {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.notes .note .note-t {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.notes .note p {
+  max-width: 720px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+.notes .note .note-f {
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+
+/* a section's chart and its ledger: the chart 7 columns, the ledger 5 (Revenue / Segments, §6) */
+.co-panel .t.aligned {
+  min-width: 0;
+}
+
+/* --- the assistant's insides (§4 Assistant panel): the question 14/600, the answer in Archivo 14/22 with its
+   figures 600, quoted passages in the serif, the sources, the machine check; the input in the footer with
+   the quota as an 11px pencil line. The full page (#/ask) is the same component at reader width. ---------- */
+
+.ai-h {
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-h .chip {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.ai-m {
+  gap: 24px;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ai-m .empty {
+  color: var(--ink-2);
+}
+
+.message {
+  line-height: 22px;
+}
+
+/* the question: 14/600, no bubble */
+.message.user {
+  align-self: stretch;
+  padding: 0 0 0 0;
+  background: transparent;
+  border-radius: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.message.assistant .answer {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink);
+}
+
+.answer strong,
+.answer b,
+.answer .figure {
+  font-weight: 600;
+}
+
+/* a passage the answer quotes is the filing's words: the serif, beside a bar */
+.answer blockquote {
+  margin: 8px 0;
+  padding: 0 0 0 16px;
+  border-left: 2px solid var(--ink-2);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.answer table {
+  font-size: 13px;
+}
+
+.answer th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--ink);
+}
+
+/* the machine check: the ink and a tick, never the colour of a gain */
+.badge.ok {
+  color: var(--ink-2);
+}
+
+.badge.warn {
+  color: var(--ink);
+}
+
+.sources {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+
+.sources h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.sources ul {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.trace-toggle {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.trace-list {
+  background: transparent;
+  border-left: 2px solid var(--rule);
+  border-radius: 0;
+  padding: 4px 0 4px 12px;
+}
+
+.trace-list .status,
+.tool.allowed .status,
+.tool.denied .status {
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.denied-count {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.act {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--ink);
+}
+
+/* suggestions: chips, one per line of their own words */
+.ai-s {
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.ai-s .btn.suggestion {
+  min-height: var(--control-h);
+  height: auto;
+  padding: 6px 12px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* the input in the footer */
+.ai-i {
+  gap: 8px;
+  padding: 8px 16px 4px;
+}
+
+.ai-i textarea {
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ai-i textarea:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* the quota: a line in pencil, not a meter */
+.ai-meter {
+  padding: 0 16px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+.ai-meter meter {
+  display: none;
+}
+
+.ai-meter.low {
+  color: var(--ink-2);
+}
+
+.ai-f {
+  padding: 2px 16px 12px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+/* the full page: the same panel at the reader's width, a sheet with a hairline */
+.ask-page .ai-page {
+  max-width: 760px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.ask-page .ai-page .ai-m {
+  padding: 24px 32px;
+}
+
+/* --- the front door (§6): no card; the headline in Source Serif 56, the lead, Try the demo (the primary, 40px)
+   and Sign in with GitHub; the proof as one ledger row read live from Data status; then what's in it and
+   what isn't, on purpose. No eyebrow, no stat tiles, no numbered list. -------------------------------------- */
+
+.welcome {
+  display: block;
+  padding: 0;
+  background: var(--paper);
+}
+
+.welcome-layout {
+  max-width: calc(1144px + 64px);
+  margin: 0 auto;
+  padding: 24px 32px 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "head"
+    "card"
+    "proof"
+    "more";
+  grid-template-rows: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.welcome-head {
+  padding: 0;
+}
+
+/* the h1 is the wordmark, at the head of the page like the app's top bar */
+.welcome-brand {
+  margin: 0 0 64px;
+  gap: 8px;
+}
+
+.welcome-brand .wordmark {
+  font-size: 22px;
+}
+
+.welcome-headline {
+  max-width: 14em;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 56px;
+  line-height: 60px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variation-settings: normal;
+  color: var(--ink);
+}
+
+.welcome-lead {
+  max-width: 40em;
+  margin: 24px 0 0;
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--ink-2);
+}
+
+.welcome-layout > .card.welcome-card {
+  padding: 32px 0 0;
+  gap: 24px;
+  max-width: 640px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.welcome-try {
+  gap: 12px;
+}
+
+.welcome-try > .btn,
+.welcome-account .btn {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.welcome-try > .small,
+.welcome-account > .small {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.welcome-account {
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+}
+
+.welcome-notice {
+  padding: 8px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  font-size: 13px;
+}
+
+/* the proof: one ledger row between ink rules, each figure over what it counts */
+.welcome-proof {
+  grid-area: proof;
+  margin: 64px 0 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.welcome .proof {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+
+.welcome .proof > div {
+  padding: 16px 24px 16px 0;
+}
+
+.welcome .proof > div + div {
+  padding-left: 24px;
+  border-left: 1px solid var(--rule);
+}
+
+.welcome .proof > div:last-child:nth-child(odd) {
+  grid-column: auto;
+}
+
+.welcome .proof dt {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 650;
+}
+
+.welcome .proof dd {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+.welcome-more {
+  grid-area: more;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 24px;
+  margin: 48px 0 0;
+}
+
+.welcome-sect {
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 24px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.welcome-list {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.welcome-list li {
+  padding: 8px 0;
+}
+
+.welcome-not {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+.welcome-status {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+@container welcome (max-width: 900px) {
+  .welcome-more {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+}
+
+@container welcome (max-width: 600px) {
+  .welcome-layout {
+    padding: 16px 16px 48px;
+  }
+
+  .welcome-brand {
+    margin-bottom: 40px;
+  }
+
+  .welcome-headline {
+    font-size: 40px;
+    line-height: 44px;
+  }
+
+  .welcome .proof {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .welcome .proof > div,
+  .welcome .proof > div + div {
+    padding: 12px 12px 12px 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+/* --- Analysis (§6): the project's header like a company's, the step list on the left, the step's work in the
+   centre, each step ending in one "Next: …" (the primary of the step) --------------------------------------- */
+
+.page .project-head.card {
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.project-head .co-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 24px;
+  padding: 0;
+}
+
+/* the crumb: 12px, no eyebrow */
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--pencil);
+}
+
+.eyebrow a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-2);
+}
+
+.project-head h1 {
+  font-size: 28px;
+  line-height: 36px;
+}
+
+.project-head .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.project-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  max-width: 520px;
+  margin-left: auto;
+}
+
+.project-progress .bar {
+  width: 96px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.project-progress .fill {
+  background: var(--ink);
+}
+
+.project-progress .ws-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.project-body {
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 32px;
+}
+
+/* the step list: the rail's look; the current step a sheet chip, a done one ticked in the ink */
+.step-rail a {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: var(--r-control);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.step-rail a[aria-current="step"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  border-left: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.step-rail .n {
+  width: 22px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.step-rail a.done .n {
+  color: var(--ink);
+  font-weight: 650;
+  background: transparent;
+}
+
+.step-head {
+  gap: 16px;
+  padding: 0 0 16px;
+  margin: 0 0 24px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.step-n {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.step-head h2 {
+  margin: 2px 0 4px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 650;
+}
+
+.step-head p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.step-done {
+  min-height: var(--control-h);
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  font-size: 13px;
+}
+
+/* each step ends in one action: the next step */
+.step-next {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+/* a step's charts and tables are sections like any other (no cards) */
+.page .numbers-chart.card {
+  padding: 0;
+}
+
+@container main (max-width: 900px) {
+  .project-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* the projects list */
+.project-row {
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .project-row:hover {
+    background: var(--sheet);
+  }
+}
+
+/* --- Portfolio, Alerts, Your data, Settings, Status, API, About (§6: a page header, one ledger each, empty
+   states that show the table's shape) ------------------------------------------------------------------- */
+
+.portfolio-empty .empty-shape {
+  width: 100%;
+  margin: 0 0 12px;
+}
+
+.portfolio-empty .empty-shape td {
+  color: var(--pencil);
+}
+
+.portfolio-empty .empty-line {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+@container main (max-width: 700px) {
+  .portfolio-empty .empty-shape th:nth-child(n + 3),
+  .portfolio-empty .empty-shape td:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+/* a section title over an ink rule (the alerts' screens and filings) */
+.alerts-h {
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.alerts-page .card .empty,
+.alerts-page .empty {
+  padding: 0;
+}
+
+/* key-value ledgers (Data status' figures): rows on hairlines, never tiles */
+.page .kv {
+  gap: 0 24px;
+  background: transparent;
+  border-top: 0;
+}
+
+.page .kv > div {
+  padding: 12px 16px 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.page .kv .k {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.page .kv .v {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.page .kv .p {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+/* Using the API: a reference layout, the contents beside (3 columns) the content (9) */
+.api-code {
+  background: var(--well);
+  border: 0;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font-size: 13px;
+}
+
+/* the 404 and other empty pages: one line and one action */
+.notfound .empty,
+.page > .empty {
+  max-width: 640px;
+}
+
+/* a table read as labelled cards on a phone (styles.css cards-narrow): its cells take their own height */
+@container tw (max-width: 560px) {
+  .t.cards-narrow tbody td,
+  .t.cards-narrow tbody td.first,
+  .t.watchlist tbody td,
+  .t.watchlist tbody td.first {
+    height: auto;
+  }
+}
+
+/* an h3 without its own size reads at 14px, never the browser's 1.17em (16.38px: §2.1 has no fractional sizes) */
+:where(.page, .ai, .welcome) h3 {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* only the first summary row sits under the ink rule (the median); High and Low follow on hairlines */
+.t tr.agg + tr.agg td {
+  border-top: 1px solid var(--rule);
+}
+
+/* the 10-K's Item 1 in the Business step is the filing's words: the serif, at a reading measure */
+.item1 p {
+  max-width: 720px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.item1 .item1-h {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 600;
+}

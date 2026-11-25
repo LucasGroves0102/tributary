@@ -1,0 +1,871 @@
+/* The company page (.interface-design/system.md §4 Company header, §5, §6 Company Overview and
+   Statements). Tokens only; positions set from script go through the CSSOM. */
+
+.company-page {
+  gap: 0;
+}
+
+/* --- the header: ends ≤ 270px from the top at 1440 ------------------------------------------------ */
+
+.co-head {
+  display: block;
+  font-family: var(--sans);
+}
+
+.crumb {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-2);
+}
+
+.crumb a {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--rule-2);
+  text-underline-offset: 3px;
+}
+
+.co-titlerow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+
+.co-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  min-width: 0;
+}
+
+h1.co-name {
+  margin: 0;
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.co-listing {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.co-listing b {
+  font-weight: 600;
+}
+
+.co-listing .ex {
+  font-size: 13px;
+  color: var(--pencil);
+}
+
+.co-acts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.co-acts .more-btn {
+  min-width: 40px;
+  letter-spacing: 0.08em;
+}
+
+.narrow-only {
+  display: none;
+}
+
+.co-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+.co-meta b {
+  color: var(--ink);
+}
+
+.co-next {
+  color: var(--ink-2);
+}
+
+.asof-today-k {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.co-head .notice {
+  margin-top: 12px;
+}
+
+.co-head .save-form {
+  margin-top: 12px;
+}
+
+.co-head .holding-line {
+  margin: 4px 0 0;
+}
+
+/* the tabs: links in a row over a hairline, the current one's 2px indicator sliding to it (§7.4) */
+.co-tabsrow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.tabs.co-tabs {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs.co-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs.co-tabs a {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  height: 40px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  box-shadow: none;
+  transition: color var(--t-hover-out) linear;
+}
+
+.tabs.co-tabs a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tabs.co-tabs a:hover {
+    color: var(--ink);
+    transition-duration: 0s;
+  }
+}
+
+.tab-ink {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 0;
+  background: var(--ink);
+  transition: transform var(--t-tab) var(--ease-move), width var(--t-tab) var(--ease-move);
+}
+
+.tab-ink.no-anim,
+html[data-motion="reduced"] .tab-ink {
+  transition: none;
+}
+
+/* As of: Today | Pick a day, and the day typed in a field */
+.co-asof {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding-bottom: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.co-asof-field {
+  display: flex;
+  gap: 8px;
+}
+
+.co-asof-field .field {
+  width: 120px;
+  height: 32px;
+}
+
+.co-panel {
+  margin-top: 24px;
+  min-width: 0;
+}
+
+/* a statement's shape while it loads scrolls inside itself, as the table will */
+.tw-skel {
+  overflow-x: hidden;
+}
+
+/* blanks while the header and the panel load: the value to come's width */
+.blank-v.w-48 { width: 48px; }
+.blank-v.w-64 { width: 64px; }
+.blank-v.w-160 { width: 160px; }
+.blank-v.w-240 { width: 240px; }
+.blank-v.w-480 { width: min(480px, 80%); }
+
+.co-name .blank-v {
+  height: 24px;
+}
+
+.text-shape {
+  display: grid;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.hero-blank {
+  width: 220px;
+  height: 40px;
+}
+
+/* --- the Overview (§6): lead 7, side 5; stacked when the content box is under 900px -------------- */
+
+.ov {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 0 40px;
+  align-items: start;
+}
+
+.ov-lead,
+.ov-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ov-more {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.ov .folio {
+  margin-bottom: 40px;
+}
+
+@container main (max-width: 963px) {
+  .ov {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* the hero (§2.1: 48/56, one per page; 40/48 on a phone) */
+.ov-hero {
+  margin-bottom: 40px;
+}
+
+.ov-label {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.hero {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+}
+
+.hero-chg {
+  font-size: 13px;
+}
+
+.chg {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+/* the footing (§5.3): one ledger line between hairlines */
+.footing {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.term,
+.term-blank {
+  position: relative;
+  display: grid;
+  justify-items: end;
+  align-content: center;
+  min-height: 44px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--t-hover-out) linear, box-shadow var(--t-hover-out) linear;
+}
+
+.term-blank {
+  cursor: default;
+}
+
+.term-blank .blank-v {
+  margin: 6px 0;
+}
+
+.term .tv {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.term small,
+.term-blank small {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--pencil);
+}
+
+.term.derived .v {
+  font-style: italic;
+  font-weight: 500;
+}
+
+.term.tot .tv {
+  font-weight: 650;
+}
+
+.term.on,
+.term[aria-expanded="true"] {
+  background: var(--well);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .term:hover {
+    background: var(--well);
+    transition-duration: 0s;
+  }
+}
+
+.op {
+  width: 12px;
+  padding-top: 8px;
+  text-align: center;
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--pencil);
+}
+
+/* the year in plain English: 16/26 (§2.1 section, regular) */
+.story {
+  margin: 16px 0 0;
+  max-width: 62ch;
+  font-size: 16px;
+  line-height: 26px;
+  font-weight: 400;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+.story b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* the rest of the twelve months: a two-column kv ledger, 36px rows */
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 32px;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.ledger dl {
+  margin: 0;
+  min-width: 0;
+}
+
+.ledger dl > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.ledger dt {
+  min-width: 0;
+  color: var(--ink-2);
+}
+
+.ledger dt .when {
+  display: block;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--pencil);
+}
+
+.ledger dd {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ledger dd .fig {
+  min-height: 28px;
+  align-items: center;
+  margin-right: -6px;
+}
+
+.ledger dd.blank .figure {
+  color: var(--ink-2);
+  font-weight: 400;
+}
+
+.rdg {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  vertical-align: 4px;
+}
+
+.flag-mark::after {
+  content: "*";
+  margin-left: 2px;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
+.fnote {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+.fnote p {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 0;
+}
+
+.fnote .mark {
+  flex: none;
+  font-weight: 700;
+}
+
+@container main (max-width: 600px) {
+  .ledger {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (pointer: coarse) {
+  .ledger dl > div,
+  .ledger dd .fig {
+    min-height: 44px;
+  }
+}
+
+/* the latest quarter: a ledger (ui.css .led); the quarter's own column in weight */
+.recap td.current b {
+  font-weight: 650;
+}
+
+/* the recap fits the lead column at 1280: its labels take only their room */
+.t.led.recap td.first {
+  min-width: 120px;
+}
+
+.recap td.gain {
+  color: var(--gain);
+}
+
+.recap td.loss {
+  color: var(--loss);
+}
+
+/* --- revenue by quarter (§4 Chart): bars at their value, a 3:1 edge, derived hatched ----------- */
+
+.qbars {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.qbars-plot {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  column-gap: 10px;
+  align-items: end;
+  height: 176px;
+  margin-left: 32px;
+  padding-top: 20px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.qbars-gl {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--rule);
+  color: var(--pencil);
+}
+
+.qbars-gl > span {
+  position: absolute;
+  left: -32px;
+  top: -9px;
+  width: 26px;
+  text-align: right;
+}
+
+.qbar {
+  position: relative;
+  min-height: 1px;
+  background: var(--bar);
+  box-shadow: inset 0 0 0 1px var(--bar-edge);
+  border-radius: 1px 1px 0 0;
+  transition: box-shadow var(--t-hover-out) linear;
+}
+
+.qbar.dv {
+  background: repeating-linear-gradient(135deg, var(--bar-edge) 0 1px, transparent 1px 5px);
+}
+
+.qbar.last {
+  background: var(--bar-latest);
+  box-shadow: none;
+}
+
+.qbar.hl {
+  box-shadow: inset 0 0 0 2px var(--ink), 0 0 0 1px var(--paper);
+}
+
+.qbar.last.hl {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
+}
+
+.qbar i {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 3px;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.qbars-x {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  column-gap: 10px;
+  margin-left: 32px;
+  padding-top: 6px;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.qbars-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.qbars-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qbars-key .sw {
+  width: 10px;
+  height: 10px;
+  background: var(--bar);
+  box-shadow: inset 0 0 0 1px var(--bar-edge);
+}
+
+.qbars-key .sw.l {
+  background: var(--bar-latest);
+  box-shadow: none;
+}
+
+.qbars-key .sw.dv {
+  background: repeating-linear-gradient(135deg, var(--bar-edge) 0 1px, transparent 1px 4px);
+}
+
+.qbars-blank {
+  height: 214px;
+}
+
+.view-table {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ov-bars-t td.first {
+  min-width: 0;
+}
+
+/* --- since the last report: 8-K rows (§4): date, the quote in serif, the item in words ------------- */
+
+.ov-side .events-card ol.events {
+  max-width: none;
+}
+
+.ov-side li.event {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+
+.event-excerpt,
+.events-card blockquote,
+.events-card .excerpt {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 23px;
+}
+
+/* the business, in the filing's own words */
+.business .excerpt {
+  margin: 0 0 12px;
+  max-width: 70ch;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.business .excerpt-h {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* --- Statements (§6): one toolbar, then the ledger ------------------------------------------------ */
+
+.statement-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.view-menu .more-caret {
+  margin-left: 2px;
+}
+
+/* a ledger table over the older .t rules: 32px rows, 13px figures, a 1px ink rule under the header, no
+   vertical rules, the page's ground */
+.t.led th {
+  position: static;
+  padding: 0 0 8px 12px;
+  border-bottom: 1px solid var(--ink);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--paper);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.t.led th.first {
+  text-align: left;
+  padding-left: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.t.led th .pe,
+.t.led th .src {
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.t.led th .src {
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+.t.led th .src i {
+  font-stretch: 100%;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.t.led td,
+.t.led td.n {
+  height: 32px;
+  padding: 0 0 0 12px;
+  font-size: 13px;
+  line-height: 20px;
+  border-bottom: 1px solid var(--rule);
+  border-left: 0;
+}
+
+.t.led td.first {
+  padding: 0 12px 0 0;
+  background: var(--paper);
+  font-size: 13px;
+}
+
+.t.led tr:last-child td {
+  border-bottom: 1px solid var(--rule);
+}
+
+.t.led tbody tr:hover td,
+.t.led tbody tr:hover td.first {
+  background: var(--sheet);
+}
+
+.t.led tr.total td {
+  font-weight: 650;
+  border-top: 1px solid var(--ink);
+}
+
+.t.led tr.grand td,
+.t.led tr.grand td.first {
+  font-weight: 650;
+  border-bottom: 3px double var(--ink);
+}
+
+.t.led td.derived {
+  font-style: italic;
+}
+
+.t.led tr.sub td.first {
+  padding-left: 16px;
+  color: var(--ink-2);
+}
+
+.t.led tr.input-line td {
+  height: 28px;
+  font-style: italic;
+  color: var(--ink-2);
+}
+
+.t.led td[data-cell] {
+  cursor: pointer;
+}
+
+.t.led td[data-cell][aria-expanded="true"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+}
+
+.t.led td[data-cell]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+  border-radius: 0;
+}
+
+@media (pointer: coarse) {
+  .t.led td,
+  .t.led td.n {
+    height: 40px;
+  }
+}
+
+/* --- widths ----------------------------------------------------------------------------------- */
+
+@container main (max-width: 767px) {
+  .hide-narrow {
+    display: none;
+  }
+
+  .co-titlerow {
+    align-items: flex-start;
+  }
+
+  h1.co-name {
+    font-size: 24px;
+    line-height: 32px;
+  }
+
+  .co-meta .co-minor {
+    display: none;
+  }
+
+  .co-tabsrow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .co-asof {
+    padding: 8px 0;
+    flex-wrap: wrap;
+  }
+
+  .fig-hero {
+    font-size: 40px;
+    line-height: 48px;
+  }
+
+  .term {
+    padding: 2px 6px;
+  }
+
+  .term .tv {
+    font-size: 14px;
+    line-height: 22px;
+  }
+}
+
+@media (max-width: 767px) {
+  .narrow-only {
+    display: flex;
+  }
+}

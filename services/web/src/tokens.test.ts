@@ -19,11 +19,13 @@ const LIGHT = ':root[data-theme="light"]';
 const DARK = ':root[data-theme="dark"] {';
 const SYSTEM_DARK = ':root:not([data-theme="light"])';
 
-// WCAG 2.1 AA: 4.5:1 for text, 3:1 for graphics (chart series against the sheet)
-const TEXT = ["ink", "ink-2", "ink-3", "red", "up", "warn", "action", "error"];
-const SURFACES = ["page", "sheet", "sheet-2"];
-const PAIRS: [string, string][] = [
-  ["red-ink", "red"], ["red", "red-soft"], ["up", "up-soft"], ["warn", "warn-soft"], ["action-ink", "action"], ["error", "error-soft"],
+// WCAG 2.1 AA (.interface-design/system.md §2.3): 4.5:1 for text on every ground; 3:1 for outlines,
+// chart bar edges and chart series (1.4.11). `disabled` is for disabled controls only, never content.
+const TEXT = ["ink", "ink-2", "pencil", "seal", "gain", "loss"];
+const SURFACES = ["paper", "sheet", "well"];
+// field outlines sit on any ground; chart bars on the paper or a sheet only (the spec measures those two)
+const OUTLINES: [string, string][] = [
+  ...SURFACES.map((bg): [string, string] => ["rule-2", bg]), ["bar-edge", "paper"], ["bar-edge", "sheet"],
 ];
 
 describe.each([
@@ -36,8 +38,15 @@ describe.each([
     expect(contrast(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(PAIRS)("%s on %s ≥ 4.5", (fg, bg) => {
-    expect(contrast(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(4.5);
+  it.each(OUTLINES)("outline %s on %s ≥ 3", (fg, bg) => {
+    expect(contrast(t[fg]!, t[bg]!)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the primary button: paper on ink ≥ 4.5; inserted text: ink on its tint ≥ 4.5, its underline ≥ 3", () => {
+    expect(contrast(t.paper!, t.ink!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t.ink!, t["ins-bg"]!)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(t["ins-line"]!, t.paper!)).toBeGreaterThanOrEqual(3);
+    expect(contrast(t["bar-latest"]!, t["bar-edge"]!)).toBeGreaterThanOrEqual(3);
   });
 
   it.each([0, 1, 2, 3, 4, 5, 6, 7])("chart series %i on the sheet ≥ 3", (i) => {
@@ -60,7 +69,7 @@ it("prints in the light palette (a report's Print / PDF)", () => {
   const light = block(css, LIGHT);
   expect(Object.keys(print).length).toBeGreaterThan(20);
   for (const [k, v] of Object.entries(print)) {
-    if (k === "page") expect(v).toBe("#ffffff");
+    if (k === "paper") expect(v).toBe("#ffffff");
     else expect(v, k).toBe(light[k]);
   }
 });

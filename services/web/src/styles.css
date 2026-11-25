@@ -13,13 +13,13 @@ body,
   min-height: 100%;
 }
 
-/* The page reads in the serif (names, sentences, figures); controls, navigation and meta in the
-   sans, set where they are. */
+/* The interface and every figure are Archivo (Noor's spec §2.1); Source Serif 4 is the filing's own
+   words only (the reader, quotes, excerpts), set where they are. Digits are tabular and lining. */
 body {
-  background: var(--page);
+  background: var(--paper);
   color: var(--ink);
-  font: var(--fs-md) / 1.5 var(--serif);
-  font-variant-numeric: lining-nums;
+  font: 400 14px / 22px var(--sans);
+  font-variant-numeric: tabular-nums lining-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -93,15 +93,21 @@ button:disabled {
 h1,
 h2,
 h3 {
-  font-family: var(--serif);
+  font-family: var(--sans);
   text-wrap: balance;
 }
 
 h1 {
-  font-size: var(--fs-xl);
+  font-size: var(--fs-title);
+  line-height: 36px;
   margin: 0;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+}
+
+/* a heading that takes the focus after a page change shows no ring (§2.4) */
+h1[tabindex="-1"]:focus {
+  outline: none;
 }
 
 h2 {
@@ -116,7 +122,7 @@ p {
 
 code {
   font-family: var(--mono);
-  font-size: 0.92em;
+  font-size: 13px;
 }
 
 /* Utilities */
@@ -178,120 +184,131 @@ th.n {
 
 kbd,
 .kbd {
-  font-size: var(--fs-xs);
-  border: 1px solid var(--rule-2);
-  padding: 0 4px;
-  color: var(--ink-3);
-  font-weight: 500;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  padding: 3px 5px;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--ink-2);
+  white-space: nowrap;
 }
 
+/* a status point: green while EDGAR's feed is in its hours */
 .live {
   display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--up);
-  margin-right: 5px;
-  box-shadow: 0 0 0 3px var(--up-soft);
+  background: var(--gain);
+  margin-right: 6px;
 }
 
-/* Buttons (one system, Riley, test 10, finding 105): square corners. Primary is the ink filled, one per
-   view; secondary an ink outline; quiet (ghost) is text that underlines on hover, never a grey pill;
-   destructive (danger) is the error ink, outlined in a confirm and in a menu after a rule. A press
-   sinks a little. */
+/* Buttons (§2.5): one 32px height. Primary is the ink filled with paper text, exactly one per page
+   header; secondary a sheet with an inset rule-2 outline; quiet (ghost) is text only, for actions inside
+   rows. Destructive actions live in a menu. A press sinks to 0.97 (never under reduced motion); a hover
+   tints at once and clears in 80ms, on a fine pointer only (§7.4). */
 
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: 6px;
   justify-content: center;
-  border: 1px solid var(--ink);
-  background: transparent;
-  min-height: 32px;
-  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  min-height: var(--control-h);
+  padding: 0 12px;
   font-family: var(--sans);
-  font-size: var(--fs-base);
-  font-weight: 600;
-  line-height: 1.25;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
   white-space: nowrap;
   color: var(--ink);
-  transition: transform var(--press), background-color var(--press), color var(--press);
+  transition: transform var(--t-press) var(--ease-enter), background-color var(--t-hover-out) linear;
 }
 
 a.btn:hover {
   text-decoration: none;
 }
 
-.btn:hover:not(:disabled) {
-  background: var(--sheet-2);
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    background: var(--well);
+    transition-duration: var(--t-press), 0s;
+  }
+
+  .btn.primary:hover:not(:disabled) {
+    background: var(--ink-2);
+  }
+
+  .btn.ghost:hover:not(:disabled) {
+    background: var(--well);
+  }
 }
 
 .btn:active:not(:disabled) {
   transform: scale(0.97);
 }
 
-/* One scale (Riley 105): a button is 32px, or 28px inside a row, a card's head or a table. A page's
-   own bar never mixes the two. */
+html[data-motion="reduced"] .btn:active:not(:disabled) {
+  transform: none;
+}
+
+/* a compact button inside a row or a table */
 .btn.sm {
   min-height: 28px;
   padding: 0 10px;
-  font-size: var(--fs-sm);
+  font-size: 13px;
 }
 
 .page-bar .btn.sm {
-  min-height: 32px;
-  padding: 0 14px;
-  font-size: var(--fs-base);
+  min-height: var(--control-h);
+  padding: 0 12px;
 }
 
-/* the one action of a view: the ink, filled (--action; the red is the seal's) */
+/* the one action of a header: the ink, filled */
 .btn.primary {
-  background: var(--action);
-  border-color: var(--action);
-  color: var(--action-ink);
-}
-
-.btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--action) 84%, var(--page));
+  background: var(--ink);
+  box-shadow: none;
+  color: var(--paper);
 }
 
 /* a disabled primary keeps its shape and loses its fill: "nothing to save" reads as quiet, not broken */
 .btn.primary:disabled {
-  background: transparent;
-  color: var(--ink-3);
-  border-color: var(--rule-2);
+  background: var(--sheet);
+  color: var(--disabled);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  opacity: 1;
+}
+
+.btn:disabled {
+  color: var(--disabled);
   opacity: 1;
 }
 
 .btn.ghost {
-  border-color: transparent;
+  box-shadow: none;
   background: transparent;
   color: var(--ink-2);
 }
 
-.btn.ghost:hover:not(:disabled) {
+/* a quiet destructive action in a row (Delete this buy): words, not a colour */
+.btn.ghost.danger {
   color: var(--ink);
   background: transparent;
   text-decoration: underline;
-  text-decoration-color: var(--link-rule);
+  text-decoration-color: var(--rule-2);
   text-underline-offset: 3px;
-}
-
-/* a quiet destructive action in a row (Delete this buy): the error ink */
-.btn.ghost.danger {
-  color: var(--error);
-  background: transparent;
-  border-color: transparent;
-}
-
-.btn.ghost.danger:hover:not(:disabled) {
-  color: var(--error);
-  text-decoration-color: currentColor;
 }
 
 .btn.primary .kbd {
   color: inherit;
-  border-color: currentColor;
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 /* a form mark: 1px outline, sans 12px, in the ink. An annual report (10-K) is filled, a quarterly
@@ -333,17 +350,7 @@ a.btn:hover {
   color: var(--error);
 }
 
-/* App shell: sidebar | page | assistant */
-
-.app {
-  display: grid;
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  min-height: 100vh;
-}
-
-.app.with-ai {
-  grid-template-columns: var(--sidebar-w) minmax(0, 1fr) var(--drawer-w);
-}
+/* App shell: ui.css (top bar, rail, page, assistant) */
 
 /* Pages lay out by the room they have, not the window's width: the assistant panel takes 372px at
    any window size. `@container main` below means this column. */
@@ -361,21 +368,6 @@ a.btn:hover {
   font-family: var(--sans);
   font-size: var(--fs-sm);
   padding: var(--sp-4) var(--sp-8);
-}
-
-/* Demo sandbox: a thin strip above the page, and the front door */
-
-.sandbox-banner {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px var(--sp-8);
-  background: var(--page);
-  color: var(--ink-2);
-  font-family: var(--sans);
-  font-size: var(--fs-sm);
-  padding: 5px clamp(16px, 2vw, 28px);
-  border-bottom: 1px solid var(--rule);
 }
 
 /* The front door: a sheet on the page. Who it is, the headline and the way in on the left; on the
@@ -432,7 +424,7 @@ a.btn:hover {
 .welcome-lead {
   margin: 22px 0 0;
   max-width: 44ch;
-  font-size: 19px;
+  font-size: 20px;
   line-height: 1.5;
   color: var(--ink-2);
 }
@@ -478,7 +470,7 @@ a.btn:hover {
 .welcome-sect {
   margin: 0 0 10px;
   color: var(--red);
-  font-size: 19px;
+  font-size: 20px;
   font-style: italic;
   font-weight: 600;
 }
@@ -579,11 +571,11 @@ a.btn:hover {
   }
 
   .welcome-headline {
-    font-size: 40px;
+    font-size: 48px;
   }
 
   .welcome-lead {
-    font-size: 17px;
+    font-size: 16px;
   }
 }
 
@@ -633,239 +625,7 @@ a.btn:hover {
   accent-color: var(--action);
 }
 
-/* Sidebar */
-
-/* Three parts: the logo and screens stay put, the lists scroll between them, the footer is always
-   whole. Scrolling a long list never takes the navigation with it. The same ground as the page,
-   divided from it by one rule: navigation serves the page. */
-.side {
-  background: var(--page);
-  border-right: 1px solid var(--rule);
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  font-family: var(--sans);
-  font-size: var(--fs-sm);
-}
-
-.side-top {
-  flex: none;
-  padding: 12px 12px 10px;
-  border-bottom: 1px solid var(--rule);
-}
-
-.side-lists {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 12px 12px;
-}
-
-.side-foot {
-  flex: none;
-  padding: 8px 12px 12px;
-  border-top: 1px solid var(--rule);
-}
-
-/* too short for three parts (a phone on its side): the whole sidebar scrolls as one */
-@media (max-height: 560px) {
-  .side {
-    overflow-y: auto;
-  }
-
-  .side-lists {
-    flex: none;
-    overflow: visible;
-  }
-}
-
-.side-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px var(--sp-6);
-  padding: 6px 4px 0;
-}
-
-.side .side-links .cover-link,
-.side .side-links .cover-link.link {
-  padding: 0;
-}
-
-/* the seal and the name, as on the front door */
-.brand {
-  padding: 2px 4px 12px;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-5);
-}
-
-.wordmark {
-  font-family: var(--serif);
-  font-size: 21px;
-  font-weight: 600;
-  font-style: italic;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  line-height: 1;
-}
-
-.brand .env {
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  font-weight: 600;
-  color: var(--ink-2);
-  border: 1px solid currentColor;
-  padding: 0 5px;
-}
-
-.nav a {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: 6px 10px;
-  color: var(--ink-2);
-  font-weight: 500;
-  font-size: var(--fs-base);
-  transition: color var(--press), background-color var(--press);
-}
-
-.nav a:hover {
-  text-decoration: none;
-  color: var(--ink);
-  background: var(--sheet-2);
-}
-
-/* where you are: the ink, and an ink rule at its edge (the tabs' underline, turned on its side); red is
-   only the seal, rubrics, red-letter days and the "may have changed" mark (Riley, test 10, finding 104) */
-.nav a.on {
-  color: var(--ink);
-  font-weight: 600;
-  box-shadow: inset 2px 0 0 var(--ink);
-}
-
-.nav .cnt {
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.nav .cnt.new {
-  color: var(--action-ink);
-  background: var(--action);
-  font-weight: 600;
-  padding: 0 5px;
-}
-
-.nav kbd {
-  font-size: var(--fs-xs);
-  border: 0;
-  padding: 0;
-  visibility: hidden;
-}
-
-.nav a:hover kbd,
-.nav a:focus-visible kbd {
-  visibility: visible;
-}
-
-.side .sect {
-  margin: 14px 4px 4px;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-.side .sect-n {
-  margin-left: var(--sp-3);
-  font-weight: 400;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-
-.side .sect button {
-  border: 0;
-  background: none;
-  color: var(--ink-3);
-  padding: 0 3px;
-  font-size: var(--fs-md);
-  line-height: 1;
-}
-
-.side .sect button:hover {
-  color: var(--ink);
-}
-
-.side-note {
-  margin: 2px 4px;
-  color: var(--ink-3);
-  font-family: var(--serif);
-  font-size: var(--fs-sm);
-  line-height: 1.45;
-}
-
-/* what the spark and the percentage are: revenue and its growth, not a share price (Riley 25) */
-.side .wl .wl-head {
-  display: flex;
-  justify-content: space-between;
-  margin: 0 0 2px;
-  padding: 0 6px 0 62px;
-  font-family: var(--sans);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
-  color: var(--ink-3);
-}
-
-.side .wl a {
-  display: grid;
-  grid-template-columns: 6px 44px 46px 1fr;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  color: var(--ink-2);
-}
-
-.side .wl a b {
-  font-weight: 600;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.side .wl a .num {
-  font-family: var(--serif);
-  font-size: var(--fs-sm);
-}
-
-.side .wl a:hover,
-.side .up a:hover {
-  background: var(--sheet-2);
-  text-decoration: none;
-}
-
-.side .wl a.on {
-  box-shadow: inset 2px 0 0 var(--ink);
-}
-
-/* a new filing since the last visit: an ink point (not the seal's red: Riley, test 10, finding 104) */
-.side .wl .d {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink);
-}
-
-.side .wl .d.off {
-  background: transparent;
-}
-
+/* the watchlist's sparkline (Home) and the quiet status point */
 .spark {
   display: block;
 }
@@ -878,154 +638,9 @@ a.btn:hover {
   stroke: var(--ink-3);
 }
 
-.side .up a {
-  display: flex;
-  gap: var(--sp-3);
-  align-items: center;
-  padding: 4px 6px;
-  color: var(--ink-2);
-  font-size: var(--fs-sm);
-}
-
-.side .up b {
-  color: var(--ink);
-}
-
-.side .up .num {
-  font-family: var(--serif);
-}
-
 .live.quiet {
   background: var(--ink-3);
   box-shadow: none;
-}
-
-.side .credit {
-  padding: 6px 4px 0;
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 var(--sp-4);
-}
-
-.side .fresh {
-  padding: 0 4px;
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-  line-height: 1.55;
-}
-
-.side .fresh summary {
-  cursor: pointer;
-  color: var(--ink-2);
-}
-
-.side-signout {
-  margin: 6px 4px 0;
-}
-
-/* Top bar: the page's head, ruled off in ink */
-
-.top {
-  height: var(--topbar-h);
-  display: flex;
-  align-items: center;
-  gap: var(--sp-6);
-  padding: 0 clamp(16px, 2vw, 28px);
-  min-width: 0;
-  border-bottom: 2px solid var(--ink);
-  background: var(--page);
-  font-family: var(--sans);
-  font-size: var(--fs-base);
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
-/* where you are keeps its words: the search box gives way first (Riley 108, 125: "Nvidia (…") */
-.crumb {
-  font-weight: 600;
-  white-space: nowrap;
-  display: flex;
-  gap: var(--sp-3);
-  min-width: 0;
-  flex-shrink: 0;
-  max-width: 46%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.crumb a {
-  color: var(--ink-3);
-  font-weight: 500;
-}
-
-.crumb .sep {
-  color: var(--rule-2);
-}
-
-/* a long crumb (a filing's accession number) gives way before the search box does */
-.crumb > :last-child {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.search-box {
-  flex: 1 1 220px;
-  min-width: 96px;
-  max-width: 480px;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-4);
-  background: var(--sheet);
-  border: 1px solid var(--rule-2);
-  padding: 6px 10px;
-  color: var(--ink-3);
-  font-size: var(--fs-sm);
-  cursor: text;
-  text-align: left;
-  transition: border-color var(--press);
-}
-
-.search-box:hover {
-  border-color: var(--ink-3);
-}
-
-.search-ic {
-  flex: none;
-}
-
-.sb-long,
-.sb-short {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.sb-short {
-  display: none;
-}
-
-.search-box kbd {
-  white-space: nowrap;
-}
-
-.who {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-
-.who select {
-  height: 28px;
-  background-color: var(--sheet);
-  font-size: var(--fs-sm);
 }
 
 /* Pages, cards, tables */
@@ -1303,8 +918,8 @@ table.t {
 /* the Filings tab's fiscal-year headings */
 .t tr.year-h th {
   background: var(--sheet);
-  color: var(--red);
-  font-family: var(--serif);
+  color: var(--ink);
+  font-family: var(--sans);
   font-style: italic;
   font-weight: 600;
   text-align: left;
@@ -1420,68 +1035,6 @@ table.t {
 }
 
 /* Companies: filter rail and screener table */
-
-/* The filters sit above the table: a rail beside it took 244px from the numbers. */
-.screener {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-}
-
-/* the filters: a band ruled above and below, on the page's ground */
-.filter-band.card {
-  background: transparent;
-  border-width: 1px 0;
-  border-color: var(--rule);
-}
-
-.filter-band > summary {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-4);
-  padding: var(--sp-5) 0;
-  cursor: pointer;
-  list-style: none;
-}
-
-.filter-band > summary b {
-  font-weight: 600;
-}
-
-.filter-band > summary::-webkit-details-marker {
-  display: none;
-}
-
-.filter-band > summary::before {
-  content: "▸";
-  color: var(--ink-3);
-}
-
-.filter-band[open] > summary::before {
-  content: "▾";
-}
-
-.filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--sp-6) var(--sp-7);
-  align-items: end;
-  padding: 0 0 var(--sp-7);
-}
-
-.filter-note {
-  grid-column: 1 / -1;
-}
-
-/* a field's label: sans 13, the second ink, regular weight (bold sans labels read as a form's soup) */
-.filters label:not(.chk) {
-  display: block;
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  margin-bottom: var(--sp-2);
-  font-weight: 500;
-}
-
 /* One control (Riley pattern 9): every text field, select and date field is the same box, 32px, square,
    on the page's ground (a field receives, so it sits inset), a 1px rule, sans 14. A select is drawn
    here, not by the system: its chevron is two gradients (no image, for the CSP). */
@@ -1804,7 +1357,7 @@ button.link:hover {
 
 .ch-legend text {
   fill: var(--text-2);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .ch-grid line {
@@ -1814,12 +1367,12 @@ button.link:hover {
 .ch-grid text,
 .ch-axis text {
   fill: var(--text-3);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .ch-foot {
   fill: var(--text-3);
-  font-size: 11.5px;
+  font-size: 12px;
   font-style: italic;
 }
 
@@ -1923,12 +1476,6 @@ button.link:hover {
   min-width: 0;
 }
 
-.ai-drawer {
-  border-left: 1px solid var(--line);
-  position: sticky;
-  top: 0;
-  height: 100vh;
-}
 
 .ai-page {
   height: calc(100vh - 150px);
@@ -2127,7 +1674,7 @@ a.accession:hover {
 .figure-flag {
   font: inherit;
   font-family: var(--mono);
-  font-size: 0.92em;
+  font-size: 13px;
   padding: 0 5px;
   border: 1px dotted var(--warn);
   border-radius: 4px;
@@ -2237,7 +1784,7 @@ a.accession:hover {
 }
 
 .trace-list .status {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   text-align: center;
   border-radius: var(--radius-sm);
@@ -2357,60 +1904,79 @@ a.accession:hover {
   gap: var(--sp-4);
 }
 
-/* Command palette */
+/* Command palette (.interface-design/system.md §4): 560px, centred at 12vh, over a scrim. It opens and
+   closes with no animation, whichever way it opens (§7.2: used a hundred times a day). */
 
 .pal {
   position: fixed;
   inset: 0;
-  background: var(--overlay);
+  background: var(--scrim);
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 12vh;
-  z-index: 20;
+  z-index: 60;
 }
 
 .pal .box {
   width: 560px;
-  max-width: 92vw;
-  background: var(--panel);
-  border: 1px solid var(--line-2);
-  border-radius: 10px;
-  box-shadow: var(--popover-shadow);
+  max-width: calc(100vw - 32px);
+  background: var(--sheet);
+  border: 0;
+  border-radius: var(--r-pop);
+  box-shadow: var(--float);
   overflow: hidden;
+  font-family: var(--sans);
 }
 
 .pal input {
   width: 100%;
+  height: 48px;
   border: 0;
-  border-bottom: 1px solid var(--line);
-  padding: 12px 14px;
-  font-size: var(--fs-lg);
-  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
+  padding: 0 16px;
+  font-size: 16px;
+  background: var(--sheet);
   outline: none;
 }
 
 .pal-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 4px;
+  max-height: min(60vh, 480px);
+  overflow-y: auto;
 }
 
 .pal .it {
-  padding: 8px 14px;
   display: flex;
-  gap: var(--sp-5);
+  gap: 16px;
   align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  font-size: 14px;
   cursor: pointer;
 }
 
+.pal .it .faint {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
 .pal .it.on {
-  background: var(--accent-soft);
+  background: var(--well);
 }
 
 .pal .it.already {
   cursor: default;
-  opacity: 0.6;
+  color: var(--pencil);
+}
+
+.pal .empty {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink-2);
 }
 
 /* Companies, company page, filing reader */
@@ -2436,7 +2002,7 @@ a.accession:hover {
 }
 
 .status-page .page-header p {
-  font-size: 17px;
+  font-size: 16px;
   color: var(--ink-2);
   max-width: 68ch;
 }
@@ -2599,7 +2165,7 @@ svg.chart {
   padding: 5px 8px;
   border-radius: var(--radius);
   color: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .toc a:hover {
@@ -3010,7 +2576,7 @@ button.chip:disabled {
   position: absolute;
   top: 1px;
   right: 1px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
   font-style: normal;
   text-decoration: none;
@@ -3039,12 +2605,12 @@ button.chip:disabled {
 }
 
 /* a figure from another period than the company's latest (blanks.ts): the date under it; an old one dimmed */
-.fig {
+.figt {
   display: inline-block;
 }
 
 /* the type scale's smallest, 12px, not 10.5 (Riley, test 10, findings 89 and 13: 8-9px notes in Compare) */
-.fig .asof {
+.figt .asof {
   display: block;
   font-size: var(--fs-xs);
   font-weight: 400;
@@ -3052,7 +2618,7 @@ button.chip:disabled {
   white-space: nowrap;
 }
 
-.fig.old {
+.figt.old {
   color: var(--text-3);
 }
 
@@ -3288,7 +2854,7 @@ button.chip:disabled {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .snippet {
@@ -3471,41 +3037,15 @@ mark {
   font-size: var(--fs-base);
 }
 
-/* Narrower screens: the drawer floats over the page, then the sidebar goes */
-
-@media (max-width: 1200px) {
-  .app.with-ai {
-    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  }
-
-  .ai-drawer {
-    position: fixed;
-    right: 0;
-    top: 0;
-    width: 380px;
-    max-width: 100vw;
-    z-index: 18;
-    box-shadow: var(--popover-shadow);
-  }
-
-}
+/* Narrow screens: a chart's text a step larger on a small drawing */
 
 @media (max-width: 900px) {
-  .app,
-  .app.with-ai {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .side {
-    display: none;
-  }
-
   .chart text {
     font-size: 20px;
   }
 
   .chart .gridline text {
-    font-size: 17px;
+    font-size: 16px;
   }
 
   .chart text.alternate {
@@ -3652,7 +3192,7 @@ mark {
 }
 
 .side .ws .tag {
-  font-size: 10px;
+  font-size: 11px;
   padding: 0 4px;
 }
 
@@ -3872,7 +3412,7 @@ mark {
 
 .ch-mk text {
   fill: currentColor;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -4004,60 +3544,10 @@ button.link.num {
   border-bottom: 1px solid var(--line);
 }
 
-/* Narrow screens: the sidebar is a drawer behind Menu, the assistant drawer is full screen */
-.menu-btn,
-.scrim {
-  display: none;
-}
-
+/* Narrow screens: tables scroll by touch */
 @media (max-width: 900px) {
-  .menu-btn {
-    display: inline-flex;
-    flex: none;
-    font-size: 16px;
-  }
-
-  .side.open {
-    display: flex;
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: min(280px, 85vw);
-    z-index: 30;
-    box-shadow: var(--popover-shadow);
-  }
-
-  .scrim {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: var(--overlay);
-    z-index: 29;
-  }
-
-  .top {
-    padding: 0 var(--sp-5);
-    gap: var(--sp-4);
-  }
-
-  .top .crumb {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
-
   .tw {
     -webkit-overflow-scrolling: touch;
-  }
-
-}
-
-@media (max-width: 600px) {
-  .ai-drawer {
-    width: 100vw;
-    left: 0;
-    border-left: 0;
   }
 }
 
@@ -4190,7 +3680,7 @@ button.link.num {
 
 .note-fig-tag {
   overflow-wrap: anywhere;
-  font-size: 0.85em;
+  font-size: 12px;
 }
 
 /* a finding's severity: the form marks' family, by weight and ink, never a colour (Riley, test 10, findings 99 and
@@ -4376,8 +3866,9 @@ button.link.num {
   gap: var(--sp-4);
 }
 
-/* one, two or three charts a row, each at least 380px; a short last row is centred, its charts the
-   same size as the rest (#199: eight charts in rows of three left an empty cell at the end) */
+/* one, two or three charts a row, each at least 350px (three fit the spec's 1144px of content); a short
+   last row is centred, its charts the same size as the rest (#199: eight charts in rows of three left an
+   empty cell at the end) */
 .multiples {
   container: multiples / inline-size;
   display: flex;
@@ -4404,7 +3895,7 @@ button.link.num {
   }
 }
 
-@container multiples (min-width: 1164px) {
+@container multiples (min-width: 1094px) {
   .multiple {
     flex-basis: calc((100% - 2 * var(--sp-6)) / 3);
   }
@@ -4681,28 +4172,24 @@ button.link.num {
   :root:not([data-theme="light"]),
   :root[data-theme="dark"],
   :root[data-theme="light"] {
-    --page: #ffffff;
+    --paper: #ffffff;
     --sheet: #ffffff;
-    --sheet-2: #f4f1ed;
-    --ink: #161314;
-    --ink-2: #4c4646;
-    --ink-3: #706965;
-    --rule: #e6e0db;
-    --rule-2: #d3cbc4;
-    --red: #b3111e;
-    --red-ink: #ffffff;
-    --red-soft: #f7e9e9;
-    --up: #1d6944;
-    --up-soft: #e6f0ea;
-    --warn: #8f4e14;
-    --warn-soft: #f6ece2;
-    --red-rule: rgb(179 17 30 / 0.36);
-    --red-wash: rgb(179 17 30 / 0.05);
-    --col-rule: rgb(179 17 30 / 0.36);
-    --action: #161314;
-    --action-ink: #ffffff;
-    --error: #b3111e;
-    --error-soft: #f7e9e9;
+    --well: #ecede7;
+    --ink: #111513;
+    --ink-2: #39413d;
+    --pencil: #5c6560;
+    --disabled: #8e9691;
+    --rule: #dee2dc;
+    --rule-2: #7f8781;
+    --seal: #a3121d;
+    --logo: #b3111e;
+    --gain: #0e6b41;
+    --loss: #a8460b;
+    --ins-bg: #ffec99;
+    --ins-line: #8a6a00;
+    --bar: #c9cfc9;
+    --bar-edge: #858d87;
+    --bar-latest: #111513;
     --series-0: #5c5350;
     --series-1: #3d5a80;
     --series-2: #9a5a17;
@@ -5762,7 +5249,7 @@ button.chip.on {
 
 /* the company's name leads, as on its own page (a page's title size, not a card's) */
 .project-head h1 {
-  font-size: 34px;
+  font-size: 28px;
   letter-spacing: -0.02em;
   font-variation-settings: "opsz" 60;
 }
@@ -6513,7 +6000,7 @@ button.chip.on {
 }
 
 .page-bar h1 {
-  font-size: 34px;
+  font-size: 28px;
   letter-spacing: -0.02em;
   font-variation-settings: "opsz" 60;
 }
@@ -6802,8 +6289,8 @@ table.t.release-grid {
   text-align: left;
   padding-top: var(--sp-7);
   background: var(--sheet);
-  color: var(--red);
-  font-family: var(--serif);
+  color: var(--ink);
+  font-family: var(--sans);
   font-size: var(--fs-md);
   font-style: italic;
   font-weight: 600;
@@ -8084,7 +7571,7 @@ label.check {
 .api-page li code {
   padding: 0 4px;
   background: var(--sheet-2);
-  font-size: 0.84em;
+  font-size: 12px;
   white-space: nowrap;
 }
 
@@ -8324,7 +7811,7 @@ label.check {
 
 .connect-title {
   margin: 0;
-  font-size: 34px;
+  font-size: 28px;
   font-weight: 650;
   line-height: 1.1;
   letter-spacing: -0.015em;
@@ -8336,7 +7823,7 @@ label.check {
 .connect-lead {
   margin: 14px 0 0;
   max-width: 54ch;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.5;
   color: var(--ink-2);
 }
@@ -8406,7 +7893,7 @@ label.check {
 .connect-sect {
   margin: 0 0 6px;
   color: var(--red);
-  font-size: 17px;
+  font-size: 16px;
   font-style: italic;
   font-weight: 600;
 }
@@ -8465,7 +7952,7 @@ label.check {
   }
 
   .connect-title {
-    font-size: 27px;
+    font-size: 28px;
   }
 
   .connect-facts > div,
@@ -8597,13 +8084,13 @@ label.check {
 
 /* a chart's values as a table: the ledger's serif figures, like every other table (Riley, test 10, finding 77) */
 .chart-values tbody th.first {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-weight: 400;
 }
 
 .chart-values td.n,
 .chart-values td.n button.link {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: var(--fs-md);
   font-variant-numeric: lining-nums tabular-nums;
 }

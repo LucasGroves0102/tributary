@@ -14,6 +14,8 @@ export interface Reason {
   cite?: { companyId: string; mention: MentionCite };
   /** the longer sentence, for a hover */
   title?: string;
+  /** the reason as a short pencil tag (spec §6 Peers: never keyword soup); null: the hover only */
+  short?: string | null;
 }
 
 /** Why there is no business text to rank by, short, after "by SIC and size" in each row. */
@@ -82,23 +84,23 @@ export function whyParts(match: PeerMatch | undefined, peer: ScreenerRow, target
   if (!match) return [];
   const out: Reason[] = [];
   if (match.named_by_target) {
-    out.push({ text: `named as a competitor in ${possessive(target.name)} ${reportForm(match.named_by_target.section_key)}`, cite: { companyId: target.companyId, mention: match.named_by_target } });
+    out.push({ text: `named as a competitor in ${possessive(target.name)} ${reportForm(match.named_by_target.section_key)}`, short: "named as a competitor", cite: { companyId: target.companyId, mention: match.named_by_target } });
   }
   if (match.names_target) {
-    out.push({ text: `its ${reportForm(match.names_target.section_key)} names ${short(target.name)} as a competitor`, cite: { companyId: peer.company_id, mention: match.names_target } });
+    out.push({ text: `its ${reportForm(match.names_target.section_key)} names ${short(target.name)} as a competitor`, short: `names ${short(target.name)}`, cite: { companyId: peer.company_id, mention: match.names_target } });
   }
   if (match.similarity !== undefined) {
-    if (match.terms?.length) out.push({ text: `business: ${distinctTerms(match.terms).slice(0, 3).join(", ")}` });
-    if (match.same_industry && peer.sector_industry) out.push({ text: `same industry (${peer.sector_industry})` });
+    if (match.terms?.length) out.push({ text: `business: ${distinctTerms(match.terms).slice(0, 3).join(", ")}`, short: null });
+    if (match.same_industry && peer.sector_industry) out.push({ text: `same industry (${peer.sector_industry})`, short: "same industry" });
     else if (match.sic_level === 4) out.push({ text: "same SIC" });
   } else if (match.size_peer) {
     // the size fallback (query_api/peers.py): no Business section to compare
-    out.push({ text: "same SIC, a large company with at least a quarter of the revenue; no Business section to compare" });
+    out.push({ text: "same SIC, a large company with at least a quarter of the revenue; no Business section to compare", short: "same SIC, large" });
   } else {
     out.push({ text: SIC_LEVEL[match.sic_level] ?? "SIC" });
     if (match.same_filer_category) out.push({ text: "same filer category" });
   }
-  if (match.same_revenue_band) out.push({ text: `similar size (${match.revenue_band})` });
+  if (match.same_revenue_band) out.push({ text: `similar size (${match.revenue_band})`, short: "similar size" });
   return out;
 }
 

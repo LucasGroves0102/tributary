@@ -9,7 +9,7 @@ import { paren } from "../format";
 export function FigureText({ cell }: { cell: { text: string; asOf?: string | null; old?: boolean } }) {
   if (!cell.asOf) return <>{paren(cell.text)}</>;
   return (
-    <span className={cell.old ? "fig old" : "fig"}>
+    <span className={cell.old ? "figt old" : "figt"}>
       {paren(cell.text)}
       {/* "none since", not a bare "since" under the dash (Riley, test 10, finding 59: "— since Mar '24" read as cryptic) */}
       <span className="asof">{cell.old ? `none since ${cell.asOf}` : cell.asOf}</span>
