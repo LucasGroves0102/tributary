@@ -653,6 +653,50 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             "peers": [{**by_id[cid], "match": matches[cid]} for cid in ids if cid in by_id],
         }
 
+    @app.get("/v1/companies/{company_id}/relations", response_model=dict)
+    def relations(
+        user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
+        limit: Annotated[int, Query(ge=1, le=500, description="sentences a side")] = 200,
+    ) -> dict:
+        """Other companies a company's business section names outside competition (migration
+        160, parser-peers): suppliers, customers, partners, subsidiaries and owners, both ways,
+        each with the sentence that names it and its filing. The sentence says what the relation
+        is; Tributary doesn't classify it. require(filings) first: the sentences are filing text.
+        `named_by` reads under RLS, so it holds only companies whose filings the caller reads."""
+        require(user_id, "filings", company_id)
+        rows = store.business_relations(user_id, company_id, limit)
+
+        def side(key: str) -> tuple[list[dict], bool]:
+            found = rows[key]
+            truncated = len(found) > limit
+            groups: dict[str, dict] = {}
+            other_col = "named_id" if key == "names" else "company_id"
+            for r in found[:limit]:
+                other = r[other_col]
+                g = groups.setdefault(other, {
+                    "company_id": other, "name": r["other_name"],
+                    "tickers": r["other_tickers"] or [], "ownership": False, "sentences": []})
+                g["ownership"] = g["ownership"] or bool(r["ownership"])
+                g["sentences"].append({
+                    "sentence": r["sentence"], "accession_no": r["accession_no"],
+                    "form": r["form"], "filed": r["filed"], "section_key": r["section_key"],
+                    "char_start": r["char_start"], "char_end": r["char_end"],
+                    "filing_url": filing_url(r["cik"], r["accession_no"])})
+            return list(groups.values()), truncated
+
+        names, names_cut = side("names")
+        named_by, named_by_cut = side("named_by")
+        return {
+            "company_id": company_id, "as_of": _now(),
+            "note": "Companies a business section (a 10-K's Item 1, a 20-F's Item 4) names "
+                    "outside competition: suppliers, customers, partners, subsidiaries and "
+                    "owners. Each sentence is quoted as the filing states it and says what the "
+                    "relation is; Tributary doesn't classify direction. ownership: a sentence "
+                    "says one holds a majority of the other.",
+            "names": names, "named_by": named_by,
+            "truncated": names_cut or named_by_cut,
+        }
+
     @app.get("/v1/companies/{company_id}/peers/check/{candidate_id}", response_model=dict)
     def peer_check(user_id: Annotated[str, Depends(current_user)], company_id: CompanyId,
                    candidate_id: CompanyId) -> dict:

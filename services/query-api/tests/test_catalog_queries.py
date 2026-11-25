@@ -29,6 +29,7 @@ ROUTES = ["/v1/screener?limit=50", "/v1/screener?limit=50&access=financials",
           "/v1/screener?where=revenue_ttm:gte:1", "/v1/filings/latest", "/v1/filing-index?limit=50",
           "/v1/search?q=supply+chain", "/v1/companies/search?q=app&access=financials",
           "/v1/data-notes", f"/v1/companies/{NVDA}/peers", "/v1/watchlist",
+          f"/v1/companies/{NVDA}/relations",
           "/v1/calendar/expected-filings?scope=readable", f"/v1/companies/{NVDA}/events",
           f"/v1/companies/{NVDA}/earnings?quarters=8",
           f"/v1/companies/{NVDA}/earnings?quarters=8&tables=true",  # parser v7
@@ -162,6 +163,9 @@ class RecordingStore:
 
     def answer_peers(self, *_, **__):
         return []
+
+    def answer_business_relations(self, user_id, company_id, limit):
+        return {"names": [], "named_by": []}
 
     def answer_business_peers(self, user_id, company_id):
         """NVDA's stored neighbours, OUTSIDE among them as if RLS let it through."""

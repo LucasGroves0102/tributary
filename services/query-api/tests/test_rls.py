@@ -1345,6 +1345,36 @@ def test_business_relations_read_like_the_text_they_come_from(client, token):
     assert B not in [p["company_id"] for p in body["peers"]]
 
 
+def test_relations_route_quotes_only_text_the_caller_reads(client, token):
+    """/relations: A's Item 1 names B and B's names A. t-pro reads A's filings, not B's: A's
+    sentence is quoted (sliced from the served section by the document offsets) and B's isn't
+    there at all. t-free reads no filings: nothing, whichever way (RLS, under the allow-all
+    authorizer)."""
+    conn = client.app_conn
+    texts = {A: "Intro. We buy chips from B. Rest.", B: "B sells to A, its largest customer."}
+    for cid, text in texts.items():
+        conn.execute(
+            "INSERT INTO silver.filing_sections (accession_no, section_key, parser,"
+            " parser_version, item, title, text, char_start, char_end)"
+            " VALUES (%s, '1', 'python', 't', '1', 'Business', %s, 1000, %s)",
+            (f"{cid}-26-000002", text, 1000 + len(text)))
+    rel = ("INSERT INTO gold.business_relations (company_id, named_id, accession_no,"
+           " section_key, char_start, char_end, ownership) VALUES (%s, %s, %s, '1', %s, %s, false)")
+    start = 1000 + texts[A].index("We buy")
+    conn.execute(rel, (A, B, f"{A}-26-000002", start, start + len("We buy chips from B.")))
+    conn.execute(rel, (B, A, f"{B}-26-000002", 1000, 1000 + len(texts[B])))
+    r = client.get(f"/v1/companies/{A}/relations", headers=token("t-pro"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    (named,) = body["names"]
+    assert named["company_id"] == B
+    (s,) = named["sentences"]
+    assert s["sentence"] == "We buy chips from B." and s["form"] == "10-K"
+    assert body["named_by"] == []  # B's text: t-pro can't read B's filings
+    free = client.get(f"/v1/companies/{A}/relations", headers=token("t-free")).json()
+    assert free["names"] == [] and free["named_by"] == []
+
+
 def test_sectors_co_registrants_and_peer_check_run_as_query_api(client, token):
     """046's view and 047's function are public metadata the query_api role can read."""
     r = client.get("/v1/sectors", headers=token("t-nobody"))
