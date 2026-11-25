@@ -2550,7 +2550,9 @@ html[data-motion="reduced"] .release-table-box summary::before {
 /* a table read as labelled cards on a phone (styles.css cards-narrow): its cells take their own height */
 @container tw (max-width: 560px) {
   .t.cards-narrow tbody td,
-  .t.cards-narrow tbody td.first {
+  .t.cards-narrow tbody td.first,
+  .t.watchlist tbody td,
+  .t.watchlist tbody td.first {
     height: auto;
   }
 }
