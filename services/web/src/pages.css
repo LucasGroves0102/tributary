@@ -1,0 +1,749 @@
+/* Noor's build spec (.interface-design/system.md), batches 2 and 3: every page batch 1 didn't rebuild.
+   The rules every page shares come first (the page header, sections instead of cards, the ledger, fields
+   and chips), then each page's own. Tokens only (tokens.css); loaded last, after company.css. */
+
+/* --- the page and its header (§4 Page header) --------------------------------------------------- */
+
+.page {
+  gap: 40px;
+}
+
+/* title 28/36, the actions on its line: secondaries, then the one primary at the far right */
+.page-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 8px;
+  min-height: 36px;
+}
+
+.page-bar > h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 16px;
+}
+
+.page-bar > h1.grow {
+  flex: 1 1 auto;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* the meta beside a title (a count, a date): 13px pencil, never a second headline */
+.page-bar > .muted,
+.page-bar > .faint {
+  font-size: 13px;
+  color: var(--pencil);
+}
+
+/* a header's content follows 24px under it; sections stack 40 apart */
+.page > .page-bar + * {
+  margin-top: -16px;
+}
+
+.crumb {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+/* --- no cards (§2.4): a section is its title over a 1px ink rule, on the page's ground ------------- */
+
+.page .card,
+.page section.card {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.page .card.pad {
+  padding: 0;
+}
+
+.page .card > .card-h,
+.page .card-h {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-height: 0;
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.page .card-h > h2,
+.page .card-h > h3 {
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.page .card-h .sub {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+/* a header's controls sit on its title's line, at the right */
+.page .card-h > .btn,
+.page .card-h > .grow + * {
+  align-self: center;
+}
+
+.page .card-b,
+.page .card-note,
+.page .card > .foot,
+.page .card > .empty,
+.page .card .pager {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.page .card-note {
+  border-bottom: 0;
+  padding-top: 0;
+  font-size: 13px;
+}
+
+.page .empty {
+  padding: 8px 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+.foot {
+  padding: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+/* --- the ledger table everywhere (§4 Ledger table) ---------------------------------------------- */
+/* header cells 12/500 ink-2 over a 1px ink rule; rows 32px with hairlines, no vertical rules; the name
+   column on the page's left edge; a row tints `sheet` on hover (on at once, off in 80ms) */
+
+.t:not(.led) th {
+  padding: 0 0 8px 12px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.t:not(.led) th.first,
+.t:not(.led) td.first {
+  padding-left: 0;
+  background: var(--paper);
+}
+
+.t:not(.led) th.first {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.t:not(.led) th .unit {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+.t:not(.led) td {
+  height: 32px;
+  padding: 4px 0 4px 12px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 20px;
+  transition: background-color var(--t-hover-out) linear;
+}
+
+.t:not(.led) td.n {
+  font-size: 13px;
+}
+
+.t:not(.led) td:last-child,
+.t:not(.led) th:last-child {
+  padding-right: 0;
+}
+
+.t:not(.led) tr:last-child td {
+  border-bottom: 1px solid var(--rule);
+}
+
+.t.ruled-n td.n + td.n,
+.t.ruled-n th.n + th.n {
+  border-left: 0;
+}
+
+.t tbody tr:hover td,
+.t tbody tr:hover td.first {
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t:not(.led) tbody tr:hover td,
+  .t:not(.led) tbody tr:hover td.first {
+    background: var(--sheet);
+    transition-duration: 0s;
+  }
+}
+
+@media (pointer: coarse) {
+  .t:not(.led) td {
+    height: 40px;
+  }
+}
+
+/* sorting turns the header ink and adds the arrow; no underline bar */
+.t th.sort {
+  cursor: pointer;
+}
+
+.t th[aria-sort="ascending"],
+.t th[aria-sort="descending"] {
+  box-shadow: none;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.t th.sort:hover {
+  color: var(--ink);
+}
+
+/* a selected or watched row: a 2px ink notch at its left edge */
+.t tr.watched td.first,
+.t tr.sel td.first {
+  box-shadow: inset 2px 0 0 var(--ink);
+  padding-left: 12px;
+}
+
+.t tr.watched td.first {
+  padding-left: 8px;
+}
+
+/* row actions: a fixed slot at the row's end, quiet; shown on hover on a fine pointer, always on a coarse one */
+.t td.actions {
+  text-align: right;
+}
+
+.t td.actions .btn.sm {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .t.screen td.actions .btn {
+    opacity: 0;
+    transition: opacity var(--t-hover-out) linear;
+  }
+
+  .t.screen tr:hover td.actions .btn,
+  .t.screen tr:focus-within td.actions .btn,
+  .t.screen td.actions .btn.watching {
+    opacity: 1;
+    transition-duration: 0s;
+  }
+}
+
+/* a reading in a cell: the dash and an 11px letter (§4 Readings), explained under the table */
+.rdg-cell {
+  white-space: nowrap;
+}
+
+.rdg-cell .rdg,
+.rdg-k .rdg {
+  margin-left: 1px;
+  font-size: 11px;
+  line-height: 0;
+  font-weight: 600;
+  font-style: normal;
+  color: var(--ink-2);
+}
+
+.led-legend {
+  margin: 8px 0 0;
+}
+
+.rdg-k {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* the loading ledger: its own headers, blank values (§7.6) */
+.ledger-shape {
+  padding: 0;
+}
+
+.ledger-shape .t.shape {
+  width: 100%;
+}
+
+.ledger-shape .t.shape td .blank-v {
+  vertical-align: middle;
+}
+
+.ledger-shape .t.shape td.n {
+  text-align: right;
+}
+
+.blank-v.w-40 { width: 40px; }
+.blank-v.w-56 { width: 56px; }
+.blank-v.w-104 { width: 104px; }
+.blank-v.w-120 { width: 120px; }
+.blank-v.w-140 { width: 140px; }
+
+/* --- fields and chips (§2.5) ------------------------------------------------------------------- */
+
+.field,
+select,
+input[type="date"] {
+  border: 0;
+  border-radius: var(--r-control);
+  background-color: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  font-size: 13px;
+}
+
+.field:hover,
+select:hover:not(:disabled),
+input[type="date"]:hover {
+  box-shadow: inset 0 0 0 1px var(--ink-2);
+}
+
+.field:focus,
+select:focus-visible,
+input[type="date"]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+textarea.field {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* labels sit above, 12/500 in ink-2 */
+.page label:not(.chk):not(.visually-hidden) {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+/* a chip: 32px, a rule-2 outline; an applied filter (or a chosen option) gets an ink outline */
+button.chip,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h);
+  max-width: 100%;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+button.chip.on,
+.chip.removable {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.chip.removable {
+  margin: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.chip:hover:not(:disabled) {
+    background: var(--well);
+  }
+}
+
+/* --- Companies (the screener, §6) --------------------------------------------------------------- */
+
+.screener-page {
+  gap: 24px;
+}
+
+.screener-page > .page-bar + * {
+  margin-top: 0;
+}
+
+/* the filters: one row of equal 32px controls, wrapping only when the page is narrow */
+.filter-band {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.filter-toggle {
+  display: none;
+  align-self: flex-start;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--control-h);
+  padding: 0 0 0 10px;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  background: transparent;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.fchip.on {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.fchip:focus-within {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.page .fchip > label:not(.visually-hidden) {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.fchip > select,
+.fchip > input {
+  height: 30px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px 0 2px;
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fchip > select:hover:not(:disabled),
+.fchip > input:hover,
+.fchip > select:focus-visible,
+.fchip > input:focus,
+.fchip > input:focus-visible {
+  box-shadow: none;
+  outline: none;
+}
+
+.fchip > select {
+  field-sizing: content;
+  padding-right: 22px;
+  background-position: calc(100% - 13px) 55%, calc(100% - 8px) 55%;
+  max-width: 200px;
+}
+
+.fchip > input::placeholder {
+  color: var(--pencil);
+  font-weight: 400;
+}
+
+.fchip > input[type="number"] {
+  width: 4ch;
+  padding-right: 0;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.fchip > input[type="number"]::-webkit-inner-spin-button,
+.fchip > input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.fchip-u {
+  padding-right: 10px;
+  color: var(--pencil);
+}
+
+.fchip > input#f-ind {
+  width: 7ch;
+}
+
+.fchip-q {
+  padding-left: 10px;
+}
+
+.fchip-q > input {
+  width: 14ch;
+  font-weight: 500;
+}
+
+.fchip-glyph {
+  flex: none;
+  color: var(--pencil);
+}
+
+.fchip-chk {
+  height: var(--control-h);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.filter-clear {
+  margin-left: auto;
+}
+
+.applied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.applied-issue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+
+@container main (max-width: 699px) {
+  .filter-toggle {
+    display: inline-flex;
+  }
+
+  .filter-row.folded {
+    display: none;
+  }
+
+  .fchip,
+  .fchip-chk {
+    height: 44px;
+  }
+
+  .fchip > select,
+  .fchip > input {
+    height: 42px;
+  }
+}
+
+/* the count over the table, the group-by control at its right */
+.screen-results {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.screen-count {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  min-height: 32px;
+  margin: 0 0 16px;
+}
+
+.screen-total {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.screen-desc {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--pencil);
+}
+
+.screen-mine {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.screen-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-desc + .screen-group {
+  margin-left: auto;
+}
+
+.screen-group-k {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.screen-results .tw {
+  margin: 0;
+}
+
+/* the name column: name, then the ticker as a code; the industry under it in pencil */
+.t.screen td.first {
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.t.screen .co b {
+  font-weight: 600;
+}
+
+.t.screen .co .ticker {
+  margin-left: 8px;
+  font-size: 12px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+.t.screen td.first .co-sub {
+  display: none;
+}
+
+.t.screen th.n.long {
+  min-width: 0;
+}
+
+.t.screen td.actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.t.screen td.actions .btn.sm {
+  padding: 0 6px;
+}
+
+.t.screen td.ind {
+  max-width: 160px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.t.screen td.ind .ind-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t.screen td.ind .sector-sub {
+  display: none;
+}
+
+.t.screen td.ind .sic-code {
+  font-size: 11px;
+  font-stretch: 82%;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+.t.screen td.n {
+  font-size: 13px;
+}
+
+.t.screen tr.group-head th {
+  padding: 16px 0 8px;
+  border-bottom: 1px solid var(--ink);
+  background: var(--paper);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  text-align: left;
+}
+
+/* the industry column folds into a line under the name when the table has no room for it */
+@container tw (min-width: 1081px) {
+  .t.screen th.ind,
+  .t.screen td.ind {
+    display: table-cell;
+  }
+}
+
+@container tw (max-width: 1080px) {
+  .t.screen th.ind,
+  .t.screen td.ind {
+    display: none;
+  }
+
+  .t.screen td.first .co-sub {
+    display: block;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+  }
+}
+
+@container main (max-width: 599px) {
+  .t.screen td.first {
+    min-width: 150px;
+    max-width: 170px;
+  }
+
+  .t.screen .co {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .t.screen .co .ticker {
+    margin-left: 0;
+  }
+
+  .t.screen td.first .co-sub {
+    display: none;
+  }
+}
+
+.screen-results .pager {
+  padding: 12px 0 0;
+  border-top: 0;
+}
+
+.screen-results .foot {
+  max-width: 96ch;
+}
+
+.screen-updating {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--pencil);
+}

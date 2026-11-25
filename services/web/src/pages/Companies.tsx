@@ -29,14 +29,15 @@ import {
   type FilerCategory,
   type ScreenFilters,
 } from "../companies/screen";
-import { ANNUAL_FORMS } from "../blanks";
+import { ANNUAL_FORMS, NOT_MEANINGFUL, NOT_REPORTED } from "../blanks";
 import { metricKey } from "../data/dataset";
 import { paren } from "../format";
 import { FigureText } from "../components/FigureText";
 import { MenuButton } from "../components/MenuButton";
 import { toast } from "../components/Toasts";
 import { Why } from "../components/Why";
-import { ErrorPanel, Skeleton } from "../components/States";
+import { ErrorPanel, LedgerShape } from "../components/States";
+import { Choices } from "../components/Choices";
 import { navRow, onTableKey } from "../components/tableNav";
 import { download } from "../download";
 import { go, href } from "../route";
@@ -177,130 +178,159 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
   const masked = rows.filter((r) => !r.readable).length;
   const total = data?.total ?? null;
 
+  // the reading letters the page shows (§4 Readings), explained on one line under the table
+  const letters = [...new Set(rows.flatMap((r) => (r.readable ? columns.map((c) => cellLetter(r.cells[c.key]!)) : [])).filter((l): l is Letter => !!l))].sort();
+  const grouped = (screen.sort ?? "").replace(/^-/, "") === GROUP_SORT;
+
   return (
-    <div className="page">
-      <div className="row page-bar">
-        <h1 className="grow">Companies</h1>
-        {total !== null && (
-          <span className="muted">
-            {scope
-              ? isEmpty(screen)
-                ? `${total} ${total === 1 ? "company" : "companies"} in your demo`
-                : `${total} of the ${scope.ids.size} companies in your demo`
-              : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"}${countWords(screen)}`}
-          </span>
-        )}
-        <button
-          className="btn"
-          onClick={exportCsv}
-          disabled={exporting || !data || total === 0}
-          title={`The whole screen, up to ${SCREENER_CSV_ROWS.toLocaleString()} rows, exact values with their period ends`}
-        >
-          {exporting ? "Exporting…" : "Export CSV"}
-        </button>
-        {columnPicker}
-        {metricMenu}
-        {saveBar}
+    <div className="page screener-page">
+      <div className="page-bar">
+        <h1>Companies</h1>
+        <div className="page-actions">
+          {columnPicker}
+          {metricMenu}
+          <button
+            className="btn"
+            onClick={exportCsv}
+            disabled={exporting || !data || total === 0}
+            title={`The whole screen, up to ${SCREENER_CSV_ROWS.toLocaleString()} rows, exact values with their period ends`}
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
+          {saveBar}
+        </div>
       </div>
       {savedScreens}
       {watch?.(columns)}
 
-      <div className="screener">
-        <FilterRail screen={screen} set={set} scoped={scope !== null} sectors={sectorList} />
+      <FilterRail screen={screen} set={set} sectors={sectorList} />
 
-        <section className="card">
-          <div className="card-h keep">
-            <h2>Screen</h2>
-            <span className="sub">{describe(screen)}</span>
-            <span className="grow" />
-            {sectorList && (
-              <label className="chk small" title="Sort by sector, then industry, with a heading for each (Tributary's own grouping of SIC codes)">
-                <input type="checkbox" checked={(screen.sort ?? "").replace(/^-/, "") === GROUP_SORT}
-                  onChange={(e) => set({ sort: e.target.checked ? GROUP_SORT : undefined })} />
-                Group by sector
-              </label>
+      <section className="screen-results" aria-label="Screen">
+        <div className="screen-count">
+          {total !== null ? (
+            <span className="screen-total">
+              {scope
+                ? isEmpty(screen)
+                  ? `${total} ${total === 1 ? "company" : "companies"} in your demo`
+                  : `${total} of the ${scope.ids.size} companies in your demo`
+                : `${total.toLocaleString()} ${total === 1 ? "company" : "companies"}${countWords(screen)}`}
+            </span>
+          ) : <span className="screen-total"><span className="blank-v w-120" /></span>}
+          <span className="screen-desc" title="The filters this screen applies">{describe(screen)}</span>
+          {!scope && (
+            <label className="chk screen-mine" title="Only companies in my plan: those whose financials your plan covers">
+              <input type="checkbox" checked={screen.mine ?? false} aria-label="Only companies in my plan"
+                onChange={(e) => set({ mine: e.target.checked || undefined })} />
+              Only my plan
+            </label>
+          )}
+          {sectorList && (
+            <span className="screen-group">
+              <span className="screen-group-k" id="group-by">Group by</span>
+              <Choices label="Group by" value={grouped ? "sector" : "none"} options={[["none", "None"], ["sector", "Sector"]]}
+                set={(v) => set({ sort: v === "sector" ? GROUP_SORT : undefined })} />
+            </span>
+          )}
+        </div>
+        {result.state === "error" ? (
+          <ErrorPanel what="this screen" detail={`${result.message}. Fewer columns or filters may help`}
+            onRetry={() => {
+              setResult({ state: "loading" });
+              setAttempt((n) => n + 1);
+            }} />
+        ) : result.state === "loading" ? (
+          <LedgerShape label="Running the screen" first="Company" columns={["Industry (SIC)", ...columns.map((c) => c.label), "FYE"]} rows={10} />
+        ) : (
+          <>
+            {result.updating && <p className="screen-updating" role="status">Running the new screen; these are the last one's rows.</p>}
+            <Table
+              updating={!!result.updating}
+              rows={rows}
+              columns={columns}
+              sort={screen.sort ?? DEFAULT_SORT}
+              watched={watched}
+              onSort={(sort) => set({ sort })}
+              onSic={(sic) => set({ sic, industry: undefined })}
+              onWatch={onWatch}
+              onChart={onChart}
+            />
+            {rows.length === 0 && (
+              <p className="empty">
+                {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
+                {hasValueFilter(screen) && !scope
+                  ? "Value filters only match figures that are current and meaningful; loosen a filter or clear it."
+                  : "Loosen a filter."}
+              </p>
             )}
-            {!isEmpty(screen) && (
-              <button className="btn sm ghost" onClick={() => go({ view: "companies" })}>
-                Reset filters
-              </button>
-            )}
-          </div>
-          {result.state === "error" ? (
-            <ErrorPanel what="this screen" detail={`${result.message}. Fewer columns or filters may help`}
-              onRetry={() => {
-                setResult({ state: "loading" });
-                setAttempt((n) => n + 1);
-              }} />
-          ) : result.state === "loading" ? (
-            <Skeleton lines={8} label="Running the screen" />
-          ) : (
+          </>
+        )}
+        {data && rows.length > 0 && (
+          <Pager
+            offset={data.offset}
+            shown={rows.length}
+            total={total}
+            onPage={(page) => go({ view: "companies", screen: { ...screen, page } })}
+          />
+        )}
+        {letters.length > 0 && (
+          <p className="mk-legend led-legend" aria-label="What the letters mean">
+            {letters.map((l) => <span key={l}><span className="rdg-k">—<sup className="rdg">{l}</sup></span> {LETTERS[l]}</span>)}
+            {rows.some((r) => r.readable && columns.some((c) => r.cells[c.key]!.text === NOT_MEANINGFUL)) && <span><span className="rdg-k">n/m</span> not meaningful</span>}
+          </p>
+        )}
+        <p className="foot read-first">
+          {currencyFoot(rows)} A negative amount is in parentheses. Hover a value for its period and source filing.
+          {masked > 0 && (
             <>
-              {result.updating && <p className="screen-updating" role="status">Running the new screen; these are the last one's rows.</p>}
-              <Table
-                updating={!!result.updating}
-                rows={rows}
-                columns={columns}
-                sort={screen.sort ?? DEFAULT_SORT}
-                watched={watched}
-                onSort={(sort) => set({ sort })}
-                onSic={(sic) => set({ sic, industry: undefined })}
-                onWatch={onWatch}
-                onChart={onChart}
-              />
-              {rows.length === 0 && (
-                <p className="empty">
-                  {scope ? "None of the companies in your demo match." : "No companies match."}{" "}
-                  {hasValueFilter(screen) && !scope
-                    ? "Value filters only match figures that are current and meaningful; loosen a filter or clear it."
-                    : "Loosen a filter."}
-                </p>
-              )}
+              {" "}
+              <span title={MASKED_TITLE}>
+                {masked} {masked === 1 ? "company" : "companies"} on this page{" "}
+                {masked === 1 ? "shows" : "show"} metadata only: your plan doesn't cover
+                {masked === 1 ? " its" : " their"} financials.
+              </span>
             </>
           )}
-          {data && rows.length > 0 && (
-            <Pager
-              offset={data.offset}
-              shown={rows.length}
-              total={total}
-              onPage={(page) => go({ view: "companies", screen: { ...screen, page } })}
-            />
+          {hasValueFilter(screen) && !scope &&
+            " Value filters and size bands only match companies whose financials you can read."}
+          {/* a once-a-year filer ranks beside the others' twelve months: said once, under the table (Riley, test 10, finding 25) */}
+          {(data?.rows ?? []).some((r) => Object.values(r.sources ?? {}).some((s) => ANNUAL_FORMS.test(s?.form ?? ""))) && (
+            <span className="annual-foot">
+              {" "}A company that reports once a year (Form 20-F or 40-F) is ranked by its latest fiscal year, marked “annual”
+              (c) beside the figure, beside the others' twelve months to their latest quarter.
+            </span>
           )}
-          <p className="foot read-first">
-            {currencyFoot(rows)} A negative amount is in parentheses. Hover a value for its period and source filing.
-            {masked > 0 && (
-              <>
-                {" "}
-                <span title={MASKED_TITLE}>
-                  {masked} {masked === 1 ? "company" : "companies"} on this page{" "}
-                  {masked === 1 ? "shows" : "show"} metadata only: your plan doesn't cover
-                  {masked === 1 ? " its" : " their"} financials.
-                </span>
-              </>
-            )}
-            {hasValueFilter(screen) && !scope &&
-              " Value filters and size bands only match companies whose financials you can read."}
-            {/* a once-a-year filer ranks beside the others' twelve months: said once, under the table (Riley, test 10, finding 25) */}
-            {(data?.rows ?? []).some((r) => Object.values(r.sources ?? {}).some((s) => ANNUAL_FORMS.test(s?.form ?? ""))) && (
-              <span className="annual-foot">
-                {" "}A company that reports once a year (Form 20-F or 40-F) is ranked by its latest fiscal year, marked “annual” under the
-                figure, beside the others' twelve months to their latest quarter.
-              </span>
-            )}
-          </p>
-          <details className="how-to-read">
-            <summary>How to read these figures</summary>
-            <div className="foot">
-              TTM = trailing twelve months to each company's latest reported quarter; net debt and debt/equity at that
-              quarter's end. A figure from an earlier period than the company's latest shows its date; about a year or
-              more behind it reads old, dimmed, and leaves sorts and filters. n/m = not meaningful, n/a = doesn't apply,
-              — = not reported; hover for why.
-            </div>
-          </details>
-        </section>
-      </div>
+        </p>
+        <details className="how-to-read">
+          <summary>How to read these figures</summary>
+          <div className="foot">
+            TTM = trailing twelve months to each company's latest reported quarter; net debt and debt/equity at that
+            quarter's end. A figure from an earlier period than the company's latest shows its date; about a year or
+            more behind it reads as none since that date and leaves sorts and filters. n/m = not meaningful; a dash
+            with a letter is a reading, explained on the line under the table; hover any figure for why.
+          </div>
+        </details>
+      </section>
     </div>
   );
+}
+
+/** The reading letters a screener cell can carry (§4 Readings): words for the API's reading only. */
+type Letter = "a" | "b" | "c" | "k";
+const LETTERS: Record<Letter, string> = {
+  a: "not available for this company (hover for why)",
+  b: "none filed since a date (hover for when)",
+  c: "an annual figure: a 20-F or 40-F's fiscal year",
+  k: "a bank: the line doesn't describe one",
+};
+
+/** A cell's reading letter, from the API's reading (blanks.ts `readFigure`) only: never a threshold. */
+export function cellLetter(cell: { value: number | null; text: string; old?: boolean; status?: string | null; asOf?: string | null }): Letter | null {
+  if (cell.old) return "b";
+  if (cell.status === "not_applicable") return "k";
+  if (cell.status === "not_computed") return "a";
+  if (cell.value === null && cell.text === NOT_REPORTED) return "a";
+  if (cell.asOf?.startsWith("annual")) return "c";
+  return null;
 }
 
 /** A typed filter applies this long after the last keystroke. */
@@ -313,11 +343,9 @@ const without = (list: string[], name: string) => {
 /** Up to this wide the filters start folded: all nine would fill a phone's first screen. */
 const FOLD_FILTERS_PX = 700;
 
-function FilterRail({ screen, set, scoped, sectors }: {
+function FilterRail({ screen, set, sectors }: {
   screen: ScreenFilters;
   set: (p: Partial<ScreenFilters>) => void;
-  /** a demo sandbox: only its companies, so no "Only companies I can read" */
-  scoped: boolean;
   /** /v1/sectors (null: an older API, no sector filter) */
   sectors: Sectors | null;
 }) {
@@ -387,148 +415,162 @@ function FilterRail({ screen, set, scoped, sectors }: {
     // commit reads the drafts this key describes
   }, [draftKey]);
 
+  // the filters are one row of equal 32px controls (§2.5 chips: an applied one has an ink outline); the
+  // chosen sectors and industries, a SIC code and a data check are chips above the table, each with ×
+  const fchip = (on: boolean, extra = "") => `fchip${on ? " on" : ""}${extra ? ` ${extra}` : ""}`;
+  const applied = chosenSectors.length + chosenIndustries.length + (screen.sic ? 1 : 0) + (screen.issue ? 1 : 0);
   return (
-    <details className="card filter-band" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary>
-        <b>Filters</b>
-        <span className="faint small">{active ? `${active} active` : "None set"}</span>
-        <span className="faint small">Applied as you change them</span>
-      </summary>
-      <form className="filters" onSubmit={submit} aria-label="Screen filters">
-      {screen.issue && (
-        <div className="filter-note">
-          <span className="small muted">From the data status page</span>
-          <button type="button" className="chip removable" onClick={() => apply({ issue: undefined })}
-            title="Remove the data-check filter">
-            {checkName(screen.issue) ?? screen.issue} ✕
-          </button>
-          <p className="faint small">
-            Each company's Data notes tab shows what was found. Only companies you can read are listed.
-          </p>
-        </div>
-      )}
-      <div>
-        <label htmlFor="f-q">Name or ticker</label>
-        <input id="f-q" className="field" type="search" value={q} maxLength={100}
-          placeholder="e.g. PEP or Pepsi" onChange={(e) => setQ(e.target.value)} onBlur={commit} />
-      </div>
-      <div>
-        <label htmlFor="f-ind">Industry (SIC)</label>
-        <input id="f-ind" className="field" value={industry} maxLength={100}
-          placeholder="e.g. beverages, semiconductors" onChange={(e) => setIndustry(e.target.value)}
-          onBlur={commit} />
-        {screen.sic && (
-          <button type="button" className="chip removable" onClick={() => apply({ sic: undefined })}
-            title="Remove the SIC filter">
-            SIC {screen.sic} ✕
-          </button>
+    <div className="filter-band">
+      <button type="button" className="btn filter-toggle" aria-expanded={open} aria-controls="screen-filters"
+        onClick={() => setOpen((o) => !o)}>
+        Filters{active ? ` · ${active} active` : ""}
+        <span className="more-caret" aria-hidden="true" />
+      </button>
+      <form id="screen-filters" className={open ? "filters filter-row" : "filters filter-row folded"} onSubmit={submit}
+        aria-label="Screen filters">
+        <span className={fchip(!!screen.q, "fchip-q")}>
+          <label htmlFor="f-q" className="visually-hidden">Name or ticker</label>
+          <svg className="fchip-glyph" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10.5 10.5 14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input id="f-q" type="search" value={q} maxLength={100}
+            placeholder="Name or ticker" onChange={(e) => setQ(e.target.value)} onBlur={commit} />
+        </span>
+        {sectors && (
+          <span className={fchip(chosenSectors.length > 0)}>
+            <label htmlFor="f-sector">Sector</label>
+            <select id="f-sector" value="" title={sectors.note} disabled={chosenSectors.length >= MAX_SECTORS}
+              onChange={(e) => e.target.value && apply({ sector: [...chosenSectors, e.target.value] })}>
+              <option value="">{chosenSectors.length ? "Add a sector" : "Any"}</option>
+              {sectors.sectors.filter((s) => !chosenSectors.includes(s.name)).map((s) => (
+                <option key={s.name} value={s.name}>{s.name} ({s.companies.toLocaleString()})</option>
+              ))}
+            </select>
+          </span>
         )}
-      </div>
-      {/* several sectors and industries (uranium plus renewables): each box adds one, the chosen ones are
-          chips under it; the screener reads them as a tree (an industry narrows its own sector) */}
-      {sectors && (
-        <div>
-          <label htmlFor="f-sector">Sector</label>
-          <select id="f-sector" className="field" value="" title={sectors.note} disabled={chosenSectors.length >= MAX_SECTORS}
-            onChange={(e) => e.target.value && apply({ sector: [...chosenSectors, e.target.value] })}>
-            <option value="">{chosenSectors.length ? "Add a sector" : "Any"}</option>
-            {sectors.sectors.filter((s) => !chosenSectors.includes(s.name)).map((s) => (
-              <option key={s.name} value={s.name}>{s.name} ({s.companies.toLocaleString()})</option>
+        {/* the sectors' industries are a filter of their own, in the row, not a second box under Sector (Riley 104) */}
+        {sectors && offered.length > 0 && (
+          <span className={fchip(chosenIndustries.length > 0)}>
+            <label htmlFor="f-sector-ind">{chosenSectors.length === 1 ? `Industry in ${chosenSectors[0]}` : "Industry"}</label>
+            <select id="f-sector-ind" value="" disabled={chosenIndustries.length >= MAX_INDUSTRIES}
+              aria-label={chosenSectors.length === 1 ? "Industry within the sector" : "Industry within the sectors"}
+              title="An industry narrows its own sector; a sector with none of its industries chosen counts whole"
+              onChange={(e) => e.target.value && apply({ sector_industry: [...chosenIndustries, e.target.value] })}>
+              <option value="">{chosenIndustries.length ? "Add an industry" : "Any"}</option>
+              {offered.map((s) => {
+                const options = s.industries.filter((i) => !chosenIndustries.includes(i.name)).map((i) => (
+                  <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
+                ));
+                return offered.length > 1 ? <optgroup key={s.name} label={s.name}>{options}</optgroup> : <Fragment key={s.name}>{options}</Fragment>;
+              })}
+            </select>
+          </span>
+        )}
+        <span className={fchip(!!screen.industry)}>
+          <label htmlFor="f-ind">SIC industry</label>
+          <input id="f-ind" value={industry} maxLength={100} size={8} aria-label="Industry (SIC)"
+            placeholder="any" title="Words in the SEC's industry name, e.g. beverages, semiconductors"
+            onChange={(e) => setIndustry(e.target.value)} onBlur={commit} />
+        </span>
+        <span className={fchip(!!screen.band)}>
+          <label htmlFor="f-band">Revenue</label>
+          <select id="f-band" value={screen.band ?? ""} aria-label="Revenue TTM"
+            onChange={(e) => apply({ band: (e.target.value || undefined) as Band | undefined })}>
+            <option value="">Any</option>
+            {BANDS.map((b) => (
+              <option key={b} value={b}>{BAND_LABELS[b]}</option>
             ))}
           </select>
-          {chosenSectors.map((s) => (
-            <button key={s} type="button" className="chip removable" title={`Remove ${s} and its industries`}
-              onClick={() => apply({ sector: without(chosenSectors, s), sector_industry: chosenIndustries.filter((i) => !industriesOf(s).includes(i)) })}>
-              {s} ✕
-            </button>
-          ))}
-        </div>
-      )}
-      {/* the sectors' industries are a filter of their own, in the grid, not a second box under Sector that
-          pushed its row out of line (Riley 104) */}
-      {sectors && offered.length > 0 && (
-        <div>
-          <label htmlFor="f-sector-ind">{chosenSectors.length === 1 ? `Industry in ${chosenSectors[0]}` : "Industry"}</label>
-          <select id="f-sector-ind" className="field" value="" disabled={chosenIndustries.length >= MAX_INDUSTRIES}
-            aria-label={chosenSectors.length === 1 ? "Industry within the sector" : "Industry within the sectors"}
-            title="An industry narrows its own sector; a sector with none of its industries chosen counts whole"
-            onChange={(e) => e.target.value && apply({ sector_industry: [...chosenIndustries, e.target.value] })}>
-            <option value="">{chosenIndustries.length ? "Add an industry" : "Any"}</option>
-            {offered.map((s) => {
-              const options = s.industries.filter((i) => !chosenIndustries.includes(i.name)).map((i) => (
-                <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
-              ));
-              return offered.length > 1 ? <optgroup key={s.name} label={s.name}>{options}</optgroup> : <Fragment key={s.name}>{options}</Fragment>;
-            })}
+        </span>
+        <span className={fchip(screen.growth !== undefined)}>
+          <label htmlFor="f-growth">Growth ≥</label>
+          <input id="f-growth" type="number" step="any" value={growth} size={4} aria-label="Rev growth YoY, min %"
+            placeholder="any" onChange={(e) => setGrowth(e.target.value)} onBlur={commit} />
+          <span className="fchip-u" aria-hidden="true">%</span>
+        </span>
+        <span className={fchip(screen.margin !== undefined)}>
+          <label htmlFor="f-margin">Op mgn ≥</label>
+          <input id="f-margin" type="number" step="any" value={margin} size={4} aria-label="Op margin TTM, min %"
+            placeholder="any" onChange={(e) => setMargin(e.target.value)} onBlur={commit} />
+          <span className="fchip-u" aria-hidden="true">%</span>
+        </span>
+        <span className={fchip(!!screen.exchange)}>
+          <label htmlFor="f-ex">Exchange</label>
+          <select id="f-ex" value={screen.exchange ?? ""}
+            onChange={(e) => apply({ exchange: e.target.value || undefined })}>
+            <option value="">Any</option>
+            {EXCHANGES.map((x) => (
+              <option key={x} value={x}>{x}</option>
+            ))}
           </select>
-          {chosenIndustries.map((i) => (
-            <button key={i} type="button" className="chip removable" title={`Remove ${i}`}
-              onClick={() => apply({ sector_industry: without(chosenIndustries, i) })}>
-              {i} ✕
-            </button>
-          ))}
-        </div>
-      )}
-      <div>
-        <label htmlFor="f-band">Revenue TTM</label>
-        <select id="f-band" className="field" value={screen.band ?? ""}
-          onChange={(e) => apply({ band: (e.target.value || undefined) as Band | undefined })}>
-          <option value="">Any</option>
-          {BANDS.map((b) => (
-            <option key={b} value={b}>{BAND_LABELS[b]}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label htmlFor="f-growth">Rev growth YoY, min %</label>
-        <input id="f-growth" className="field" type="number" step="any" value={growth}
-          placeholder="any" onChange={(e) => setGrowth(e.target.value)} onBlur={commit} />
-      </div>
-      <div>
-        <label htmlFor="f-margin">Op margin TTM, min %</label>
-        <input id="f-margin" className="field" type="number" step="any" value={margin}
-          placeholder="any" onChange={(e) => setMargin(e.target.value)} onBlur={commit} />
-      </div>
-      <div>
-        <label htmlFor="f-fye">Fiscal year end</label>
-        <select id="f-fye" className="field" value={screen.fye ?? ""}
-          onChange={(e) => apply({ fye: e.target.value ? Number(e.target.value) : undefined })}>
-          <option value="">Any</option>
-          {MONTHS.map((m, i) => (
-            <option key={m} value={i + 1}>{m}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label htmlFor="f-ex">Exchange</label>
-        <select id="f-ex" className="field" value={screen.exchange ?? ""}
-          onChange={(e) => apply({ exchange: e.target.value || undefined })}>
-          <option value="">Any</option>
-          {EXCHANGES.map((x) => (
-            <option key={x} value={x}>{x}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label htmlFor="f-filer">Filer category</label>
-        <select id="f-filer" className="field" value={screen.filer ?? ""}
-          onChange={(e) => apply({ filer: (e.target.value || undefined) as FilerCategory | undefined })}>
-          <option value="">Any</option>
-          {FILER_CATEGORIES.map((c) => (
-            <option key={c} value={c}>{FILER_LABELS[c]}</option>
-          ))}
-        </select>
-      </div>
-      {!scoped && (
-        <label className="chk">
-          <input type="checkbox" checked={screen.mine ?? false}
-            onChange={(e) => apply({ mine: e.target.checked || undefined })} />
-          Only companies in my plan
-        </label>
-      )}
-      <button type="submit" className="visually-hidden">Apply</button>
+        </span>
+        <span className={fchip(!!screen.filer)}>
+          <label htmlFor="f-filer">Filer</label>
+          <select id="f-filer" value={screen.filer ?? ""} aria-label="Filer category"
+            onChange={(e) => apply({ filer: (e.target.value || undefined) as FilerCategory | undefined })}>
+            <option value="">Any</option>
+            {FILER_CATEGORIES.map((c) => (
+              <option key={c} value={c}>{FILER_LABELS[c]}</option>
+            ))}
+          </select>
+        </span>
+        <span className={fchip(!!screen.fye)}>
+          <label htmlFor="f-fye">FYE</label>
+          <select id="f-fye" value={screen.fye ?? ""} aria-label="Fiscal year end"
+            onChange={(e) => apply({ fye: e.target.value ? Number(e.target.value) : undefined })}>
+            <option value="">Any</option>
+            {MONTHS.map((m, i) => (
+              <option key={m} value={i + 1}>{m}</option>
+            ))}
+          </select>
+        </span>
+        {active > 0 && (
+          <button type="button" className="btn ghost filter-clear" onClick={() => go({ view: "companies" })}>
+            Clear
+          </button>
+        )}
+        <button type="submit" className="visually-hidden">Apply</button>
       </form>
-    </details>
+      {applied > 0 && (
+        <ul className="applied" aria-label="Applied filters">
+          {screen.issue && (
+            <li className="applied-issue">
+              <span className="pencil">From the data status page:</span>
+              <button type="button" className="chip removable" onClick={() => apply({ issue: undefined })}
+                title="Remove the data-check filter">
+                {checkName(screen.issue) ?? screen.issue} ✕
+              </button>
+              <span className="pencil">Each company's Data notes tab shows what was found. Only companies you can read are listed.</span>
+            </li>
+          )}
+          {screen.sic && (
+            <li>
+              <button type="button" className="chip removable" onClick={() => apply({ sic: undefined })}
+                title="Remove the SIC filter">
+                SIC {screen.sic} ✕
+              </button>
+            </li>
+          )}
+          {chosenSectors.map((s) => (
+            <li key={s}>
+              <button type="button" className="chip removable" title={`Remove ${s} and its industries`}
+                onClick={() => apply({ sector: without(chosenSectors, s), sector_industry: chosenIndustries.filter((i) => !industriesOf(s).includes(i)) })}>
+                {s} ✕
+              </button>
+            </li>
+          ))}
+          {chosenIndustries.map((i) => (
+            <li key={i}>
+              <button type="button" className="chip removable" title={`Remove ${i}`}
+                onClick={() => apply({ sector_industry: without(chosenIndustries, i) })}>
+                {i} ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -579,7 +621,7 @@ function Table({
     <>
       {error && <p className="empty error">{error}</p>}
       <TableScroll label="Screener results">
-        <table className={updating ? "t screen ruled-n updating" : "t screen ruled-n"} aria-busy={updating || undefined}>
+        <table className={updating ? "t screen updating" : "t screen"} aria-busy={updating || undefined}>
           <thead>
             <tr>
               <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
@@ -614,7 +656,7 @@ function Table({
                     <th colSpan={columns.length + 4} scope="rowgroup">{group}</th>
                   </tr>
                 )}
-                <tr className={r.readable ? "clk" : "clk masked"} {...navRow(i, r.name)}
+                <tr className={[r.readable ? "clk" : "clk masked", isWatched && "watched"].filter(Boolean).join(" ")} {...navRow(i, r.name)}
                   onClick={() => go({ view: "company", companyId: r.companyId })}>
                   <td className="first">
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}
@@ -654,15 +696,26 @@ function Table({
                   </td>
                   {columns.map((c) => {
                     const cell = r.cells[c.key]!;
+                    // a reading is a dash and a letter (§4), explained under the table; a change takes its
+                    // direction's colour and a true minus (§2.3), a level none
+                    const letter = r.readable ? cellLetter(cell) : null;
                     const tone = cell.value === null
                       ? "faint"
                       : c.kind === "growth"
-                        ? cell.value >= 0 ? "pos" : "neg"
+                        ? cell.value >= 0 ? "gain" : "loss"
                         : "";
                     return (
                       <td key={c.key} className={`n ${tone}`} title={cell.title}>
-                        {/* a negative amount in parentheses, as a ledger prints it; the hover and CSV keep the sign */}
-                        <FigureText cell={c.kind === "usd" ? { ...cell, text: paren(cell.text) } : cell} />
+                        {letter && letter !== "c" ? (
+                          <span className="rdg-cell">{NOT_REPORTED}<sup className="rdg">{letter}</sup></span>
+                        ) : letter === "c" ? (
+                          <span className="rdg-cell">{paren(cell.text)}<sup className="rdg">c</sup></span>
+                        ) : (
+                          /* a negative amount in parentheses, as a ledger prints it (the hover and CSV keep the
+                             sign); a fall in growth takes a true minus */
+                          <FigureText cell={c.kind === "usd" ? { ...cell, text: paren(cell.text) }
+                            : c.kind === "growth" ? { ...cell, text: cell.text.replace(/^-/, "−") } : cell} />
+                        )}
                       </td>
                     );
                   })}

@@ -79,7 +79,7 @@ it("runs the screen from the URL's filters and shows values with sources", async
   expect(nvda.textContent).toContain("Nvidia");
   const revenue = [...nvda.querySelectorAll("td.n")].find((td) => td.textContent === "$130.5B");
   expect(revenue?.getAttribute("title")).toContain("10-Q filed Aug 26, 2026");
-  expect($(".card-h .sub")?.textContent).toBe("revenue $1B to $10B, operating margin ≥ 20%");
+  expect($(".screen-desc")?.textContent).toBe("revenue $1B to $10B, operating margin ≥ 20%");
 });
 
 it("a once-a-year filer ranked beside twelve months is said under the table (Riley, test 10, finding 25)", async () => {
@@ -129,16 +129,18 @@ it("the filters start folded on a phone, say how many are set, and stay mounted"
   Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
   await render({ industry: "semi", band: "over100b" as ScreenFilters["band"] });
   Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
-  const band = $(".filter-band") as HTMLDetailsElement;
-  expect(band.open).toBe(false);
-  expect(band.querySelector("summary")?.textContent).toContain("2 active");
+  const toggle = $(".filter-toggle")!;
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect($(".filter-row")?.classList.contains("folded")).toBe(true);
+  expect(toggle.textContent).toContain("2 active");
   // folded, not gone: what's typed survives opening and closing
   expect($("#f-ind")).not.toBeNull();
 });
 
 it("the filters start open where there's room", async () => {
   await render();
-  expect(($(".filter-band") as HTMLDetailsElement).open).toBe(true);
+  expect($(".filter-toggle")?.getAttribute("aria-expanded")).toBe("true");
+  expect($(".filter-row")?.classList.contains("folded")).toBe(false);
 });
 
 it("an empty result keeps the table's headers", async () => {
@@ -276,22 +278,22 @@ it("a demo sandbox screens only its companies, with no 'only mine' box and a dem
   vi.mocked(fetch).mockImplementation(async () => Response.json({ ...SCREEN, total: 1, rows: [row(entry())] }));
   await render({}, scope);
   expect(calls()[0]!.searchParams.get("access")).toBe("financials");
-  expect(container.textContent).not.toContain("Only companies in my plan");
-  expect($(".page > .row .muted")?.textContent).toBe("1 company in your demo");
-  expect($(".card-h .sub")?.textContent).toBe("no filters");
+  expect(container.querySelector('[aria-label="Only companies in my plan"]')).toBeNull();
+  expect($(".screen-total")?.textContent).toBe("1 company in your demo");
+  expect($(".screen-desc")?.textContent).toBe("no filters");
   expect(container.textContent).not.toContain("metadata only");
   act(() => root.unmount());
   await render({ margin: 20, mine: true }, scope);
   expect(calls().filter((u) => u.pathname.endsWith("/screener")).at(-1)!.searchParams.get("access")).toBe("financials");
-  expect($(".page > .row .muted")?.textContent).toBe("1 of the 1 companies in your demo");
-  expect($(".card-h .sub")?.textContent).toBe("operating margin ≥ 20%");
+  expect($(".screen-total")?.textContent).toBe("1 of the 1 companies in your demo");
+  expect($(".screen-desc")?.textContent).toBe("operating margin ≥ 20%");
 });
 
 it("a named user keeps the full index and the 'only mine' box", async () => {
   await render();
   expect(calls()[0]!.searchParams.get("access")).toBeNull();
-  expect(container.textContent).toContain("Only companies in my plan");
-  expect($(".page > .row .muted")?.textContent).toBe("2 companies with figures in these columns");
+  expect(container.querySelector('[aria-label="Only companies in my plan"]')).not.toBeNull();
+  expect($(".screen-total")?.textContent).toBe("2 companies with figures in these columns");
 });
 
 it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with a heading per industry", async () => {
@@ -315,7 +317,7 @@ it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with 
   expect([...container.querySelectorAll("tr.group-head th")].map((th) => th.textContent))
     // Seal: no middle-dot separators
     .toEqual(["Technology: Semiconductors", "Consumer Discretionary: Automobiles"]);
-  expect((container.querySelector(".card-h .chk input") as HTMLInputElement).checked).toBe(true);
+  expect(container.querySelector('[aria-label="Group by"] [aria-checked="true"]')?.textContent).toBe("Sector");
   expect($(".sector-sub")?.textContent).toBe("Semiconductors");
 });
 
@@ -352,7 +354,7 @@ it("industries set without a sector (as the assistant may) offer every sector's"
   const industry = container.querySelector('select[aria-label="Industry within the sectors"]') as HTMLSelectElement;
   expect([...industry.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Technology", "Utilities"]);
   expect([...container.querySelectorAll(".chip.removable")].map((c) => c.textContent)).toEqual(["Independent power & renewables ✕"]);
-  expect($(".card-h .sub")?.textContent).toBe("Independent power & renewables");
+  expect($(".screen-desc")?.textContent).toBe("Independent power & renewables");
 });
 
 it("F4: an older API without /v1/sectors offers no sector filter or grouping", async () => {
@@ -361,5 +363,5 @@ it("F4: an older API without /v1/sectors offers no sector filter or grouping", a
     : Response.json(SCREEN));
   await render();
   expect($("#f-sector")).toBeNull();
-  expect(container.textContent).not.toContain("Group by sector");
+  expect(container.textContent).not.toContain("Group by");
 });

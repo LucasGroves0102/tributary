@@ -21,8 +21,7 @@ window](#deploy-window).
 filing's own words; one seal red for the tick and the logo, green and rust for a change's direction only,
 yellow for inserted text only; hairlines and surface steps, one shadow (`--float`) on things that float. The
 first batch (2026-11-25) rebuilt the foundations, the shell and the company page's header, Overview and
-Statements; the other screens read the new tokens through the older names and keep their own layout until
-their pass.
+Statements; batches 2 and 3 (`ui-overhaul-2`) the rest, page by page.
 
 - **Tokens** (`src/tokens.css`): both palettes (`--paper --sheet --well --ink --ink-2 --pencil --disabled --rule
   --rule-2 --seal --gain --loss --ins-bg --ins-line --bar --bar-edge --bar-latest`, `--float`, `--scrim`), the type
@@ -61,7 +60,23 @@ their pass.
   row's ends, Enter or Space opens the figure's card. The screener, watchlist and comps keep the row-based
   `tableNav.ts` until their pass.
 - **Stylesheets**: `tokens.css`, then `styles.css` (the older screens), `seal.css` (their Seal pieces),
-  `ui.css` (the spec's shared components and the view-transition rules), `shell.css`, `company.css`.
+  `ui.css` (the spec's shared components and the view-transition rules), `shell.css`, `company.css`, and
+  `pages.css` (batches 2 and 3: what every other page shares, then each page's own).
+- **Every other page** (batches 2 and 3, `pages.css`): a page header (28px title, the actions on its line,
+  one primary), sections instead of cards (a `.card` is its title over a 1px ink rule on the page's ground),
+  every `.t` table a ledger (12/500 headers over an ink rule, 32px rows, no vertical rules, a `sheet` hover,
+  the name column on the page's left edge, a watched or selected row's 2px ink notch), fields filled `well`
+  with a `rule-2` ring, and chips 32px with a `rule-2` outline (an applied one ink). A loading ledger is
+  `States.tsx` `LedgerShape`: its real headers, blank `well` values, a slow pulse after a second.
+- **Companies**: the filters are one row of equal 32px chips (name or ticker, Sector, Industry, SIC industry,
+  Revenue, Growth ≥, Op mgn ≥, Exchange, Filer, FYE; an applied one has an ink outline), folded behind
+  "Filters" on a narrow page; the chosen sectors, industries, a SIC code and a data check are removable chips
+  above the table. Over the table: the count, the filters in words, Only my plan and Group by (None |
+  Sector). A blank is a dash and a reading letter (`cellLetter`, from the API's reading only: a not available
+  or not computed, b none since a date, c an annual figure, k a bank), explained on one line under the
+  table; n/m stays text. A row's Chart and Watch show on hover (always on a coarse pointer and when
+  watching); a watched row has the ink notch. The industry column folds under the name below 1080px of
+  table.
 
 Money negatives read in parentheses on every table (`format.ts` `paren`: display only; the CSV and the card
 keep the sign, and F5's `outflow` stays the one place a sign is decided); a signed change takes a true minus
@@ -846,9 +861,9 @@ Co-registrants (#135): a company that files one combined 10-K with another (PG&E
 duplicate: two SEC registrants, each with its own statements, a parent's including its subsidiaries'.
 
 Sectors (#136): the screener's filters have a Sector and an Industry within it (`/v1/sectors`,
-Tributary's own grouping of SIC codes, not GICS), and "Group by sector" sorts by sector and industry
+Tributary's own grouping of SIC codes, not GICS), and "Group by: Sector" sorts by sector and industry
 with a heading row for each. Several of each (uranium plus renewables): each box adds one, the
-chosen ones are removable chips under it (removing a sector takes its industries), and the Industry
+chosen ones are removable chips above the table (removing a sector takes its industries), and the Industry
 box offers the chosen sectors' industries grouped by sector (every sector's when the assistant set
 industries alone). The API reads them as a tree: an industry narrows its own sector, a sector with
 none of its industries chosen counts whole. The URL repeats `sector` and `sector_industry`; a saved

@@ -2667,12 +2667,12 @@ button.chip:disabled {
 }
 
 /* a figure from another period than the company's latest (blanks.ts): the date under it; an old one dimmed */
-.fig {
+.figt {
   display: inline-block;
 }
 
 /* the type scale's smallest, 12px, not 10.5 (Riley, test 10, findings 89 and 13: 8-9px notes in Compare) */
-.fig .asof {
+.figt .asof {
   display: block;
   font-size: var(--fs-xs);
   font-weight: 400;
@@ -2680,7 +2680,7 @@ button.chip:disabled {
   white-space: nowrap;
 }
 
-.fig.old {
+.figt.old {
   color: var(--text-3);
 }
 
