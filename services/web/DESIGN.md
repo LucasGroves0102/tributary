@@ -77,6 +77,13 @@ Statements; batches 2 and 3 (`ui-overhaul-2`) the rest, page by page.
   table; n/m stays text. A row's Chart and Watch show on hover (always on a coarse pointer and when
   watching); a watched row has the ink notch. The industry column folds under the name below 1080px of
   table.
+- **The other company tabs** (batch 2): Earnings' quarters, the Filings tab's forms and What changed's
+  choices are segmented controls (`.seg`, the same look as `Choices`); the release's headline, outlook and
+  notes are quoted in the serif (15/24) beside a 2px bar; a reconciliation is a collapsible section whose
+  all-caps title is set in sentence case for display (`format.ts` `sentenceCase`: abbreviations such as
+  GAAP kept, the filing's own title on hover). Peers' Why is short pencil tags (`Reason.short`: "named as a
+  competitor · same industry · similar size"; business keywords and every reason whole on the cell's
+  hover); the median is a total row under an ink rule. Data notes are rows ruled apart.
 
 Money negatives read in parentheses on every table (`format.ts` `paren`: display only; the CSV and the card
 keep the sign, and F5's `outflow` stays the one place a sign is decided); a signed change takes a true minus

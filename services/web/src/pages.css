@@ -4,7 +4,8 @@
 
 /* --- the page and its header (§4 Page header) --------------------------------------------------- */
 
-.page {
+/* (the company page keeps batch 1's own spacing: company.css) */
+.page:not(.company-page) {
   gap: 40px;
 }
 
@@ -1635,4 +1636,219 @@ button.chip.on,
 
 .home-side .card-h .sub {
   flex-basis: 100%;
+}
+
+/* --- the company tabs batch 1 didn't draw (§6): Earnings, Revenue, Segments, Ratios, Filings, Data notes,
+   Peers. Their sections are batch 1's (title over an ink rule); here their insides. --------------------- */
+
+/* two sections side by side (Earnings' release and reported figures): lead and side, stacked when narrow */
+.co-panel > .grid2 {
+  gap: 24px 32px;
+  margin-bottom: 40px;
+}
+
+.co-panel > .grid2 > .card {
+  margin: 0;
+}
+
+.earnings-pick {
+  gap: 8px 16px;
+  margin: 0 0 24px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+/* the release's headline, the outlook and its notes: the release's own words, quoted (serif 15/24, the
+   figures 600, the source under it) */
+.release-headline {
+  padding-left: 16px;
+  border-left: 2px solid var(--ink-2);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.release-blocks {
+  gap: 24px;
+}
+
+.release-block {
+  padding-left: 16px;
+  border-left: 2px solid var(--ink-2);
+  gap: 8px;
+}
+
+.release-lines p.rl {
+  max-width: 720px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.release-lines p.rl.heading {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.release-lines p.rl.sub {
+  padding-left: 24px;
+}
+
+/* a reconciliation: a collapsible ledger, titled in sentence case */
+.release-table-box {
+  border-top: 1px solid var(--rule);
+  padding: 8px 0;
+}
+
+.release-table-box summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.release-table-box summary::-webkit-details-marker {
+  display: none;
+}
+
+.release-table-box summary::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--ink-2);
+  border-bottom: 1.5px solid var(--ink-2);
+  transform: rotate(-45deg);
+  transition: transform var(--t-tab) var(--ease-move);
+}
+
+.release-table-box[open] summary::before {
+  transform: rotate(45deg);
+}
+
+html[data-motion="reduced"] .release-table-box summary::before {
+  transition: none;
+}
+
+.release-table {
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.reader-link,
+.edgar-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.reader-link::after {
+  content: " →";
+}
+
+/* the Filings tab: the forms as a segmented control on its own row, the dates beside it */
+.filings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.t.filings td.actions {
+  width: 1%;
+}
+
+.t.filings td.items {
+  color: var(--ink-2);
+}
+
+.t.filings tr.year-h th {
+  padding: 16px 0 8px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+/* Peers: why as short pencil tags; the median a total row under an ink rule */
+.t.peers td.why {
+  font-size: 12px;
+  color: var(--pencil);
+  white-space: normal;
+  min-width: 160px;
+}
+
+.t.peers td.why a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-2);
+}
+
+.t tr.agg td {
+  background: transparent;
+  border-top: 1px solid var(--ink);
+  font-weight: 650;
+}
+
+.t tr.agg td .unit {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.t tr.sel td,
+.t tr.sel td.first {
+  background: transparent;
+}
+
+/* Data notes: a summary line, then the notes as a ledger of rows */
+.notes-summary {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink);
+}
+
+.notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notes .note {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.notes .note .note-t {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.notes .note p {
+  max-width: 720px;
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+.notes .note .note-f {
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+
+/* a section's chart and its ledger: the chart 7 columns, the ledger 5 (Revenue / Segments, §6) */
+.co-panel .t.aligned {
+  min-width: 0;
 }

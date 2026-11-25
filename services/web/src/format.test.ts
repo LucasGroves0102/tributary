@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, duration, inWords, localClock, localTime, money, moneyRow, paren, pct, quarter } from "./format";
+import { ago, change, companyName, day, displayNames, duration, inWords, localClock, localTime, money, moneyRow, paren, pct, quarter, sentenceCase } from "./format";
 
 describe("moneyRow", () => {
   it("reads a row in one unit: the largest value's, or the next smaller one when a value would read under one", () => {
@@ -159,4 +159,13 @@ it("never claims more than four significant figures: $227.0M, not $227.00M (Rile
   expect(money(46.74e9, "USD")).toBe("$46.74B");
   // a row takes its largest value's decimals, so its points line up
   expect(moneyRow([227e6, 46.7e6])).toEqual(["$227.0M", "$46.7M"]);
+});
+
+describe("sentenceCase", () => {
+  it("sets an all-caps heading in sentence case, keeping abbreviations; leaves a mixed-case one as filed", () => {
+    expect(sentenceCase("RECONCILIATION OF GAAP TO NON-GAAP FINANCIAL MEASURES")).toBe("Reconciliation of GAAP to non-GAAP financial measures");
+    expect(sentenceCase("RECONCILIATION OF GAAP TO NON-GAAP OUTLOOK")).toBe("Reconciliation of GAAP to non-GAAP outlook");
+    expect(sentenceCase("FREE CASH FLOW, Q3 FY2027")).toBe("Free cash flow, Q3 FY2027");
+    expect(sentenceCase("Reconciliation of GAAP to Non-GAAP")).toBe("Reconciliation of GAAP to Non-GAAP");
+  });
 });

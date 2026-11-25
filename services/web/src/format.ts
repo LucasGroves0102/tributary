@@ -102,6 +102,31 @@ export function moneyRow(values: (number | null)[], currency = "USD"): (string |
  * hover keep the sign (and F5's `outflow` stays the one place a sign is decided). A percentage or a
  * multiple ("-4.0%", "-0.40x") isn't money and keeps its minus sign; so does anything that isn't a
  * formatted amount. */
+/** Words an all-caps heading keeps in capitals when set in sentence case: abbreviations, never words. */
+const KEEP_CAPS = new Set(["GAAP", "EPS", "EBIT", "EBITDA", "EBITDAR", "FFO", "AFFO", "NOI", "ROIC", "ROE", "ROA", "LTM", "TTM",
+  "US", "U.S", "USA", "UK", "EU", "R&D", "SG&A", "FX", "IT", "AI", "CEO", "CFO", "FY", "Q1", "Q2", "Q3", "Q4", "II", "III", "IV", "LLC", "INC"]);
+/** Small words a sentence-case heading sets in lower case. */
+const SMALL_WORDS = new Set(["a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "of", "on", "or", "per", "the", "to", "with", "non"]);
+
+/** An ALL-CAPS heading of a filing's table in sentence case, for a section title (spec §6 Earnings):
+ * the first word capitalised, abbreviations kept ("Reconciliation of GAAP to non-GAAP financial
+ * measures"). Display only (the hover keeps the filing's own); a heading with any lower case is left as
+ * the filing set it. */
+export function sentenceCase(text: string): string {
+  if (/[a-z]/.test(text) || !/[A-Z]{3}/.test(text)) return text;
+  let first = true;
+  return text.replace(/[A-Z0-9][A-Z0-9&.'’]*/g, (w) => {
+    const bare = w.replace(/\.$/, "");
+    const lower = w.toLowerCase();
+    const out = KEEP_CAPS.has(bare) || /\d/.test(w) ? w
+      : first ? lower.charAt(0).toUpperCase() + lower.slice(1)
+      : SMALL_WORDS.has(lower) ? lower
+      : lower;
+    first = false;
+    return out;
+  });
+}
+
 export function paren(text: string): string {
   return /^-\D/.test(text) && !/[%x]$/.test(text) ? `(${text.slice(1)})` : text;
 }

@@ -933,7 +933,9 @@ it("F4 peers: by what they do, each with why, a named competitor linked to its s
   expect($(".peers-basis")?.textContent).toContain("accelerated computing, gpus");
   const apple = [...container.querySelectorAll("tbody tr:not(.agg)")][1]!;
   const why = apple.querySelector("td.why")!;
-  expect(why.textContent).toBe("very similar · named as a competitor in Nvidia's 10-K · business: cpus, gpus · similar size (>=$100B)");
+  // short pencil tags (spec §6), every reason whole on the hover
+  expect(why.textContent).toBe("very similar · named as a competitor · similar size");
+  expect(why.getAttribute("title")).toBe("named as a competitor in Nvidia's 10-K; business: cpus, gpus; similar size (>=$100B)");
   expect(why.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${cite.accession_no}/1?at=4200`);
   // only the answer's columns: here just revenue, with its median's n of N
   expect([...container.querySelectorAll("thead th.n")].map((th) => th.textContent)).toEqual(["Revenue TTM"]);

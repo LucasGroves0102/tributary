@@ -162,19 +162,20 @@ export function Peers({
                             );
                           })}
                           <td className="muted" title={r.fye ?? undefined}>{r.fye?.slice(0, 3) ?? "—"}</td>
-                          <td className="muted why">
+                          {/* why it's a peer as short pencil tags (spec §6), the whole of each reason on the cell's hover */}
+                          <td className="muted why" title={r.isTarget ? undefined : why}>
                             {r.isTarget ? "this company" : (
                               <>
                                 {alike && <span className="alike" title={`Business sections: cosine similarity ${p?.match.similarity?.toFixed(2)} (0 none, 1 the same words)`}>{alike}</span>}
-                                {reasons.map((x, i) => (
+                                {reasons.filter((x) => x.short !== null).map((x, i) => (
                                   <Fragment key={i}>
                                     {(i > 0 || alike) && <span className="faint"> · </span>}
                                     {x.cite ? (
                                       <a href={href({ view: "filing", companyId: x.cite.companyId, accessionNo: x.cite.mention.accession_no, section: x.cite.mention.section_key, at: x.cite.mention.char_start })}
-                                        title="Open the sentence in the filing reader">
-                                        {x.text}
+                                        title={`${x.text}: open the sentence in the filing reader`}>
+                                        {x.short ?? x.text}
                                       </a>
-                                    ) : x.title ? <span className="why-basis" title={x.title}>{x.text}</span> : x.text}
+                                    ) : x.title ? <span className="why-basis" title={x.title}>{x.short ?? x.text}</span> : (x.short ?? x.text)}
                                   </Fragment>
                                 ))}
                               </>
