@@ -453,6 +453,15 @@ export async function mockApi(page: Page): Promise<Fake> {
       return json({ company_id: m[1], as_of: "", since: "2026-06-30", window: "since_report", events: [], more: false, stale: [], method: "",
         latest_report: { accession_no: `${m[1]}-26-000040`, form: "10-Q", filed: "2026-07-30", period_end: "2026-06-30" } });
     }
+    // the Overview's latest quarter (the recap route) and its 10-K Item 1 opening: asked as soon as the header
+    // has the company's row, so a quick page change can still catch them
+    m = path.match(/^\/v1\/filings\/(\d{10}-\d{2}-\d{6})\/recap$/);
+    if (m) {
+      return json({ accession_no: m[1], company_id: m[1].slice(0, 10), form: "10-Q", filed: "2026-07-30", period_end: "2026-06-30",
+        as_of: "", note: "", metrics: [], flags: [] });
+    }
+    m = path.match(/^\/v1\/companies\/(\d{10})\/sections\/[^/]+$/);
+    if (m) return json({ sections: [] });
     m = path.match(/^\/v1\/companies\/(\d{10})\/earnings$/);
     if (m && m[1] === KO) return json(koEarnings(q.get("tables") === "true"));
     if (m) return json({ company_id: m[1], as_of: "", quarters: [], method: "" });
