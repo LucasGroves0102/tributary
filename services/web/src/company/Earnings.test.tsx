@@ -72,7 +72,7 @@ it("shows the release beside its 10-Q figures, its outlook and its adjustments, 
   // the quarter's own figures from the 10-Q (the recap route), with the year-ago comparison
   const figures = $$("section.card").find((s) => s.querySelector("h3")?.textContent === "Reported figures")!;
   expect(figures.querySelector(".sub")?.textContent).toBe("10-Q filed Oct 28, 2026 · vs the same quarter a year ago");
-  expect([...figures.querySelectorAll("thead th")].map((t) => t.textContent)).toEqual(["Metric", "FY2026 Q3", "FY2025 Q3", "YoY"]);
+  expect([...figures.querySelectorAll("thead th")].map((t) => t.firstChild?.textContent)).toEqual(["Reported figures", "FY2026 Q3", "FY2025 Q3", "YoY"]);
   const rows = [...figures.querySelectorAll("tbody tr")].map((r) => r.querySelector("td")?.textContent);
   expect(rows).toEqual(["Revenue", "Operating income", "Net income", "EPS (diluted)", "Free cash flow", "Gross margin", "Operating margin", "Net margin"]);
   expect(figures.querySelector("tbody tr td.n b")?.textContent).toBe("$4.31B");
@@ -193,18 +193,22 @@ it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with th
   const stat = (key: string) => $$(".ledger dl > div").find((d) => d.getAttribute("data-key") === key)!;
   expect(stat("net_debt_q").querySelector("dd")?.className).toContain("later");
   expect($$(".fnote p").map((p) => p.textContent)).toContain("*At Sep 30, 2026, before the Oct 27, 2026 8-K (Acquisition or disposition) and 1 more 8-K, which may have changed it.");
-  // net debt is computed (debt less cash), so no seal (Riley 32): its hover says how, and the flag
-  expect(stat("net_debt_q").querySelector(".seal-link")).toBeNull();
-  expect(stat("net_debt_q").querySelector("dd")?.title).toMatch(/^Net cash, computed: debt \(long-term and due within a year\) less cash and short-term investments\./);
-  expect(stat("net_debt_q").querySelector("dd")?.title).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
+  // net debt is computed (debt less cash), so no mark (Riley 32): its card says how, and the flag
+  expect(stat("net_debt_q").querySelector(".mk")).toBeNull();
+  await act(async () => stat("net_debt_q").querySelector<HTMLElement>("dd button")!.click());
+  const card = document.querySelector(".source-card")!.textContent!;
+  expect(card).toContain("Net cash, computed: debt (long-term and due within a year) less cash and short-term investments.");
+  expect(card).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
+  expect(card).toContain("(net debt -$783.2M)");
+  await act(async () => stat("net_debt_q").querySelector<HTMLElement>("dd button")!.click());
   // the figure itself is unchanged (a negative net debt reads as net cash, its exact figure in the hover)
   expect(stat("net_debt_q").querySelector("dt")?.textContent).toBe("Net cash");
   expect(stat("net_debt_q").querySelector(".figure")?.textContent).toBe("$783.2M");
-  expect(stat("net_debt_q").querySelector("dd")?.title).toContain("(net debt -$783.2M)");
-  // cash is a balance the 10-Q states: sealed
-  expect(stat("cash_q").querySelector(".seal-link")).not.toBeNull();
+  // cash is a balance the 10-Q states: ticked, agrees to the filing
+  expect(stat("cash_q").querySelector(".mk-ok")).not.toBeNull();
   expect(stat("cash_q").querySelector("dd")?.className).toContain("later");
-  expect(stat("revenue_ttm").querySelector("dd")?.className ?? "").not.toContain("later");
+  // revenue leads in the hero, unflagged
+  expect($(".ov-hero .flag-mark")).toBeNull();
   expect(stat("debt_to_equity_q").querySelector("dd")?.className ?? "").not.toContain("later"); // 2.01 doesn't list it
   expect($(".events-card h2")?.textContent).toBe("Since the last report");
   // the ledger already marks the figures: here the flags are one line, the no-pro-forma explanation its hover

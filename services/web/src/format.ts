@@ -49,6 +49,31 @@ export function asFiled(value: number, unit: string): string {
   return `${sign}${digits}`;
 }
 
+/** An amount Tributary holds exactly, as a filing's table would print it: "$96,221 million" when it is
+ * whole millions, "$12,340 thousand" in thousands, else every digit (asFiled). Never rounded: a source
+ * card shows no figure Tributary doesn't hold (.interface-design/system.md §4). */
+export function exactAmount(value: number, unit: string): string {
+  if (!/^[A-Z]{3}$/.test(unit)) return asFiled(value, unit);
+  const sign = value < 0 ? "-" : "";
+  const abs = Math.abs(value);
+  const p = prefix(currencyOf(unit));
+  if (abs >= 1e6 && abs % 1e6 === 0) return `${sign}${p}${grouped(abs / 1e6, 0)} million`;
+  if (abs >= 1e3 && abs % 1e3 === 0) return `${sign}${p}${grouped(abs / 1e3, 0)} thousand`;
+  return asFiled(value, unit);
+}
+
+const SCALE_WORDS: Record<string, string> = { T: "trillions", B: "billions", M: "millions", K: "thousands" };
+
+/** One unit for a ledger (§4: the unit in the first header cell, "USD billions"): the scale of the
+ * largest amount, each figure at two decimals in it ("57.01"). Display only; the exact figure is in
+ * the figure's card. */
+export function ledgerUnit(values: number[], currency = "USD"): { unit: string; text: (v: number) => string } {
+  const top = Math.max(0, ...values.map((v) => Math.abs(v)));
+  const scale = SCALES.find(([size]) => top >= size);
+  if (!scale) return { unit: currency, text: (v) => grouped(v, 0) };
+  return { unit: `${currency} ${SCALE_WORDS[scale[1]]}`, text: (v) => grouped(v / scale[0], 2) };
+}
+
 /** A row of amounts in one unit, so periods compare at a glance: the largest value's ($2.43M,
  * $4.10M), or the next smaller one when a value would read under one of the larger and the largest
  * still fits in four digits of the smaller: $119M ... $3,955M, not $0.12B ... $3.96B (Riley, test 10,

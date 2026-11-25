@@ -241,7 +241,7 @@ export function FigureButton({ text, mark, info, className, hero = false, childr
   return (
     <>
       <button type="button" className={["fig", hero && "fig-hero", mark === "d" && "derived", className].filter(Boolean).join(" ")} {...props}>
-        <span className="v">{text}</span>
+        <span className="v figure">{text}</span>
         {mark && <Mark kind={mark} size={hero ? "hero" : "ledger"} />}
         {children}
       </button>

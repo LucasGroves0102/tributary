@@ -1,45 +1,49 @@
-import { useContext, useRef, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
-import { companyEvents, financials, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
-import { LayerChart } from "../chart/LayerChart";
+import { companyEvents, financialsView, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
 import { excerptBlocks } from "../reader/text";
-import { financialSeries } from "../chart/series";
 import { Folio, TodaysView } from "../components/Folio";
-import { Seal, SealLink } from "../components/Seal";
-import { ErrorPanel, sentence, Skeleton } from "../components/States";
-import { day, paren } from "../format";
-import { go, href } from "../route";
-import type { FilingEvent, FinancialRow, ScreenerRow, Tier, ValueSource } from "../types";
+import { Mark, MarkLegend, type MarkKind } from "../components/Mark";
+import { FigureButton, useSourceCard, type SourceInfo } from "../components/SourceCard";
+import { ErrorPanel, sentence } from "../components/States";
+import { currencyOf, day, exactAmount, ledgerUnit, paren } from "../format";
+import { href } from "../route";
+import type { EventsResponse, FinancialRow, ScreenerRow, Tier, ValueSource } from "../types";
 import {
-  BANK_NOT_SHOWN, epsStat, financeArmNote, foreignReport, header, howFiled, isAmount, isBankRow, keyStats, longDay, recapAccession, statementSection,
-  statFiled, yearStory,
+  BANK_NOT_SHOWN, epsStat, financeArmNote, foreignReport, header, isBankRow, keyStats, longDay, recapAccession, shortQuarter, statementSection,
+  statMark, yearStory,
   type KeyStat, type YearStory,
 } from "./data";
 import { EventsCard } from "./Events";
-import { keyStatFlag, resultsOut, staleFlags, type StaleFlag } from "./events";
+import { keyStatFlag, staleFlags, type StaleFlag } from "./events";
 import { RecapTable } from "./RecapTable";
 import { ResultsPending } from "./ResultsPending";
+import { readerAt, rowCard, rowMark, statCard } from "./sources";
 import { Gate } from "./Tables";
 import { TextKpisCard } from "./TextKpis";
-import { useLoad } from "./useLoad";
+import { type Load, useLoad } from "./useLoad";
 import { YourData } from "./YourData";
 
 const EXCERPT_CHARS = 1500;
 const CIK = /^\d{10}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
+/** the bars of "Revenue by quarter" (§6: eight) */
+const BARS = 8;
 
-/** Where a figure's seal goes: the filing in the reader, at its financial statements. */
+/** Where a figure's filing opens: the reader, at its financial statements. */
 export function sealHref(companyId: string, src: Pick<ValueSource, "accession_no" | "form">): string | null {
   return CIK.test(companyId) && ACCESSION.test(src.accession_no)
     ? href({ view: "filing", companyId, accessionNo: src.accession_no, section: statementSection(src.form) })
     : null;
 }
 
-/** The company's Overview, a Seal page: the year as a sentence (sealed to its filing), the key figures
- * as a ledger (each sealed; a balance a later 8-K may have changed is red with *, never recomputed),
- * the 8-Ks since the last report as red-letter days, the latest quarter against the prior and year-ago
- * quarters, the business (10-K Item 1), quarterly revenue, and backlog and orders as the filings state
- * them in words (F8b). Each section's rubric is in the margin. */
+/** The company's Overview (.interface-design/system.md §6): the lead column has the hero (twelve-month
+ * revenue, its change), its footing (the four quarters that add up to it, each opening its own source),
+ * the legend and the plain-English sentence; then the rest of the twelve months as a two-column ledger,
+ * then the latest quarter against the prior and year-ago quarters. The side column has revenue by
+ * quarter (eight bars, derived quarters hatched) and the 8-Ks since the last report. The business, text
+ * figures and the user's own data follow. Every figure opens its source card; marks come from the API's
+ * sources only. Lead and side stack when the page has less than 900px (a container query). */
 export function Overview({
   token,
   companyId,
@@ -47,6 +51,7 @@ export function Overview({
   row,
   access,
   asOf,
+  events,
 }: {
   token: string;
   companyId: string;
@@ -55,12 +60,16 @@ export function Overview({
   access: Tier[];
   /** a past day (`?asof=`): the year and the key figures as they stood then; the rest is today's */
   asOf?: string;
+  /** the 8-Ks since the last report (the page asks once: the header's notice, the flags and the list) */
+  events?: Load<EventsResponse | null> | null;
 }) {
   const canFin = access.includes("financials");
   const canRead = access.includes("filings");
   // a 20-F/40-F filer files no 10-Q, 10-K or 8-K: those sections say so instead (foreignReport)
   const foreign = foreignReport(row);
-  const events = useLoad(canRead && !foreign ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  // the page's request for the 8-Ks, or (rendered alone) its own
+  const own = useLoad(events === undefined && canRead && !foreign ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  if (events === undefined) events = own;
   // today's 8-Ks flag today's figures; as of a past day they say nothing about that day's
   const flags = asOf ? [] : staleFlags(events?.state === "ok" ? events.data : null);
   // as of a past day the key figures read gold's history of itself (086), which its catch-up builds
@@ -77,80 +86,236 @@ export function Overview({
     return (await perShare(token, companyId, "annual", "fiscal", false, 1, asOf))?.rows ?? [];
   });
   const epsRows = !eps || eps.state === "loading" ? undefined : eps.state === "ok" ? eps.data : null;
-  const results = asOf ? null : resultsOut(events?.state === "ok" ? events.data : null);
+  // today's quarters (the bars: a section of today's data, like the rest past the key figures); as of a past
+  // day the footing reads its own quarters, as they stood then; the twelve months' own quarters (the footing)
+  const quarters = useLoad(canFin ? `${companyId}|quarters` : null,
+    () => financialsView(token, companyId, BARS, ["revenue"], "quarter").then((f) => f.rows));
+  const then = useLoad(canFin && asOf && !notKept ? `${companyId}|quarters|${asOf}` : null,
+    () => financialsView(token, companyId, BARS, ["revenue"], "quarter", "fiscal", false, false, asOf).then((f) => f.rows));
+  const ttm = useLoad(canFin && !foreign && !notKept ? `${companyId}|ttm|${asOf ?? ""}` : null,
+    () => financialsView(token, companyId, 1, ["revenue"], "ttm", "fiscal", false, false, asOf).then((f) => f.rows.find((r) => r.metric === "revenue") ?? null));
   // no 8-K since the last report says results are out (or none read yet): the earnings answer may
   // still have a release with no 10-Q or 10-K, said under the figures (once the 8-Ks are settled)
-  const pending = !asOf && !results && canRead && !foreign && !!events && events.state !== "loading"
-    ? <ResultsPending token={token} companyId={companyId} fiscalYearEnd={row.fiscal_year_end} slot /> : null;
-  const story = canFin && !notKept ? yearStory(row) : null;
+  const pending = !asOf && canRead && !foreign && !!events && events.state !== "loading"
+    ? <ResultsPending token={token} companyId={companyId} fiscalYearEnd={row.fiscal_year_end} /> : null;
+  // a footing term outlines its bar (§4 Chart): the quarter in focus or under the pointer
+  const [hl, setHl] = useState<string | null>(null);
+  const stats = canFin && !notKept ? keyStats(row).map((s) => (s.key === "eps_diluted_q" ? epsStat(epsRows, s, asOf) : s))
+    .map((s) => ({ ...s, flag: keyStatFlag(s.key, s.periodEnd, flags) })) : [];
+  const quarterRows = quarters?.state === "ok" ? quarters.data.filter((r) => r.metric === "revenue") : null;
+  const footingRows = asOf ? (then?.state === "ok" ? then.data.filter((r) => r.metric === "revenue") : null) : quarterRows;
   return (
-    <div className="folios">
-      {results && <ResultsOut companyId={companyId} name={name} event={results} lead={!!results} />}
-      {story && (
-        <Folio name="The year" lead={!results}
-          line={howFiled("revenue_ttm", story.source).filed ? `The year to ${day(story.end, true)}, as filed` : `Four quarters to ${day(story.end, true)}`}>
-          <YearSentence story={story} name={name} companyId={companyId} />
-        </Folio>
-      )}
-      <Figures companyId={companyId} name={name} row={row} canFin={canFin} flags={flags} lead={!story && !results} eps={epsRows}
-        asOf={asOf} notKept={notKept} pending={pending} />
-      <TodaysView.Provider value={asOf ?? null}>
-      {foreign ? (
-        <Folio name="Since the last report" line="Current reports on Form 6-K" className="events-card">
-          <p className="empty foreign-note">
-            {name} files as a foreign private issuer: current reports on Form 6-K, not 8-Ks, so there are no 8-K items here to say
-            what may have changed since its last report. Its 6-Ks are on the Filings tab.
-          </p>
-        </Folio>
-      ) : canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} folio />}
-      <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign}
-        asOf={notKept ? asOf : undefined} />
-      <Business token={token} companyId={companyId} name={name} canRead={canRead} foreign={foreign} />
-      {canFin && <Revenue token={token} companyId={companyId} name={name} foreign={foreign} />}
-      <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} folio />
-      <YourData token={token} companyId={companyId} name={name} />
-      </TodaysView.Provider>
+    <div className="ov">
+      <div className="ov-lead">
+        {canFin && !notKept && (
+          <Lead row={row} name={name} companyId={companyId} stats={stats} ttm={ttm} quarters={footingRows} hl={hl} onHl={setHl} />
+        )}
+        <Figures companyId={companyId} name={name} row={row} canFin={canFin} stats={stats} asOf={asOf} notKept={notKept} pending={pending} />
+        <TodaysView.Provider value={asOf ?? null}>
+          <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign}
+            asOf={notKept ? asOf : undefined} />
+        </TodaysView.Provider>
+      </div>
+      <div className="ov-side">
+        <TodaysView.Provider value={asOf ?? null}>
+          {canFin && <RevenueBars companyId={companyId} name={name} load={quarters} rows={quarterRows} hl={asOf ? null : hl} foreign={foreign} asOf={asOf} />}
+          {foreign ? (
+            <Folio name="Since the last report" line="Files 6-Ks, not 8-Ks" className="events-card">
+              <p className="empty foreign-note">
+                {name} files as a foreign private issuer: current reports on Form 6-K, not 8-Ks, so there are no 8-K items here to say
+                what may have changed since its last report. Its 6-Ks are on the <a href={href({ view: "company", companyId, tab: "filings" })}>Filings</a> tab.
+              </p>
+            </Folio>
+          ) : canRead && <EventsCard token={token} companyId={companyId} name={name} load={events} folio />}
+        </TodaysView.Provider>
+      </div>
+      <div className="ov-more">
+        <TodaysView.Provider value={asOf ?? null}>
+          <Business token={token} companyId={companyId} name={name} canRead={canRead} foreign={foreign} />
+          <TextKpisCard token={token} companyId={companyId} name={name} canRead={canRead} folio />
+          <YourData token={token} companyId={companyId} name={name} />
+        </TodaysView.Provider>
+      </div>
     </div>
   );
 }
 
-/** Results day (Riley, test 10, finding 21): an 8-K with results (item 2.02) after the latest
- * 10-Q or 10-K, said at the top with the release, and that the figures below are the last report's
- * until the next 10-Q or 10-K's arrive (the release's own tables are on Earnings). */
-function ResultsOut({ companyId, name, event, lead }: { companyId: string; name: string; event: FilingEvent; lead: boolean }) {
-  const read = href({ view: "filing", companyId, accessionNo: event.accession_no, section: event.release?.section_key ?? null });
+type Stat = KeyStat & { flag: StaleFlag | null };
+
+/** The hero (§6): twelve-month revenue at 48px with its mark and its change, then its footing, the
+ * legend, and the year in plain English. A company that reports once a year leads with its year. */
+function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
+  row: ScreenerRow;
+  name: string;
+  companyId: string;
+  stats: Stat[];
+  ttm: Load<FinancialRow | null> | null;
+  quarters: FinancialRow[] | null;
+  hl: string | null;
+  onHl: (end: string | null) => void;
+}) {
+  const rev = stats.find((s) => s.key === "revenue_ttm");
+  const growth = stats.find((s) => s.key === "revenue_growth_ttm");
+  const story = yearStory(row);
+  if (!rev || rev.value === null || !rev.source) return null;
+  const mark = statMark(rev);
+  const src = rev.source;
+  const currency = header(row).currency ?? "USD";
+  const annual = mark === "ok";
+  const twelve = ttm?.state === "ok" ? ttm.data : null;
+  const footing = mark === "sum" && twelve && Array.isArray(twelve.inputs?.quarters) && (twelve.inputs!.quarters as unknown[]).length > 1 ? twelve : null;
+  const loadingFooting = mark === "sum" && (!ttm || ttm.state === "loading" || !quarters);
+  const termMarks = footing && quarters ? footingTerms(footing, quarters).map((t) => t.mark).filter((m): m is MarkKind => !!m) : [];
+  const g = growth && growth.value !== null && !growth.status ? growth : null;
   return (
-    <Folio name="Results out" line={`8-K filed ${day(event.filed, true)}`} lead={lead} className="results-out">
-      <p className="story results-line" role="status">
-        {name} released its results on {longDay(event.filed)}.{" "}
-        <a href={read}>{event.release ? "Read the press release" : "Read the 8-K"}</a>, or its figures on{" "}
-        <a href={href({ view: "company", companyId, tab: "earnings" })}>Earnings</a>.
+    <section className="ov-hero" aria-label={`${rev.label}, ${annual ? "the year" : "twelve months"}`}>
+      <p className="ov-label">
+        {rev.label} · {annual ? "the year" : "the twelve months"} to {day(src.period_end, true)} · {currency}
       </p>
-      <p className="foot">
-        The figures below are from the last 10-Q or 10-K until the report for this quarter is filed and its XBRL figures arrive;
-        the release's own tables are on Earnings.
-      </p>
-    </Folio>
+      <div className="hero">
+        <FigureButton text={rev.text} mark={mark} hero info={() => statCard(rev, companyId)} />
+        {g && (
+          <span className="hero-chg">
+            <span className={g.value! >= 0 ? "chg gain" : "chg loss"}>{minus(g.text)}</span>
+            <span className="pencil"> on the {annual ? "year" : "twelve months"} before</span>
+          </span>
+        )}
+      </div>
+      {footing && quarters ? (
+        <Footing ttm={footing} quarters={quarters} companyId={companyId} label={rev.label} total={rev.text} hl={hl} onHl={onHl} />
+      ) : loadingFooting ? (
+        <div className="footing" data-loading="" aria-busy="true">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <span key={i} className="term-blank"><span className="blank-v w-48" /><small>&nbsp;</small></span>
+          ))}
+        </div>
+      ) : null}
+      <MarkLegend kinds={[...(mark ? [mark] : []), ...termMarks]} />
+      {story && <YearSentence story={story} name={name} />}
+    </section>
   );
 }
 
-/** "In the twelve months to July 26, 2026, Nvidia reported revenue of $302.97 billion, up 83.4% on
- * the year before, and net income of $192.88 billion. It ended the period with $66.00 billion more in
- * cash and short-term investments than debt." Then the seal: the filing it is taken from. */
-function YearSentence({ story, name, companyId }: { story: YearStory; name: string; companyId: string }) {
-  const src = story.source;
-  // sealed only when the twelve months are the annual report's own year; four quarters added up are not
-  // a figure the filing states (Riley 32), so then the sentence carries no seal
-  const filed = howFiled("revenue_ttm", src).filed;
-  const link = filed ? sealHref(companyId, src) : null;
-  const taken = `Taken from the ${src.form} filed ${day(src.filed, true)}`;
+/** "-4.0%" with a true minus. */
+const minus = (s: string) => s.replace(/^-/, "−");
+
+interface Term {
+  end: string;
+  value: number;
+  text: string;
+  label: string;
+  mark: MarkKind | null;
+  info: () => SourceInfo;
+}
+
+/** The twelve months' quarters as the API gives them (the TTM row's `inputs.quarters`), each with its
+ * own filing from /financials: ✓ when that quarter is reported at the same value, d when derived. */
+function footingTerms(ttm: FinancialRow, quarters: FinancialRow[]): Term[] {
+  const qs = (ttm.inputs?.quarters ?? []) as { period_end?: string; value?: number | string; accession_no?: string }[];
+  const byEnd = new Map(quarters.map((r) => [r.period_end, r]));
+  const unit = ledgerUnit([Number(ttm.value)], currencyOf(ttm.unit));
+  return qs.flatMap((q) => {
+    if (!q.period_end || q.value === undefined) return [];
+    const value = Number(q.value);
+    const r = byEnd.get(q.period_end);
+    const same = r && Number(r.value) === value;
+    return [{
+      end: q.period_end,
+      value,
+      text: unit.text(value),
+      label: shortQuarter(r?.fiscal_period) ?? day(q.period_end),
+      mark: same ? rowMark(r!) : null,
+      info: () => (same ? rowCard(r!, "Revenue", "") : {
+        title: `Revenue · three months to ${day(q.period_end!, true)}`,
+        value: exactAmount(value, ttm.unit),
+        mark: null,
+        where: q.accession_no ? [q.accession_no] : [],
+      }),
+    }];
+  });
+}
+
+/** The footing (§5.3): the hero's arithmetic as one ledger line between hairlines, quarter labels under
+ * each term and the unit under the total. Each term opens its own card and outlines its bar. The total
+ * is the API's twelve months, never re-added here. */
+function Footing({ ttm, quarters, companyId, label, total, hl, onHl }: {
+  ttm: FinancialRow;
+  quarters: FinancialRow[];
+  companyId: string;
+  label: string;
+  total: string;
+  hl: string | null;
+  onHl: (end: string | null) => void;
+}) {
+  const unit = ledgerUnit([Number(ttm.value)], currencyOf(ttm.unit));
+  const terms = footingTerms(ttm, quarters).map((t) => ({
+    ...t,
+    info: () => {
+      const r = quarters.find((x) => x.period_end === t.end && Number(x.value) === t.value);
+      return r ? rowCard(r, label, companyId) : t.info();
+    },
+  }));
+  const sum: SourceInfo = {
+    title: `${label} · twelve months to ${day(ttm.period_end, true)}`,
+    value: exactAmount(Number(ttm.value), ttm.unit),
+    mark: "sum",
+    how: `Added up from ${terms.length} quarters: ${terms.map((t) => t.text).join(" + ")} (${unit.unit}), each marked on this line.`,
+    where: [`To the ${ttm.citation.form} filed ${day(ttm.citation.filed, true)}`],
+    reader: readerAt(companyId, ttm.citation),
+  };
+  return (
+    <div className="footing landed" role="group" aria-label={`How ${total} adds up, ${unit.unit}`} onMouseLeave={() => onHl(null)}>
+      {terms.map((t, i) => (
+        <FootingTerm key={t.end} text={t.text} label={t.label} mark={t.mark} info={t.info} on={hl === t.end}
+          onHl={(on) => onHl(on ? t.end : null)} after={i < terms.length - 1 ? "+" : "="} />
+      ))}
+      <FootingTerm text={unit.text(Number(ttm.value))} label={unit.unit} mark="sum" info={() => sum} total />
+    </div>
+  );
+}
+
+function FootingTerm({ text, label, mark, info, total = false, on = false, onHl, after }: {
+  text: string;
+  label: string;
+  mark: MarkKind | null;
+  info: () => SourceInfo;
+  total?: boolean;
+  on?: boolean;
+  onHl?: (on: boolean) => void;
+  after?: string;
+}) {
+  const { props, card } = useSourceCard(info);
+  return (
+    <>
+      <button type="button" className={["term", mark === "d" && "derived", total && "tot", on && "on"].filter(Boolean).join(" ")} {...props}
+        onMouseEnter={(e) => {
+          onHl?.(true);
+          props.onMouseEnter?.(e);
+        }}
+        onFocus={() => onHl?.(true)} onBlur={() => onHl?.(false)}>
+        <span className="tv">
+          <span className="v">{text}</span>
+          {mark && <Mark kind={mark} />}
+        </span>
+        <small>{label}</small>
+      </button>
+      {after && <span className="op" aria-hidden="true">{after}</span>}
+      {card}
+    </>
+  );
+}
+
+/** "In the twelve months to July 26, 2026, Nvidia reported revenue of $302.97 billion, up 83.4% on the
+ * year before, and net income of $192.88 billion. It ended the period with $66.00 billion more in cash
+ * and short-term investments than debt." The hero above carries the figure's mark. */
+function YearSentence({ story, name }: { story: YearStory; name: string }) {
   return (
     <p className="story">
       In the twelve months to {longDay(story.end)}, {name} reported {story.revenueLabel} of <b>{story.revenue}</b>
       {story.growth && (
         story.growth.text === "flat"
           ? <>, about the same as the year before</>
-          : <>, {story.growth.rise ? <span className="rise">{story.growth.text}</span> : story.growth.text} on the year before</>
+          : <>, {story.growth.text} on the year before</>
       )}
       {story.netIncome && (
         story.netIncome.loss ? <>, and a net loss of <b>{story.netIncome.text}</b></> : <>, and net income of <b>{story.netIncome.text}</b></>
@@ -161,27 +326,33 @@ function YearSentence({ story, name, companyId }: { story: YearStory; name: stri
           ? <> It ended the period with <b>{story.balance.text}</b> more in cash and short-term investments than debt.</>
           : <> It ended the period with net debt of <b>{story.balance.text}</b>.</>
       )}
-      {link ? (
-        <SealLink size="lead" href={link} label={`${taken}: open it`} source={`${taken}, ${src.accession_no}. Revenue for the twelve months to ${day(story.end, true)}.`} />
-      ) : filed ? (
-        <Seal size="lead" label={taken} />
-      ) : null}
     </p>
   );
 }
 
-/** The key figures as a ledger: amounts in the first column, rates in the second, each value after a
- * red rule with the seal of its filing. The period they share is in the margin; a figure from another
- * says when. */
-function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept = false, pending = null }: {
+/** A reading letter for a figure that isn't a plain one (§4 Readings): the dash and an 11px letter,
+ * explained on the line under the ledger. Words the API's readings (blanks.ts) only. */
+const READINGS: Record<string, string> = {
+  a: "not reported",
+  b: "none filed since a date (the figure's card says when)",
+  k: "a bank: the line doesn't describe one",
+};
+
+function readingOf(s: Stat, bank: boolean): string | null {
+  if (s.value !== null || s.status === "not_meaningful" || s.status === "other_currency") return null;
+  if (s.old) return "b";
+  if (s.status === "not_applicable") return bank ? "k" : "a";
+  return "a";
+}
+
+/** The rest of the twelve months (§6): the key figures but revenue as a two-column ledger, amounts then
+ * rates, each figure a button that opens its card; a figure from another period says when. */
+function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, pending = null }: {
   companyId: string;
   name: string;
   row: ScreenerRow;
   canFin: boolean;
-  flags: StaleFlag[];
-  lead: boolean;
-  /** /per-share's EPS rows (epsStat): undefined while loading, null when unavailable */
-  eps?: FinancialRow[] | null;
+  stats: Stat[];
   asOf?: string;
   /** as of a past day, no history of the company is kept yet (086): nothing to read from */
   notKept?: boolean;
@@ -193,7 +364,7 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
   const armNote = financeArmNote(companyId, name);
   if (!canFin) {
     return (
-      <Folio name="Figures" line="Key figures from the filings" lead={lead}>
+      <Folio name="Figures" line="Key figures from the filings">
         <p className="empty locked">Financials for {name} aren't included in your access; its filings and metadata are public.</p>
       </Folio>
     );
@@ -201,7 +372,7 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
   if (notKept && asOf) {
     const at = (tab: "statements" | "ratios") => href({ view: "company", companyId, tab, asOf });
     return (
-      <Folio name="Figures" line={`As they stood on ${day(asOf, true)}`} lead={lead}>
+      <Folio name="Figures" line={`As they stood on ${day(asOf, true)}`}>
         <p className="empty asof-not-kept" role="note">
           {name}'s figures as they stood on {day(asOf, true)} aren't kept here yet: Tributary is building each company's history of
           its figures, a few thousand companies a day, and {name}'s isn't built. Until it is, <a href={at("statements")}>Statements</a>{" "}
@@ -210,80 +381,67 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
       </Folio>
     );
   }
-  // EPS over the twelve months, from /per-share (finding 1); the screener's quarter only as a fallback
-  const stats = keyStats(row)
-    .map((s) => (s.key === "eps_diluted_q" ? epsStat(eps, s, asOf) : s))
-    .map((s) => ({ ...s, flag: keyStatFlag(s.key, s.periodEnd, flags) }));
-  // the period most of them share goes in the margin; the others say their own
-  const ends = stats.map((s) => s.periodEnd).filter((e): e is string => !!e);
+  const bank = isBankRow(row);
+  const rest = stats.filter((s) => s.key !== "revenue_ttm" && s.key !== "revenue_growth_ttm");
+  // the period most of them share goes in the section's line; the others say their own
+  const ends = rest.map((s) => s.periodEnd).filter((e): e is string => !!e);
   const common = ends.sort((a, b) => ends.filter((x) => x === b).length - ends.filter((x) => x === a).length)[0] ?? null;
-  const sealed = stats.filter((s) => s.source && !s.status && statFiled(s).filed);
-  const sources = new Set(sealed.map((s) => `${s.source!.form} filed ${day(s.source!.filed, true)}`));
-  const computed = stats.some((s) => s.value !== null && !statFiled(s).filed);
-  const flagged = [...new Map(stats.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
+  const flagged = [...new Map(rest.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
+  const letters = [...new Set(rest.map((s) => readingOf(s, bank)).filter((l): l is string => !!l))];
+  const marks = [...new Set(rest.map((s) => statMark(s)).filter((m): m is MarkKind => !!m))];
+  const unmarked = rest.some((s) => s.value !== null && !statMark(s));
+  const amounts = rest.filter((s) => s.kind === "usd" || s.kind === "eps");
+  const rates = rest.filter((s) => !(s.kind === "usd" || s.kind === "eps"));
   return (
-    <Folio name="Figures" lead={lead}
-      line={common ? `As filed, to ${day(common, true)}` : "As filed"}
-      aside={`${currency ?? "US dollars"}; twelve months, balances at the end`}>
+    <Folio name="The rest of the twelve months" className="ov-rest"
+      line={common ? `As filed, to ${day(common, true)}` : "As filed"} aside={currency ?? "USD"}>
       <div className="ledger">
-        <dl aria-label="Amounts">{stats.filter(isAmount).map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} />)}</dl>
-        <dl aria-label="Rates">{stats.filter((s) => !isAmount(s)).map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} />)}</dl>
+        <dl aria-label="Amounts">{amounts.map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} bank={bank} />)}</dl>
+        <dl aria-label="Rates">{rates.map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} bank={bank} />)}</dl>
       </div>
+      <MarkLegend kinds={marks} extra={[
+        ...letters.map((l) => `${l} ${READINGS[l]}`),
+        ...(unmarked ? ["Unmarked: a ratio or a difference of marked figures; select one for how"] : []),
+      ]} />
       <div className="fnote">
         {pending}
-        {sources.size > 0 && (
-          <p>
-            <Seal />
-            <span>
-              Sealed: stated as shown in the {[...sources].slice(0, 2).join(" and the ")}
-              {sources.size > 2 ? ` and ${sources.size - 2} more` : ""}. A seal opens the filing at its statements.
-            </span>
-          </p>
-        )}
-        {computed && (
-          <p className="computed-note">
-            <span className="seal-slot" aria-hidden="true" />
-            <span>No seal: worked out from the filings (four quarters added up, a ratio or a difference). Hover or tap one for how.</span>
-          </p>
-        )}
         {flagged.map((f) => (
           <p key={f.short} role="note">
             <span className="mark" aria-hidden="true">*</span>
             <span>{f.asOf ? `At ${day(f.asOf, true)}, before` : "Before"} {f.short}, which may have changed it.</span>
           </p>
         ))}
-        {isBankRow(row) && "net_interest_income_ttm" in row.values && <p className="bank-note">A bank's own figures. {BANK_NOT_SHOWN}</p>}
+        {bank && "net_interest_income_ttm" in row.values && <p className="bank-note">A bank's own figures. {BANK_NOT_SHOWN}</p>}
         {armNote && <p className="debt-note" role="note">{armNote}</p>}
       </div>
     </Folio>
   );
 }
 
-function LedgerRow({ s, common, companyId, armNote }: { s: KeyStat & { flag: StaleFlag | null }; common: string | null; companyId: string; armNote: string | null }) {
-  // an old figure reads as not reported since its date (blanks.ts): no seal, the last figure in the hover
-  const blank = s.value === null && s.status !== "other_currency";
-  // a seal says "taken from the filing": only a figure the filing states has one (Riley 32); a computed
-  // one says in its hover what it is worked out from
-  const filing = statFiled(s);
-  const link = s.source && !blank && filing.filed ? sealHref(companyId, s.source) : null;
-  const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || blank;
-  const how = !blank && !filing.filed ? `${s.label}, ${filing.how}.` : null;
-  const title = [how, s.title, s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n");
-  const classes = [blank && "blank", s.old && "old", s.flag && "later"].filter(Boolean).join(" ") || undefined;
-  const taken = s.source ? `the ${s.source.form} filed ${day(s.source.filed, true)}` : "";
+function LedgerRow({ s, common, companyId, armNote, bank }: { s: Stat; common: string | null; companyId: string; armNote: string | null; bank: boolean }) {
+  const letter = readingOf(s, bank);
+  const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || letter;
+  const extra = [s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n") || null;
+  const mark = statMark(s);
   return (
-    <div data-key={s.key}>
+    <div data-key={s.key} className={s.flag ? "later" : undefined}>
       <dt>
         {s.label}
         {differs && <span className="when">{s.period}</span>}
       </dt>
-      {/* a computed figure's how opens on focus too (a tap, Tab), not only a mouse's hover (Riley, test 10, finding 55) */}
-      <dd className={classes} title={link ? undefined : title} tabIndex={how ? 0 : undefined}>
-        <span className="figure">{isAmount(s) ? paren(s.text) : s.text}</span>
-        {link ? (
-          <SealLink href={link} label={`${s.label}: taken from ${taken}`} source={title} />
+      <dd className={[letter && "blank", s.old && "old", s.flag && "later"].filter(Boolean).join(" ") || undefined}>
+        {letter ? (
+          <>
+            <span className="figure">—</span>
+            <sup className="rdg" title={READINGS[letter]}>{letter}</sup>
+          </>
+        ) : s.value === null ? (
+          <span className="figure">{s.text}</span>
         ) : (
-          <span className="seal-slot" />
+          <FigureButton text={s.kind === "usd" || s.kind === "eps" ? paren(s.text) : s.text} mark={mark}
+            info={() => statCard(s, companyId, extra)}>
+            {s.flag && <span className="flag-mark" aria-hidden="true" />}
+          </FigureButton>
         )}
       </dd>
     </div>
@@ -301,7 +459,7 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
   const data = load?.state === "ok" ? load.data : null;
   return (
     <Folio name="Latest quarter" line={data ? `${data.form} filed ${day(data.filed, true)}` : foreign ? `Annual reports on Form ${foreign}` : "The latest 10-Q or 10-K"}
-      aside={foreign ? undefined : "Against the prior quarter and a year earlier; no consensus estimates"}>
+      aside={foreign ? undefined : <a href={href({ view: "company", companyId, tab: "statements" })}>Statements →</a>}>
       {!canFin ? (
         <p className="empty locked">The recap needs financials for {name}.</p>
       ) : !accession && asOf ? (
@@ -321,7 +479,7 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
         <Gate load={load} name={name} what="Financials">
           {() => (
             <>
-              <RecapTable data={data!} label="Latest quarter" />
+              <RecapTable data={data!} label="Latest quarter" companyId={companyId} />
               {data!.flags && data!.flags.length > 0 && (
                 <div className="recap-flags">
                   <b>Flagged in the filing text</b>
@@ -339,7 +497,8 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
               )}
               <p className="foot">
                 {data!.flags_unavailable ? `${sentence(data!.flags_unavailable)} ` : ""}
-                Margins change in basis points. Values as currently reported; a restated value cites the restating filing.
+                Each column is the figures as its own filing printed them; a restated value cites the restating filing. Margins
+                change in basis points; a change in a balance is uncoloured.
               </p>
             </>
           )}
@@ -376,7 +535,7 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
           {() =>
             section ? (
               <div className="business">
-                {/* its own headings as headings, not one run of text (Riley, test 10, finding 76); the words are the filing's */}
+                {/* the filing's own words, in the serif (§1: serif means the filing wrote it) */}
                 {excerptBlocks(excerpt(section.text)).map((b, i) => (b.heading
                   ? <h3 key={i} className="excerpt-h">{b.text}</h3>
                   : <p key={i} className="excerpt">{b.text}</p>))}
@@ -394,46 +553,108 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
   );
 }
 
-/** Quarterly revenue (bars) and operating margin (line, right axis) on fiscal quarters, in the
- * chart builder's chart: hover shows each value's filing. */
-function Revenue({ token, companyId, name, foreign }: { token: string; companyId: string; name: string; foreign: string | null }) {
-  const svg = useRef<SVGSVGElement>(null);
-  const load = useLoad(companyId, () => financials(token, companyId, 12, ["revenue", "operating_margin"]));
-  const series = load?.state === "ok"
-    ? [
-        financialSeries(load.data.rows, "revenue", { id: 1, name: "Revenue", color: 0, type: "bar", axis: "L" }, companyId),
-        financialSeries(load.data.rows, "operating_margin", { id: 2, name: "Operating margin", color: 1, type: "line", axis: "R" }, companyId),
-      ].filter((s) => s.points.length)
-    : [];
-  // the heading says what's drawn: a bank reports no operating margin, so it gets revenue alone
-  const heading = series.length === 1 ? series[0]!.name : "Revenue and operating margin";
-  const without = series.length === 1 ? (series[0]!.id === 1 ? "No operating margin reported" : "No revenue reported") : undefined;
-  // the chart is today's (said so), but its way to the statements keeps the page's day (Morgan 10: it went to today)
-  const asOf = useContext(TodaysView);
+/** Revenue by quarter (§4 Chart, §6): eight bars, the latest in ink, history a light fill with a 3:1
+ * edge, a derived quarter hatched; hairlines at round values; the first and last bars labelled. Bars
+ * appear at their value (no growing from zero). "View as table" lists the same figures, each opening
+ * its card. A footing term outlines its bar. */
+function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
+  companyId: string;
+  name: string;
+  load: Load<FinancialRow[]> | null;
+  rows: FinancialRow[] | null;
+  hl: string | null;
+  foreign: string | null;
+  asOf?: string;
+}) {
+  const [table, setTable] = useState(false);
+  const bars = (rows ?? []).filter((r) => Number.isFinite(Number(r.value))).sort((a, b) => a.period_end.localeCompare(b.period_end)).slice(-BARS);
+  const values = bars.map((r) => Number(r.value));
+  const unit = ledgerUnit(values, currencyOf(bars[0]?.unit));
+  const top = Math.max(0, ...values);
+  const step = niceStep(top / 4);
+  const ceiling = step ? Math.ceil(top / step) * step : 1;
+  const lines = step ? Array.from({ length: Math.round(ceiling / step) }, (_, i) => (i + 1) * step) : [];
+  const toStatements = href({ view: "company", companyId, tab: "statements", ...(asOf ? { asOf } : {}) });
   return (
-    <Folio name={heading} line="Fiscal quarters, the last twelve"
-      aside={<>{without && <>{without}. </>}<a href={href({ view: "company", companyId, tab: "statements", ...(asOf ? { asOf } : {}) })}>The statements</a></>}>
-      {series.length ? (
-        <div className="overview-chart">
-          <LayerChart series={series} title="" footnote={[]} svgRef={svg}
-            onOpen={(src) => go({ view: "filing", companyId, accessionNo: src.accessionNo, section: null })} />
-        </div>
+    <Folio name="Revenue by quarter" className="ov-bars"
+      line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
+      aside={bars.length ? (
+        <button type="button" className="link view-table" aria-pressed={table} onClick={() => setTable((t) => !t)}>
+          {table ? "View as chart" : "View as table"}
+        </button>
+      ) : undefined}>
+      {!load || load.state === "loading" ? (
+        <div className="qbars-blank" data-loading="" aria-busy="true"><span className="visually-hidden">Loading revenue</span></div>
+      ) : load.state === "error" ? (
+        <ErrorPanel what="revenue" detail={load.message} onRetry={load.retry} />
+      ) : !bars.length ? (
+        <p className="empty">
+          {/* a once-a-year filer has no quarters to chart: said, not blank (Riley, test 10, finding 28) */}
+          {foreign
+            ? `${name} reports once a year (Form ${foreign}), so there is no quarterly revenue to chart. Statements shows its years.`
+            : `No revenue reported: ${name}'s filings state no revenue figure yet, or none could be read. Statements shows what it does report.`}
+        </p>
+      ) : table ? (
+        <table className="led ov-bars-t landed">
+          <thead><tr><th className="first">Quarter</th><th>{unit.unit}</th><th>Source</th></tr></thead>
+          <tbody>
+            {bars.map((r) => <BarRow key={r.period_end} r={r} text={unit.text(Number(r.value))} companyId={companyId} />)}
+          </tbody>
+        </table>
       ) : (
-        !load || load.state === "loading" ? (
-          <Skeleton chart label="Loading revenue" />
-        ) : load.state === "error" ? (
-          <ErrorPanel what="revenue" onRetry={load.retry} />
-        ) : (
-          <p className="empty">
-            {/* a once-a-year filer has no quarters to chart: said, not blank (Riley, test 10, finding 28) */}
-            {foreign
-              ? `${name} reports once a year (Form ${foreign}), so there is no quarterly revenue to chart. Statements shows its years.`
-              // a company before revenue (Terrestrial Energy, Deep Fission) has figures, only no revenue: said
-              // as such, never as no data (the assistant read the blank as "no financial data")
-              : `No revenue reported: ${name}'s filings state no revenue figure yet, or none could be read. Statements shows what it does report.`}
+        <div className="qbars landed" role="img"
+          aria-label={`Revenue by quarter, ${unit.unit}: ${bars.map((r) => `${shortQuarter(r.fiscal_period) ?? day(r.period_end)} ${unit.text(Number(r.value))}${r.value_source === "derived" ? " derived" : ""}`).join(", ")}`}>
+          <div className="qbars-plot">
+            {lines.map((v) => (
+              <span key={v} className="qbars-gl" data-at={v} ref={(el) => el?.style.setProperty("bottom", `${(v / ceiling) * 100}%`)}>
+                <span>{unit.text(v).replace(/\.00$/, "")}</span>
+              </span>
+            ))}
+            {bars.map((r, i) => (
+              <span key={r.period_end}
+                className={["qbar", r.value_source === "derived" && "dv", i === bars.length - 1 && "last", hl === r.period_end && "hl"].filter(Boolean).join(" ")}
+                ref={(el) => el?.style.setProperty("height", `${Math.max(0, Number(r.value) / ceiling) * 100}%`)}>
+                {(i === 0 || i === bars.length - 1) && <i>{unit.text(Number(r.value))}</i>}
+              </span>
+            ))}
+          </div>
+          <div className="qbars-x" aria-hidden="true">
+            {bars.map((r) => {
+              const [q, fy] = (shortQuarter(r.fiscal_period) ?? day(r.period_end)).split(" ");
+              return <span key={r.period_end}>{q}{fy && <><br />{fy}</>}</span>;
+            })}
+          </div>
+          <p className="qbars-key" aria-hidden="true">
+            <span><i className="sw l" />Latest {bars.at(-1)?.citation.form}</span>
+            <span><i className="sw" />As filed</span>
+            {bars.some((r) => r.value_source === "derived") && <span><i className="sw dv" />Fiscal Q4, derived from the 10-K</span>}
           </p>
-        )
+        </div>
       )}
+      {/* the chart is today's (said so), but its way to the statements keeps the page's day (Morgan 10) */}
+      <p className="qbars-more"><a href={toStatements}>The statements</a></p>
     </Folio>
   );
+}
+
+function BarRow({ r, text, companyId }: { r: FinancialRow; text: string; companyId: string }) {
+  const { props, card } = useSourceCard(() => rowCard(r, "Revenue", companyId), { hover: false });
+  return (
+    <tr>
+      <td className="first">{shortQuarter(r.fiscal_period) ?? day(r.period_end)}</td>
+      <td className={r.value_source === "derived" ? "derived" : undefined} tabIndex={0} data-cell="" {...props}>
+        <span className="v">{text}</span>
+        {card}
+      </td>
+      <td className="code">{r.citation.form}{r.value_source === "derived" ? " d" : ""}</td>
+    </tr>
+  );
+}
+
+/** A round gridline step for a chart's axis (1, 2 or 5 times a power of ten): drawing only. */
+function niceStep(rough: number): number {
+  if (!(rough > 0)) return 0;
+  const p = 10 ** Math.floor(Math.log10(rough));
+  const f = rough / p;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
 }

@@ -117,19 +117,17 @@ function EventsBody({ companyId, data, brief = false }: { companyId: string; dat
   );
 }
 
-/** A red-letter day: the date it was filed, large, red when the filing can change the figures (the
- * API's `affects`); then what it is, its words and where to read it. */
+/** An 8-K row (.interface-design/system.md §4): the day it was filed, then what it is, its own words
+ * and where to read it. */
 function EventRow({ companyId, e }: { companyId: string; e: FilingEvent }) {
   const ex = e.excerpt;
   const cite = ex?.citation;
   const edgar = e.document_url ?? e.filing_url;
   const affects = e.affects.map((m) => METRIC_LABEL[m] ?? m);
-  const [y, , d] = e.filed.slice(0, 10).split("-");
   return (
     <li className={affects.length ? "event red" : "event"}>
       <div className="day">
-        <b aria-hidden="true">{Number(d)}</b>
-        <span aria-hidden="true">{day(e.filed).split(" ")[0]} {y}</span>
+        <b aria-hidden="true">{day(e.filed)}</b>
         <span className="event-date visually-hidden">{day(e.filed, true)}</span>
       </div>
       <div className="event-body">

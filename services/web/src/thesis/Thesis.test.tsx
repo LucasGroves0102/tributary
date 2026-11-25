@@ -495,7 +495,7 @@ it("creates a thesis and a model from the workspace page", async () => {
 it("creates a model from the company page, starting from the company's own history", async () => {
   await render(`#/company/${NVDA}`, ".co-head h1");
   // New model is in the header's More menu (a Radix DropdownMenu: ArrowDown on its button opens it)
-  await act(async () => { button("More").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+  await act(async () => { container.querySelector('.co-head button[aria-label="More actions"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
   for (let i = 0; i < 3; i++) await act(async () => new Promise((r) => setTimeout(r, 0)));
   await click([...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((i) => i.textContent === "New model")!);
   const form = container.querySelector<HTMLFormElement>('form[aria-label="New model"]')!;

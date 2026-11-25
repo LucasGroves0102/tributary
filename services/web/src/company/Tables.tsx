@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { annualPerShare, ApiError, filingIndex, financialsView, perShare as fetchPerShare, segments as fetchSegments } from "../api";
 import { NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL } from "../blanks";
 import { download } from "../download";
-import { change, day, moneyRow, paren, pct } from "../format";
+import { change, day, exactAmount, moneyRow, paren, pct } from "../format";
 import { newestPeriodic } from "../thesis/useRevisit";
 import type { Callout, FinancialRow, IndexedFiling } from "../types";
 import { calloutLines, calloutText } from "./callouts";
@@ -34,14 +34,17 @@ import {
   withPerShare,
   withBridges,
   statementSection,
+  statementPlace,
   figuresBehind,
   type FiguresBehind,
 } from "./data";
 import { go, href } from "../route";
 import type { StatementView } from "./statementView";
 import { Choices } from "../components/Choices";
+import { MenuButton } from "../components/MenuButton";
 import { Folio } from "../components/Folio";
-import { Seal } from "../components/Seal";
+import { onGridKey } from "../components/ledgerGrid";
+import { useSourceCard, type SourceInfo } from "../components/SourceCard";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { useLoad, type Load } from "./useLoad";
@@ -58,6 +61,8 @@ const BASES: [Basis, string][] = [
   ["calendar", "Calendar"],
 ];
 const SHARE_BASES: [string, string][] = [["adjusted", "Split-adjusted"], ["filed", "As filed"]];
+
+const RANGE_WORDS: Record<StatementRange, string> = { "8q": "8 quarters", "5y": "5 years", "10y": "10 years", max: "All periods" };
 
 const RANGES: [StatementRange, string][] = [
   ["8q", "8 quarters"],
@@ -82,38 +87,62 @@ export function cellLinks(cell: TableCell, companyId: string): { reader: string 
   return { reader, edgar: cell.url?.startsWith("https://www.sec.gov/") ? cell.url : null };
 }
 
-function Cell({ cell, blank = NO_DATA_CELL, companyId, note }: { cell: TableCell | null; blank?: BlankCell; companyId: string; note?: string }) {
+/** A table figure's mark (§5.1): ✓ when its filing prints it as shown; d when derived (a fiscal Q4, a
+ * `derived:` tag, a per-share figure split-adjusted from the filing's own). From the API's facts only. */
+export function cellMark(cell: TableCell): "ok" | "d" {
+  return cell.derived || cell.adjusted || !!cell.source?.tag?.startsWith("derived:") ? "d" : "ok";
+}
+
+/** What a table figure's card says: the figure as Tributary holds it, its mark, its filing and where in
+ * it; a callout's sentence or a restatement as its note; the filing in the reader and on EDGAR. */
+function cellCard(cell: TableCell, row: string, column: { label: string; sub: string }, companyId: string, note?: string, currency = "USD"): SourceInfo {
+  const { reader, edgar } = cellLinks(cell, companyId);
+  const mark = cellMark(cell);
+  const n = Number(cell.raw);
+  const exact = cell.raw !== "" && Number.isFinite(n) && /^-?([$€£¥₹₩]|CN¥|[A-Z]{3} )[\d,.]+[TBMK]?$/.test(cell.text.replace(/^\(|\)$/g, ""));
+  return {
+    title: `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`,
+    value: exact ? exactAmount(n, currency) : paren(cell.text),
+    mark,
+    ...(mark === "d" ? { how: cell.adjusted ? "Derived: the filing's own figure, split-adjusted to today's share basis. Shown in italic."
+      : "Derived: worked out from the filings, not printed in one as shown (a fiscal Q4 is the 10-K's year less its three 10-Qs). Shown in italic." } : {}),
+    where: cell.source ? [`${cell.source.form}${cell.source.filed ? ` filed ${day(cell.source.filed, true)}` : ""}`, statementPlace(cell.source.form)] : [],
+    note: [note, cell.restated].filter(Boolean).join(" ") || undefined,
+    reader: reader ? { href: reader, label: `Open the ${cell.source?.form ?? "filing"} at its statements` } : null,
+    edgar,
+  };
+}
+
+function Cell({ cell, blank = NO_DATA_CELL, companyId, note, row = "", column = { label: "", sub: "" }, tab = -1, currency }: {
+  cell: TableCell | null;
+  blank?: BlankCell;
+  companyId: string;
+  note?: string;
+  /** the row's and column's names, for the card's title */
+  row?: string;
+  column?: { label: string; sub: string };
+  /** the table's one tab stop (components/ledgerGrid) */
+  tab?: 0 | -1;
+  currency?: string;
+}) {
+  const live = !!cell && cell.text !== NOT_MEANINGFUL && !cell.text.startsWith(NOT_APPLICABLE);
+  const { props, card } = useSourceCard(() => (live ? cellCard(cell!, row, column, companyId, note, currency) : null), { hover: false });
   if (!cell) return <td className="n faint" title={blank.title}>{blank.text}</td>;
-  if (cell.text === NOT_MEANINGFUL || cell.text.startsWith(NOT_APPLICABLE)) {
+  if (!live) {
     return <td className="n faint" title={cell.title}>{cell.text}</td>;
   }
-  const { reader, edgar } = cellLinks(cell, companyId);
-  const form = cell.source?.form ?? "filing";
-  const classes = ["n", cell.derived && "derived", cell.callout && "called", cell.restated && "restated", cell.tone && `tone-${cell.tone}`].filter(Boolean).join(" ");
-  // a negative amount in parentheses, as a filing prints it; the hover and the CSV keep the sign
-  const text = paren(cell.text);
+  const mark = cellMark(cell);
+  const classes = ["n", mark === "d" && "derived", cell.callout && "called", cell.restated && "restated", cell.tone && `tone-${cell.tone}`].filter(Boolean).join(" ");
+  // a negative amount in parentheses, as a filing prints it; the card and the CSV keep the sign. The cell
+  // is the figure's target (§4): it opens its card; the reader and EDGAR are in the card.
   return (
-    <td className={classes} title={note ? `${note}\n\n${cell.title}` : cell.title}>
-      {/* a callout's mark: the sentence is in the hover and listed under the table */}
+    <td className={classes} data-cell="" tabIndex={tab} {...props}>
+      {/* a callout's mark: the sentence is in the card and listed under the table */}
       {cell.callout && <span className="callout-mark" aria-hidden="true" />}
-      {/* restated since first reported: the first figure, its filing and day are in the hover */}
+      {/* restated since first reported: the first figure, its filing and day are in the card */}
       {cell.restated && <span className="restated-mark" aria-hidden="true" />}
-      {reader ? (
-        <a href={reader} aria-label={`${text}: open the ${form} in Tributary's reader`}>{text}</a>
-      ) : edgar ? (
-        <a href={edgar} target="_blank" rel="noopener noreferrer">{text}</a>
-      ) : (
-        text
-      )}
-      {/* a figure the filing reports carries the seal on hover or focus, opening the filing on EDGAR; a derived one
-          (italic) keeps the arrow (Riley, test 10, finding 103: one rule for the seal everywhere). Both are drawn
-          without text, so a copied table and the cell's text stay the figure */}
-      {reader && edgar && (
-        <a className={cell.derived ? "cell-edgar" : "cell-edgar sealed"} href={edgar} target="_blank" rel="noopener noreferrer"
-          aria-label={`The ${form} on EDGAR, sec.gov`} title={cell.derived ? `The ${form} on EDGAR, sec.gov` : `Stated in the ${form}: open it on EDGAR, sec.gov`}>
-          {!cell.derived && <Seal size="ledger" />}
-        </a>
-      )}
+      {paren(cell.text)}
+      {card}
     </td>
   );
 }
@@ -130,11 +159,27 @@ function inputLines(row: TableRow): [string, string | undefined][] {
   return [...known, ...[...keys].filter((k) => !order.some(([m]) => m === k)).sort().map((k): [string, undefined] => [k, undefined])];
 }
 
-/** A metric × period table; every cell's hover names its filing, the value opens it in the
- * reader and "↗" on EDGAR. Columns run oldest to newest, as statements read, so a wide one opens
- * at its newest end. A row that is a standardised figure (F5: derived, computed or a sum of tags)
- * opens: its lines across the periods, and under the table what one period is made of. A quarter the
- * API calls out carries a mark, its sentence in the hover and in the list under the table. */
+/** A column's source line (§5.1: tables don't put marks in cells; each column names its source): the
+ * filing its figures share, "10-Q Aug 26, 2026", or its form when they differ; d when they are derived. */
+function columnSource(table: MetricTable, i: number): { text: string; derived: boolean } | null {
+  const cells = table.rows.map((r) => r.cells[i]).filter((c): c is TableCell => !!c?.source);
+  if (!cells.length) return null;
+  const accessions = new Set(cells.map((c) => c.source!.accessionNo));
+  const forms = [...new Set(cells.map((c) => c.source!.form))];
+  // derived when the column's revenue (its first line) is: a fiscal Q4 from the 10-K
+  const derived = cellMark(table.rows[0]?.cells[i] ?? cells[0]!) === "d";
+  const first = cells[0]!.source!;
+  const text = accessions.size === 1 ? `${first.form}${first.filed ? ` ${day(first.filed, true)}` : ""}` : forms.join(", ");
+  return { text, derived };
+}
+
+/** A metric × period ledger (§4): the unit's statement in the first header cell, each column's label,
+ * period end and source; a 1px ink rule under the header, no vertical rules; totals in weight under an
+ * ink rule, the bottom line double-ruled; derived figures italic. Every figure opens its source card:
+ * one tab stop, arrows inside, Enter or Space opens a card with focus in it, Escape returns
+ * (components/ledgerGrid). Columns run oldest to newest, as statements read, so a wide one opens at its
+ * newest end. A standardised row (F5: derived, computed or a sum of tags) opens into its lines. A quarter
+ * the API calls out carries a mark, its sentence in its card and in the list under the table. */
 export function MetricTableView({ table, first, companyId, open = null, onOpen }: {
   table: MetricTable;
   first: string;
@@ -149,22 +194,29 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
       if (c?.callout) notes.set(`${r.metric}|${i}`, calloutText(c.callout, r.label, table.columns[i]!.label, r.opts?.outflow ? -1 : 1));
     });
   }
+  // the one tab stop: the first row's newest figure (the table opens at its newest end)
+  const stopRow = table.rows.findIndex((r) => r.cells.some(Boolean));
+  const stopCol = stopRow >= 0 ? table.rows[stopRow]!.cells.map((c, i) => (c ? i : -1)).filter((i) => i >= 0).at(-1)! : -1;
   return (
     <TableScroll atEnd resetKey={table.columns.length} label={first}>
-      <table className="t statement ruled now">
+      <table className="t led statement" onKeyDown={onGridKey}>
         <thead>
           <tr>
-            <th className="first">{first}</th>
-            {table.columns.map((c) => (
-              <th key={c.periodEnd} className="n">
-                {c.label}
-                <div className="unit">{c.sub}</div>
-              </th>
-            ))}
+            <th className="first">{first}<span className="pe">{table.currency ?? "USD"}</span></th>
+            {table.columns.map((c, i) => {
+              const src = columnSource(table, i);
+              return (
+                <th key={c.periodEnd} className={src?.derived ? "n derived" : "n"}>
+                  {c.label}
+                  <span className="pe unit">{c.sub}</span>
+                  {src && <span className="src">{src.text}{src.derived && <i> d</i>}</span>}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
-          {table.rows.map((r) => {
+          {table.rows.map((r, ri) => {
             const opens = !!onOpen && r.cells.some((c) => c?.opens);
             const isOpen = opens && open === r.metric;
             const lines = isOpen ? inputLines(r) : [];
@@ -180,7 +232,8 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
                   ) : r.opts?.define ? <span className="defined">{r.label}</span> : r.label}
                 </td>
                 {r.cells.map((c, i) => (
-                  <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} companyId={companyId} note={notes.get(`${r.metric}|${i}`)} />
+                  <Cell key={table.columns[i]!.periodEnd} cell={c} blank={r.blanks[i]} companyId={companyId} note={notes.get(`${r.metric}|${i}`)}
+                    row={r.label} column={table.columns[i]!} tab={ri === stopRow && i === stopCol ? 0 : -1} currency={table.currency} />
                 ))}
               </tr>,
               ...lines.map(([k, role]) => {
@@ -388,21 +441,21 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
         <Choices label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
-        {/* Annual keeps the range in place, off, so the bar doesn't move between views (Riley, test 10, finding 79) */}
-        <Choices label="Range" value={range} set={(r) => set({ range: r })} options={RANGES}
-          off={period === "a" ? Object.fromEntries(RANGES.map(([r]) => [r, ANNUAL_RANGE])) : undefined} />
-        {/* what the switch does, said where it is (Riley 80: the figures didn't change, only the labels) */}
-        <span className="basis-choice" title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change.">
-          <Choices label="Basis" value={basis} set={(b) => set({ basis: b })} options={BASES} />
-        </span>
-        {kind === "is" && (
-          <span className="basis-choice" title={`EPS and shares: split-adjusted restates every period to ${asOf ? `the share basis of ${day(asOf, true)} (the splits a filing had restated by then)` : "today's share basis"}, using the company's own restated figures where it filed them and the split's ratio before that; as filed is each filing's own figure for its period.`}>
-            <Choices label="Per share" value={view.shares === "filed" ? "filed" : "adjusted"}
-              set={(s) => set({ shares: s === "filed" ? "filed" : undefined })} options={SHARE_BASES} />
-          </span>
-        )}
+        {/* the rest of the view in one menu (§6 Statements: "8 quarters · Fiscal ▾"): the range (for Quarterly and
+            TTM; Annual is ten years), the basis and, on the income statement, the per-share basis */}
+        <MenuButton className="btn view-menu" count={false} align="start"
+          title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change."
+          label={<>{period === "a" ? "10 years" : RANGE_WORDS[range]} · {basis === "calendar" ? "Calendar" : "Fiscal"}{kind === "is" && asFiled ? " · As filed" : ""}</>}
+          items={[
+            ...RANGES.map(([r]) => ({ label: RANGE_WORDS[r], checked: range === r, disabled: period === "a", title: period === "a" ? ANNUAL_RANGE : undefined,
+              onCheckedChange: () => set({ range: r }) })),
+            ...BASES.map(([b, l]) => ({ label: l, checked: basis === b, onCheckedChange: () => set({ basis: b }) })),
+            ...(kind === "is" ? SHARE_BASES.map(([v, l]) => ({ label: `Per share: ${l.toLowerCase()}`, checked: (view.shares === "filed" ? "filed" : "adjusted") === v,
+              title: `EPS and shares: split-adjusted restates every period to ${asOf ? `the share basis of ${day(asOf, true)} (the splits a filing had restated by then)` : "today's share basis"}, using the company's own restated figures where it filed them and the split's ratio before that; as filed is each filing's own figure for its period.`,
+              onCheckedChange: () => set({ shares: v === "filed" ? "filed" : undefined }) })) : []),
+          ]} />
         <span className="grow" />
-        <button className="btn sm" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
+        <button className="btn" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
       {!asOf && !behind && canRead && load?.state === "ok" && !load.data.annualOnly && (
@@ -461,7 +514,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         }
       </Gate>
       {/* the period table's blank said in the line under it, not only in the legend (Riley, test 10, finding 57) */}
-      <p className="foot read-first">A figure opens its filing; italic ones are derived, a negative amount is in parentheses, and {NO_DATA} marks a period with no figure.</p>
+      <p className="foot read-first">Each column names its filing; italic columns are fiscal Q4s derived from the 10-K (d). Select a figure, or move with the arrow keys and press Enter, for its source. A negative amount is in parentheses, and {NO_DATA} marks a period with no figure.</p>
       <details className="how-to-read">
         <summary>How to read these figures</summary>
         <div className="foot">
@@ -485,8 +538,8 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           {bank && `${BANK_NOT_SHOWN} `}
           {"A line with ▸ opens into what it is made of, with the tags and filings behind it. "}
           Italic values are derived (e.g. Q4 = the 10-K's year minus nine months year-to-date), the rest are reported. A
-          value opens its filing in the reader; ↗ beside it (on hover) is the filing on EDGAR. A negative amount is in
-          parentheses; the CSV and the hover keep its sign.
+          figure opens its source: its filing, where it sits, and the filing in the reader and on EDGAR. A negative amount is in
+          parentheses; the CSV and the card keep its sign.
         </div>
         <BlanksLegend />
       </details>
@@ -609,7 +662,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                 </div>
                 {t.staleNote && <p className="card-b stale-note" role="note">⚠ {t.staleNote}</p>}
                 <TableScroll atEnd resetKey={t.columns.length} label={t.title}>
-                  <table className="t aligned">
+                  <table className="t aligned" onKeyDown={onGridKey}>
                     <thead>
                       <tr>
                         <th className="first">Member</th>
@@ -622,7 +675,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                       </tr>
                     </thead>
                     <tbody>
-                      {t.rows.map((r) => (
+                      {t.rows.map((r, ri) => (
                         <tr key={r.member} className={[r.until ? "retired" : r.reconciling ? "reconciling" : "", r.parent ? "child" : "", r.otherCut ? "other-cut" : ""].filter(Boolean).join(" ") || undefined}>
                           <td className="first" title={r.until ? `${r.member}: last reported for ${r.until}`
                             : r.reconciling ? "What the company reports outside its segments (corporate costs, items it doesn't allocate), shown for the quarters where it and the segments come to the reported total"
@@ -633,7 +686,8 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
                             {r.until && <span className="until">until {r.until}</span>}
                           </td>
                           {r.cells.map((c, i) => (
-                            <Cell key={t.columns[i]!.periodEnd} cell={c} companyId={companyId} />
+                            <Cell key={t.columns[i]!.periodEnd} cell={c} companyId={companyId} row={r.label}
+                              column={{ label: t.columns[i]!.label, sub: day(t.columns[i]!.periodEnd, true) }} tab={ri === 0 && i === r.cells.length - 1 ? 0 : -1} />
                           ))}
                           {t.metric === "revenue" ? (
                             r.shareTooBig ? (
