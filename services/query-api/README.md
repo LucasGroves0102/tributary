@@ -234,7 +234,7 @@ limits, alignment, n/m points and error shapes: [DESIGN.md](DESIGN.md#formulas).
 ## Screener
 
 `GET /v1/screener`: every company with a figure in at least one requested column (`<metric>_ttm`
-or `<metric>_q` for every catalog metric), with filters (SIC, sector, exchange, filer category,
+or `<metric>_q` for every catalog metric), with filters (SIC, sectors and industries, exchange, filer category,
 size bands, `where=<column>:<op>:<number>`, `issue`), sorts, `limit`/`offset` and `format=csv`.
 Companies you can't read are listed with metadata only and never match a value filter.
 `readings` say how each value reads (migration 035, the only definition: `not_meaningful`,

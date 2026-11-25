@@ -695,9 +695,10 @@ export const textKpis = (token: string, companyId: string) =>
   orNullOn404(get<TextKpis>(token, `/v1/companies/${companyId}/text-kpis`));
 
 /** Each quarter's earnings release (8-K Item 2.02), its outlook and adjustments, newest first, with
- * the tables those quote as grids (`parts`, parser v7; an older Query API ignores `tables`). */
-export const earnings = (token: string, companyId: string, quarters = 4) =>
-  orNullOn404(get<EarningsResponse>(token, `/v1/companies/${companyId}/earnings`, { quarters, tables: "true" }));
+ * the tables those quote as grids (`parts`, parser v7; an older Query API ignores `tables`).
+ * `tables` false: without the grids (the Overview's and Statements' line only reads the quarter). */
+export const earnings = (token: string, companyId: string, quarters = 4, tables = true) =>
+  orNullOn404(get<EarningsResponse>(token, `/v1/companies/${companyId}/earnings`, { quarters, ...(tables ? { tables: "true" } : {}) }));
 
 export const segments = (token: string, companyId: string, quarters = 8) =>
   get<{ as_of: string; rows: SegmentRow[] }>(token, `/v1/companies/${companyId}/segments`, { quarters });
@@ -928,13 +929,27 @@ export async function ask(
   signal?: AbortSignal,
   context?: UiContext,
 ): Promise<void> {
-  const r = await fetch(`${AGENT}/v1/ask`, {
+  const send = (ctx?: UiContext) => fetch(`${AGENT}/v1/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(context ? { question, history, context } : { question, history }),
+    body: JSON.stringify(ctx ? { question, history, context: ctx } : { question, history }),
     signal,
   });
+  let r = await send(context);
+  // the deploy window: an agent-api older than the screen's sectors and industries refuses the
+  // context (422, before anything is counted), so ask once more without them
+  const older = r.status === 422 ? olderContext(context) : null;
+  if (older) r = await send(older);
   await stream(r, onEvent);
+}
+
+/** The context without what an agent-api one release older refuses (its UiContext is strict): the
+ * screen's sectors and industries. Null when there is none. */
+export function olderContext(context?: UiContext): UiContext | null {
+  const s = context?.screen;
+  if (!context || !s || (s.sectors === undefined && s.industries === undefined)) return null;
+  const { sectors: _sectors, industries: _industries, ...rest } = s;
+  return { ...context, screen: rest };
 }
 
 // --- filing alerts (F6) ------------------------------------------------------------------------

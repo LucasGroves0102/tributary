@@ -5,8 +5,10 @@ Neither touches identity or access. Context is sent by the browser, so it is unt
 validated, size-capped and shown to the model as a description of the screen, never as
 instructions; the user is still only whoever the bearer token says. UI actions are checked
 here against what that user can read, through the Query API with their token (`/v1/me`,
-`/v1/companies/search`, `/v1/formulas/validate`), before the app sees them; the app then
-reads any data through the Query API itself, so an action can't widen access either.
+`/v1/companies/search`, `/v1/formulas/validate`; a screen's sector names against `/v1/sectors`
+and its result against `/v1/screener`, which must list a company), before the app sees them;
+the app then reads any data through the Query API itself, so an action can't widen access
+either.
 """
 
 import json
@@ -15,6 +17,15 @@ from typing import Annotated, Any, Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from tributary_agent.tools import (
+    INDUSTRY_CHARS,
+    MAX_INDUSTRIES,
+    MAX_SECTORS,
+    SECTOR_CHARS,
+    SectorCatalog,
+    check_names,
+)
 
 MAX_CONTEXT_BYTES = 4000
 MAX_LAYERS = 12
@@ -30,6 +41,8 @@ Axis = Literal["L", "R"]
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 FilerCategory = Literal["large_accelerated", "accelerated", "non_accelerated"]
 Short = Annotated[str, Field(max_length=100)]
+SectorName = Annotated[str, Field(min_length=1, max_length=SECTOR_CHARS)]
+IndustryName = Annotated[str, Field(min_length=1, max_length=INDUSTRY_CHARS)]
 Metric = Annotated[str, Field(pattern=r"^[a-z_]{1,64}$")]
 SORTS = ("name", "sic", "fiscal_year_end", "revenue_ttm", "revenue_growth_ttm",
          "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q",
@@ -79,9 +92,14 @@ class ChartContext(_Strict):
 
 
 class ScreenFilters(_Strict):
-    """The screener's filters (the web app's companies/screen.ts)."""
+    """The screener's filters (the web app's companies/screen.ts; its sector and sector_industry
+    are `sectors` and `industries` here)."""
     q: Short | None = None
-    industry: Short | None = None
+    industry: Short | None = Field(default=None, description="SEC SIC description contains")
+    # Tributary's grouping of SIC codes (/v1/sectors): a sector counts whole unless `industries`
+    # names some of its industries. In an action an empty list clears that filter.
+    sectors: list[SectorName] | None = Field(default=None, max_length=MAX_SECTORS)
+    industries: list[IndustryName] | None = Field(default=None, max_length=MAX_INDUSTRIES)
     sic: str | None = Field(default=None, pattern=r"^\d{4}$")
     band: Band | None = None
     growth: float | None = Field(default=None, ge=-1000, le=100000,
@@ -236,8 +254,19 @@ UI_TOOL: dict = {
                                "reset is true",
                 "properties": {
                     "q": {"type": "string", "description": "name contains, or exact ticker"},
+                    "sectors": {"type": "array", "items": {"type": "string"},
+                                "maxItems": MAX_SECTORS,
+                                "description": "Tributary's sectors, the names find_companies "
+                                               "takes, e.g. Utilities: the whole sector unless "
+                                               "industries names some of its industries"},
+                    "industries": {"type": "array", "items": {"type": "string"},
+                                   "maxItems": MAX_INDUSTRIES,
+                                   "description": "Tributary's industries, the names "
+                                                  "find_companies takes, e.g. Metals & mining"},
                     "industry": {"type": "string",
-                                 "description": "SIC description contains, e.g. software"},
+                                 "description": "SEC SIC description text contains (the "
+                                                "filer's own label, e.g. software); for an "
+                                                "industry, prefer industries"},
                     "band": {"type": "string", "enum": list(Band.__args__),
                              "description": "TTM revenue band"},
                     "growth": {"type": "number",
@@ -287,6 +316,11 @@ can read. When they ask to chart, plot, screen, filter, compare, (un)watch or sa
 workspace, call propose_ui_action instead of describing how to do it, then say in a sentence \
 what changed (they can undo it). Chart and compare only companies whoami lists with \
 financials; if one isn't readable, say so and use the rest.
+A screen: set only the filters the user asked for; never add a revenue band, growth, margin, \
+fiscal year end, exchange, filer category or "mine" they didn't ask for. For an industry or a \
+theme, use sectors and industries (Tributary's grouping, the names find_companies takes; \
+several when the theme spans them) rather than industry, which only matches the SEC's SIC \
+label. After applying, tell the user the screen is on the Companies page.
 Tributary has SEC filings and their XBRL data only: no stock prices or market data, no \
 consensus estimates, no earnings-call transcripts. Asked for a share price, market cap, \
 valuation multiple (P/E, EV/EBITDA), stock return, analyst estimate, beat or miss versus \
@@ -309,13 +343,18 @@ class ActionError(Exception):
 class UiActions:
     """Validates propose_ui_action calls for the user whose token `api` holds."""
 
-    def __init__(self, api: Http) -> None:
+    def __init__(self, api: Http, sectors: SectorCatalog | None = None) -> None:
         self._api = api
+        self._sectors = sectors or SectorCatalog()
         self._readable: dict[str, str] | None = None  # company_id → name, financials only
         # /v1/me's public catalog is open with financials: every company is readable, and
         # _readable holds only the private grants beyond it
         self._open = False
         self._showing: set[str] = set()  # what save_to_workspace can save: chart, comps, screen
+        # the screener's filters as the app has them (the context, then each screen action in
+        # this answer): a set_screen_filters merges into them, as the app does
+        self._screen: dict[str, Any] = {}
+        self._note: str | None = None  # what run() tells the model after this action
 
     def observe(self, ctx: UiContext) -> None:
         """What the user's screen shows before this answer (saving needs something to save)."""
@@ -325,9 +364,11 @@ class UiActions:
             self._showing.add("comps")
         if ctx.page == "companies":
             self._showing.add("screen")
+            self._screen = ctx.screen.model_dump(exclude_none=True) if ctx.screen else {}
 
     def run(self, args: dict[str, Any]) -> tuple[str, bool, dict | None]:
         """(tool_result content, is_error, action for the app or None)."""
+        self._note = None
         try:
             a = ActionArgs.model_validate(args)
             action = self._check(a)
@@ -342,7 +383,8 @@ class UiActions:
         if made:
             self._showing.add(made)
         return json.dumps({"applied": action["label"],
-                           "note": "Shown on the user's screen with an Undo button."}), \
+                           "note": self._note
+                           or "Shown on the user's screen with an Undo button."}), \
             False, action
 
     # -- checks
@@ -377,14 +419,7 @@ class UiActions:
                 return {"action": a.action, "options": opts,
                         "label": "Chart: " + ", ".join(f"{k} {v}" for k, v in opts.items())}
             case "set_screen_filters":
-                f = a.filters or ScreenFilters()
-                filters = f.model_dump(exclude_none=True)
-                if not filters and not a.reset:
-                    raise ActionError("filters: nothing to change")
-                parts = (["cleared filters"] if a.reset else []) + \
-                    [f"{k} {v}" for k, v in filters.items()]
-                return {"action": a.action, "filters": filters, "reset": a.reset,
-                        "label": "Screen: " + ", ".join(parts)}
+                return self._screen_filters(a)
             case "add_watchlist" | "remove_watchlist":
                 if not a.company:
                     raise ActionError("company: required")
@@ -397,6 +432,44 @@ class UiActions:
                 return self._compare(a)
             case "save_to_workspace":
                 return self._save(a)
+
+    def _screen_filters(self, a: ActionArgs) -> dict:
+        """The grouping's names must be its own (the closest are named back); then the screen
+        the app would show (these filters merged into the current ones unless reset, as the
+        app's screenAfter does) must list a company, asked of /v1/screener as the user, or
+        nothing is applied and the model hears why (Lucas: "uranium" as SIC text matched
+        none, under a band nobody asked for). A screener that can't answer doesn't block."""
+        f = a.filters or ScreenFilters()
+        filters = f.model_dump(exclude_none=True)
+        if not filters and not a.reset:
+            raise ActionError("filters: nothing to change")
+        wrong = check_names(self._sectors.get(self._api), f.sectors or [], f.industries or [])
+        if wrong:
+            raise ActionError(wrong)
+        after = {k: v for k, v in {**({} if a.reset else self._screen), **filters}.items()
+                 if v != []}
+        parts = (["cleared filters"] if a.reset else []) + \
+            [f"{k} {', '.join(v) if v else 'cleared'}" if isinstance(v, list) else f"{k} {v}"
+             for k, v in filters.items()]
+        r = self._api.call("GET", "/v1/screener", params=screen_params(after, limit=1))
+        body = _json(r) if r is not None else {}
+        if r is not None and r.status_code == 422:
+            raise ActionError(f"the screener refused it: {body.get('detail')}")
+        total = body.get("total") if r is not None and r.status_code == 200 else None
+        if total == 0:
+            shown = ", ".join(f"{k} {', '.join(v) if isinstance(v, list) else v}"
+                              for k, v in after.items() if k != "sort") or "no filters"
+            raise ActionError(
+                f"no company matches the screen this would make ({shown}). Nothing changed. "
+                "Use only the filters the user asked for; for an industry, sectors and "
+                "industries (find_companies lists their companies)")
+        self._screen = after
+        self._note = ("Applied on the Companies page" +
+                      (f": {total:,} {'company matches' if total == 1 else 'companies match'}"
+                       if isinstance(total, int) else "") +
+                      ". Tell the user the screen is on the Companies page (they can undo it).")
+        return {"action": a.action, "filters": filters, "reset": a.reset,
+                "label": "Screen: " + ", ".join(parts)}
 
     def _save(self, a: ActionArgs) -> dict:
         """Saves what the screen shows: the app sends it to the Query API, which validates it
@@ -536,6 +609,36 @@ class UiActions:
             if str(x.get("name", "")).upper() == upper:
                 return x["company_id"], x["name"]
         return None
+
+
+# the Companies page's value columns (web companies/screen.ts SCREEN_COLUMNS): a company with
+# none of them isn't listed there, so the check counts the same way
+SCREEN_COLUMNS = ["revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm",
+                  "free_cash_flow_ttm", "net_debt_q", "debt_to_equity_q"]
+
+
+def screen_params(f: dict[str, Any], limit: int) -> dict[str, Any]:
+    """/v1/screener's parameters for these filters, as the web app's screenParams sends them
+    (companies/screen.ts: growth and margin as minimum fractions, band as revenue_band, one sic,
+    exchange and filer; its sector and sector_industry lists are `sectors` and `industries`)."""
+    where = [f"{column}:gte:{format(f[key] / 100, '.12g')}"
+             for key, column in (("growth", "revenue_growth_ttm"),
+                                 ("margin", "operating_margin_ttm"))
+             if f.get(key) is not None]
+    p: dict[str, Any] = {"columns": SCREEN_COLUMNS, "limit": limit, "offset": 0}
+    if where:
+        p["where"] = where
+    for key, param, as_list in (("q", "q", False), ("industry", "industry", False),
+                                ("sic", "sic", True), ("sectors", "sector", False),
+                                ("industries", "sector_industry", False),
+                                ("band", "revenue_band", False),
+                                ("fye", "fiscal_year_end_month", False),
+                                ("exchange", "exchange", True), ("filer", "filer_category", True)):
+        if f.get(key) not in (None, "", []):
+            p[param] = [f[key]] if as_list else f[key]
+    if f.get("mine"):
+        p["access"] = "financials"
+    return p
 
 
 def _clean_name(field: str, value: str | None, limit: int) -> str:

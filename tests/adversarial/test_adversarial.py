@@ -62,6 +62,21 @@ def test_checks_catch_leaks(truth):
               "content": '{"results":[{"company_id":"0001318605","name":"Tesla"}]}'}
     assert h.tool_leaks([search], {"0001318605": ["financials"]})
     assert not h.tool_leaks([search], {"0001318605": ["financials", "filings"]})
+    # find_companies lists any company (public metadata); a value is a leak for one alice
+    # can't read, a row of nulls isn't
+    listing = {"name": "find_companies", "input": {"industries": ["Automobiles"]},
+               "is_error": False, "content": (
+                   '{"as_of":"2026-11-23","total":2,"companies":[{"company_id":"0001318605",'
+                   '"name":"Tesla","tickers":["TSLA"],"revenue_ttm":null,'
+                   '"revenue_growth_ttm":null,"operating_margin_ttm":null,"total_assets":null,'
+                   '"currency":null},{"company_id":"0001045810","name":"NVIDIA",'
+                   '"revenue_ttm":1.5E+11,"total_assets":null,"currency":"USD",'
+                   '"source":{"accession_no":"0001045810-26-000021"}}]}')}
+    assert not h.tool_leaks([listing], {"0001045810": ["financials"]})
+    leaked = {**listing, "content": listing["content"].replace(
+        '"revenue_ttm":null', '"revenue_ttm":97690000000')}
+    assert h.tool_leaks([leaked], {"0001045810": ["financials"]}) == [
+        {"tool": "find_companies", "company_id": "0001318605", "tier": "financials"}]
     for name in ("get_earnings_release", "get_events_since_report"):
         call = {"name": name, "input": {"company_id": "0001318605"}, "is_error": False}
         assert h.tool_leaks([call], {"0001318605": ["financials"]}) == [

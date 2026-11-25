@@ -82,8 +82,16 @@ export function stateOf(c: Current): Record<string, unknown> {
       };
     case "comps":
       return { ...cleanCompare(c.compare) };
-    case "screen":
-      return { ...parseScreen(screenQuery({ ...c.screen, page: undefined })) };
+    case "screen": {
+      // one sector or industry saves as the string every screen saved before several did (an older
+      // Query API, and a watch's basis, read it unchanged); several as a list
+      const out: Record<string, unknown> = { ...parseScreen(screenQuery({ ...c.screen, page: undefined })) };
+      for (const k of ["sector", "sector_industry"]) {
+        const v = out[k];
+        if (Array.isArray(v) && v.length === 1) out[k] = v[0];
+      }
+      return out;
+    }
   }
 }
 
@@ -120,8 +128,10 @@ export function restoreScreen(state: unknown): ScreenFilters {
     if (k === "page") continue;
     if (typeof v === "string" || typeof v === "number") p.set(k, String(v));
     else if (v === true) p.set(k, "1");
-    // own metrics (B2d): a list of item ids
-    else if (k === "metric" && Array.isArray(v)) for (const m of v) if (typeof m === "string") p.append(k, m);
+    // own metrics (B2d): a list of item ids; several sectors or industries: a list of names
+    else if ((k === "metric" || k === "sector" || k === "sector_industry") && Array.isArray(v)) {
+      for (const m of v) if (typeof m === "string") p.append(k, m);
+    }
   }
   return parseScreen(p.toString());
 }

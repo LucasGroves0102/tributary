@@ -1,4 +1,4 @@
-import { useContext, useRef } from "react";
+import { useContext, useRef, type ReactNode } from "react";
 
 import { companyEvents, financials, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
 import { LayerChart } from "../chart/LayerChart";
@@ -18,6 +18,7 @@ import {
 import { EventsCard } from "./Events";
 import { keyStatFlag, resultsOut, staleFlags, type StaleFlag } from "./events";
 import { RecapTable } from "./RecapTable";
+import { ResultsPending } from "./ResultsPending";
 import { Gate } from "./Tables";
 import { TextKpisCard } from "./TextKpis";
 import { useLoad } from "./useLoad";
@@ -77,6 +78,10 @@ export function Overview({
   });
   const epsRows = !eps || eps.state === "loading" ? undefined : eps.state === "ok" ? eps.data : null;
   const results = asOf ? null : resultsOut(events?.state === "ok" ? events.data : null);
+  // no 8-K since the last report says results are out (or none read yet): the earnings answer may
+  // still have a release with no 10-Q or 10-K, said under the figures (once the 8-Ks are settled)
+  const pending = !asOf && !results && canRead && !foreign && !!events && events.state !== "loading"
+    ? <ResultsPending token={token} companyId={companyId} fiscalYearEnd={row.fiscal_year_end} slot /> : null;
   const story = canFin && !notKept ? yearStory(row) : null;
   return (
     <div className="folios">
@@ -88,7 +93,7 @@ export function Overview({
         </Folio>
       )}
       <Figures companyId={companyId} name={name} row={row} canFin={canFin} flags={flags} lead={!story && !results} eps={epsRows}
-        asOf={asOf} notKept={notKept} />
+        asOf={asOf} notKept={notKept} pending={pending} />
       <TodaysView.Provider value={asOf ?? null}>
       {foreign ? (
         <Folio name="Since the last report" line="Current reports on Form 6-K" className="events-card">
@@ -168,7 +173,7 @@ function YearSentence({ story, name, companyId }: { story: YearStory; name: stri
 /** The key figures as a ledger: amounts in the first column, rates in the second, each value after a
  * red rule with the seal of its filing. The period they share is in the margin; a figure from another
  * says when. */
-function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept = false }: {
+function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept = false, pending = null }: {
   companyId: string;
   name: string;
   row: ScreenerRow;
@@ -180,6 +185,8 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
   asOf?: string;
   /** as of a past day, no history of the company is kept yet (086): nothing to read from */
   notKept?: boolean;
+  /** results announced before their 10-Q or 10-K (ResultsPending): why the figures end where they do */
+  pending?: ReactNode;
 }) {
   const currency = header(row).currency;
   // Ford's and GM's debt includes their finance arms' (migration 055, consolidated as built)
@@ -223,6 +230,7 @@ function Figures({ companyId, name, row, canFin, flags, lead, eps, asOf, notKept
         <dl aria-label="Rates">{stats.filter((s) => !isAmount(s)).map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} />)}</dl>
       </div>
       <div className="fnote">
+        {pending}
         {sources.size > 0 && (
           <p>
             <Seal />
@@ -420,7 +428,9 @@ function Revenue({ token, companyId, name, foreign }: { token: string; companyId
             {/* a once-a-year filer has no quarters to chart: said, not blank (Riley, test 10, finding 28) */}
             {foreign
               ? `${name} reports once a year (Form ${foreign}), so there is no quarterly revenue to chart. Statements shows its years.`
-              : "No quarterly revenue to chart. Statements shows what this company reports."}
+              // a company before revenue (Terrestrial Energy, Deep Fission) has figures, only no revenue: said
+              // as such, never as no data (the assistant read the blank as "no financial data")
+              : `No revenue reported: ${name}'s filings state no revenue figure yet, or none could be read. Statements shows what it does report.`}
           </p>
         )
       )}

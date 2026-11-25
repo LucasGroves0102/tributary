@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, type RefObject } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from "react";
 
 import type { PageContext } from "./context";
 import { href } from "../route";
@@ -26,6 +26,24 @@ interface Props {
   allowance?: Allowance | null;
 }
 
+/** Below this width the drawer floats over the page (styles.css, "Narrower screens"). */
+const OVERLAY = "(max-width: 1200px)";
+
+/** Whether the drawer covers the page now (it follows the window). */
+function useOverlay(drawer: boolean): boolean {
+  const query = () => drawer && !!window.matchMedia?.(OVERLAY).matches;
+  const [overlay, setOverlay] = useState(query);
+  useEffect(() => {
+    const m = drawer ? window.matchMedia?.(OVERLAY) : undefined;
+    setOverlay(!!m?.matches);
+    if (!m) return;
+    const update = () => setOverlay(m.matches);
+    m.addEventListener?.("change", update);
+    return () => m.removeEventListener?.("change", update);
+  }, [drawer]);
+  return overlay;
+}
+
 export function AssistantPanel({
   assistant,
   onUndo,
@@ -39,6 +57,8 @@ export function AssistantPanel({
 }: Props) {
   const { turns, draft, busy, setDraft, submit, stop, clear } = assistant;
   const bottom = useRef<HTMLDivElement>(null);
+  // over the page, an action's change is behind the panel: its Show closes the panel (the conversation stays)
+  const overlay = useOverlay(variant === "drawer");
   useEffect(() => {
     bottom.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
   }, [turns]);
@@ -89,7 +109,7 @@ export function AssistantPanel({
               </article>
             ) : (
               <Suspense key={t.id} fallback={<article className="message">…</article>}>
-                <AssistantMessage turn={t} undone={undone} onUndo={onUndo} />
+                <AssistantMessage turn={t} undone={undone} onUndo={onUndo} onShow={overlay ? onClose : undefined} />
               </Suspense>
             ),
           )

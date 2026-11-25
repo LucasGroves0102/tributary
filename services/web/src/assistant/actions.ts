@@ -9,7 +9,7 @@ import { AGENT_COLUMNS, cleanCompare, columnsOf, type CompareState } from "../co
 import { metricLabel } from "../chart/metrics";
 import { addLayer, MAX_LAYERS, type ChartState, type Layer, chartTitle } from "../chart/model";
 import type { Route } from "../route";
-import type { UiAction, UiContext, UiLayer } from "../types";
+import type { UiAction, UiContext, UiLayer, UiScreenFilters } from "../types";
 
 type ChartAction = Extract<
   UiAction,
@@ -81,9 +81,16 @@ export function compareAfter(
   });
 }
 
-/** Filters after a set_screen_filters action: merged into the current ones unless reset. */
-export function screenAfter(current: ScreenFilters, filters: ScreenFilters, reset: boolean): ScreenFilters {
-  return clean({ ...(reset ? {} : current), ...filters, page: undefined });
+/** Filters after a set_screen_filters action: merged into the current ones unless reset. The
+ * agent's `sectors` and `industries` are the screen's sector and sector_industry (an empty list
+ * clears one). */
+export function screenAfter(current: ScreenFilters, filters: UiScreenFilters, reset: boolean): ScreenFilters {
+  const { sectors, industries, ...rest } = filters;
+  const grouping: Partial<ScreenFilters> = {
+    ...(sectors ? { sector: sectors.length ? sectors : undefined } : {}),
+    ...(industries ? { sector_industry: industries.length ? industries : undefined } : {}),
+  };
+  return clean({ ...(reset ? {} : current), ...(rest as ScreenFilters), ...grouping, page: undefined });
 }
 
 const MAX_CONTEXT = 3800; // agent-api refuses more than 4000 bytes
@@ -129,11 +136,14 @@ export function uiContext(route: Route, chart: ChartState, name: (id: string) =>
     ctx.accession_no = route.accessionNo;
     if (route.section) ctx.section_key = route.section;
   }
-  // agent-api's ScreenFilters is strict and doesn't know the status page's data-check filter
-  // agent-api's ScreenFilters is strict: no data check, no sector filter or grouping (F4) there
+  // agent-api's ScreenFilters is strict: no data check, grouping sort (F4) or own metrics (B2d:
+  // nothing of Your data reaches the assistant) there; the screen's sector and sector_industry
+  // are its `sectors` and `industries` (an agent-api without them refuses the context: `ask`
+  // asks again without them)
   if (route.view === "companies" && route.screen) {
-    const s = route.screen;
-    ctx.screen = { ...s, page: undefined, issue: undefined, sector: undefined, sector_industry: undefined,
+    const { sector, sector_industry, ...s } = route.screen;
+    ctx.screen = { ...s, page: undefined, issue: undefined, metric: undefined,
+      ...(sector?.length ? { sectors: sector } : {}), ...(sector_industry?.length ? { industries: sector_industry } : {}),
       sort: s.sort?.replace(/^-/, "") === "sector" ? undefined : s.sort } as UiContext["screen"];
   }
   if (route.view === "chart") {

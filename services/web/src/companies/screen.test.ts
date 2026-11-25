@@ -195,7 +195,8 @@ describe("the month a fiscal year ends in", () => {
 describe("F4: sectors in a screen", () => {
   it("parses, keeps and asks for a sector and an industry within it, and groups by sector", () => {
     const f = parseScreen("sector=Technology&sector_industry=Semiconductors&sort=sector");
-    expect(f).toEqual({ sector: "Technology", sector_industry: "Semiconductors", sort: "sector" });
+    expect(f).toEqual({ sector: ["Technology"], sector_industry: ["Semiconductors"], sort: "sector" });
+    // an old address is a list of one, and reads back as it was
     expect(screenQuery(f)).toBe("sector=Technology&sector_industry=Semiconductors&sort=sector");
     const p = screenParams(f);
     expect(p.sector).toEqual(["Technology"]);
@@ -203,7 +204,21 @@ describe("F4: sectors in a screen", () => {
     expect(p.sort).toBe("sector");
     expect(activeFilters(f)).toBe(2);
     expect(describeScreen(f)).toBe("Technology: Semiconductors");
-    expect(describeScreen({ sector: "Utilities" })).toBe("sector Utilities");
+    expect(describeScreen({ sector: ["Utilities"] })).toBe("sector Utilities");
+  });
+
+  it("takes several sectors and industries (uranium plus renewables), each once and within the screener's limits", () => {
+    const f = parseScreen("sector=Utilities&sector=Materials&sector=Utilities&sector_industry=Metals%20%26%20mining&sector_industry=%20Independent%20power%20%26%20renewables%20&sector_industry=");
+    expect(f).toEqual({ sector: ["Utilities", "Materials"], sector_industry: ["Metals & mining", "Independent power & renewables"] });
+    expect(screenQuery(f)).toBe("sector=Utilities&sector=Materials&sector_industry=Metals+%26+mining&sector_industry=Independent+power+%26+renewables");
+    expect(screenParams(f)).toMatchObject({ sector: ["Utilities", "Materials"], sector_industry: ["Metals & mining", "Independent power & renewables"] });
+    expect(activeFilters(f)).toBe(4);
+    expect(describeScreen(f)).toBe("sectors Utilities, Materials; industries Metals & mining, Independent power & renewables");
+    expect(describeScreen({ sector_industry: ["Coal", "Steel & metals"] })).toBe("industries Coal, Steel & metals");
+    expect(describeScreen({ sector_industry: ["Coal"] })).toBe("Coal");
+    const many = parseScreen(Array.from({ length: 30 }, (_, i) => `sector_industry=I${i}&sector=S${i}`).join("&"));
+    expect([many.sector?.length, many.sector_industry?.length]).toEqual([12, 20]);
+    expect(parseScreen("sector=&sector_industry=%20")).toEqual({});
   });
 
   it("rows carry the sector and the companies they file one 10-K with", () => {

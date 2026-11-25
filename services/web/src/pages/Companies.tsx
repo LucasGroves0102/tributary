@@ -17,7 +17,9 @@ import {
   GROUP_SORT,
   hasValueFilter,
   isEmpty,
+  MAX_INDUSTRIES,
   MAX_METRICS,
+  MAX_SECTORS,
   MONTHS,
   PAGE_SIZE,
   screenParams,
@@ -296,6 +298,11 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
 
 /** A typed filter applies this long after the last keystroke. */
 const APPLY_AFTER_MS = 400;
+/** A list without one name: undefined once empty, so the filter goes. */
+const without = (list: string[], name: string) => {
+  const left = list.filter((x) => x !== name);
+  return left.length ? left : undefined;
+};
 /** Up to this wide the filters start folded: all nine would fill a phone's first screen. */
 const FOLD_FILTERS_PX = 700;
 
@@ -307,7 +314,15 @@ function FilterRail({ screen, set, scoped, sectors }: {
   /** /v1/sectors (null: an older API, no sector filter) */
   sectors: Sectors | null;
 }) {
-  const sectorOf = sectors?.sectors.find((s) => s.name === screen.sector) ?? null;
+  const chosenSectors = screen.sector ?? [];
+  const chosenIndustries = screen.sector_industry ?? [];
+  const sectorOf = (name: string) => sectors?.sectors.find((s) => s.name === name) ?? null;
+  const industriesOf = (name: string) => sectorOf(name)?.industries.map((i) => i.name) ?? [];
+  // the industry box offers the chosen sectors' industries; with industries alone (the assistant can set
+  // them) every sector's, so more can be added
+  const offered = !sectors ? []
+    : chosenSectors.length ? chosenSectors.flatMap((s) => sectorOf(s) ?? [])
+      : chosenIndustries.length ? sectors.sectors : [];
   // every filter applies by itself: selects at once, typed ones a moment after typing stops (or
   // on Enter or leaving the field), so nothing needs a second step
   const [q, setQ] = useState(screen.q ?? "");
@@ -402,31 +417,49 @@ function FilterRail({ screen, set, scoped, sectors }: {
           </button>
         )}
       </div>
+      {/* several sectors and industries (uranium plus renewables): each box adds one, the chosen ones are
+          chips under it; the screener reads them as a tree (an industry narrows its own sector) */}
       {sectors && (
         <div>
           <label htmlFor="f-sector">Sector</label>
-          <select id="f-sector" className="field" value={screen.sector ?? ""}
-            title={sectors.note}
-            onChange={(e) => apply({ sector: e.target.value || undefined, sector_industry: undefined })}>
-            <option value="">Any</option>
-            {sectors.sectors.map((s) => (
+          <select id="f-sector" className="field" value="" title={sectors.note} disabled={chosenSectors.length >= MAX_SECTORS}
+            onChange={(e) => e.target.value && apply({ sector: [...chosenSectors, e.target.value] })}>
+            <option value="">{chosenSectors.length ? "Add a sector" : "Any"}</option>
+            {sectors.sectors.filter((s) => !chosenSectors.includes(s.name)).map((s) => (
               <option key={s.name} value={s.name}>{s.name} ({s.companies.toLocaleString()})</option>
             ))}
           </select>
+          {chosenSectors.map((s) => (
+            <button key={s} type="button" className="chip removable" title={`Remove ${s} and its industries`}
+              onClick={() => apply({ sector: without(chosenSectors, s), sector_industry: chosenIndustries.filter((i) => !industriesOf(s).includes(i)) })}>
+              {s} ✕
+            </button>
+          ))}
         </div>
       )}
-      {/* the sector's industries are a filter of their own, in the grid, not a second box under Sector that
+      {/* the sectors' industries are a filter of their own, in the grid, not a second box under Sector that
           pushed its row out of line (Riley 104) */}
-      {sectors && sectorOf && (
+      {sectors && offered.length > 0 && (
         <div>
-          <label htmlFor="f-sector-ind">Industry in {sectorOf.name}</label>
-          <select id="f-sector-ind" className="field" aria-label="Industry within the sector" value={screen.sector_industry ?? ""}
-            onChange={(e) => apply({ sector_industry: e.target.value || undefined })}>
-            <option value="">Any</option>
-            {sectorOf.industries.map((i) => (
-              <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
-            ))}
+          <label htmlFor="f-sector-ind">{chosenSectors.length === 1 ? `Industry in ${chosenSectors[0]}` : "Industry"}</label>
+          <select id="f-sector-ind" className="field" value="" disabled={chosenIndustries.length >= MAX_INDUSTRIES}
+            aria-label={chosenSectors.length === 1 ? "Industry within the sector" : "Industry within the sectors"}
+            title="An industry narrows its own sector; a sector with none of its industries chosen counts whole"
+            onChange={(e) => e.target.value && apply({ sector_industry: [...chosenIndustries, e.target.value] })}>
+            <option value="">{chosenIndustries.length ? "Add an industry" : "Any"}</option>
+            {offered.map((s) => {
+              const options = s.industries.filter((i) => !chosenIndustries.includes(i.name)).map((i) => (
+                <option key={i.name} value={i.name} title={`SIC ${i.sic.join(", ")}`}>{i.name} ({i.companies.toLocaleString()})</option>
+              ));
+              return offered.length > 1 ? <optgroup key={s.name} label={s.name}>{options}</optgroup> : <Fragment key={s.name}>{options}</Fragment>;
+            })}
           </select>
+          {chosenIndustries.map((i) => (
+            <button key={i} type="button" className="chip removable" title={`Remove ${i}`}
+              onClick={() => apply({ sector_industry: without(chosenIndustries, i) })}>
+              {i} ✕
+            </button>
+          ))}
         </div>
       )}
       <div>

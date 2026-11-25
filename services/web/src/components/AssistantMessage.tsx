@@ -11,6 +11,9 @@ import { FilingLinks } from "./FilingLinks";
 export interface ActionRecord {
   id: number;
   label: string;
+  /** the page the action changed ("Companies", "the chart builder", "Compare"); none for a
+   * watchlist change or a save */
+  page?: string;
 }
 
 export interface AssistantTurn {
@@ -33,6 +36,7 @@ const TOOL_LABEL: Record<string, string> = {
   get_section: "Read filing section",
   get_section_changes: "Compared with the prior filing",
   search_filings: "Searched filings",
+  find_companies: "Listed companies by industry",
   propose_ui_action: "Changed the screen",
 };
 
@@ -40,10 +44,13 @@ export function AssistantMessage({
   turn,
   undone,
   onUndo,
+  onShow,
 }: {
   turn: AssistantTurn;
   undone?: ReadonlySet<number>;
   onUndo?: (actionId: number) => void;
+  /** the panel covers the page (a narrower window): close it so the page an action changed shows */
+  onShow?: () => void;
 }) {
   const finalRound = turn.answer ? turn.answer.rounds - 1 : maxRound(turn);
   const text = turn.answer?.text ?? turn.rounds[finalRound] ?? "";
@@ -72,7 +79,7 @@ export function AssistantMessage({
         <p className="muted thinking">Working…</p>
       )}
       {turn.actions.map((a) => (
-        <Action key={a.id} action={a} undone={undone?.has(a.id) ?? false} onUndo={onUndo} />
+        <Action key={a.id} action={a} undone={undone?.has(a.id) ?? false} onUndo={onUndo} onShow={onShow} />
       ))}
       {turn.answer && <Sources citations={usedCitations(turn.answer)} />}
       {turn.answer && <Meta answer={turn.answer} body={body} />}
@@ -84,16 +91,25 @@ function Action({
   action,
   undone,
   onUndo,
+  onShow,
 }: {
   action: ActionRecord;
   undone: boolean;
   onUndo?: (id: number) => void;
+  onShow?: () => void;
 }) {
   return (
     <div className={undone ? "act undone" : "act"}>
       <span className="grow">
         {undone ? "↺ Undone" : "✓ Applied"}: {action.label}
       </span>
+      {/* the panel floats over the page below 1200px: the change was made behind it (Lucas: a screen the
+          assistant set was on Companies, hidden) */}
+      {!undone && action.page && onShow && (
+        <button className="btn sm" onClick={() => onShow()} title={`Close the assistant to see ${action.page}; Ctrl J opens it again`}>
+          Show
+        </button>
+      )}
       {!undone && onUndo && (
         <button className="btn sm" onClick={() => onUndo(action.id)}>
           Undo

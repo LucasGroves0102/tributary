@@ -186,7 +186,11 @@ export interface UiLayer {
 /** Screener filters in agent-api's shape: the web app's ScreenFilters (companies/screen.ts). */
 export interface UiScreenFilters {
   q?: string;
+  /** SEC SIC description contains */
   industry?: string;
+  /** Tributary's grouping (the screen's sector and sector_industry); in an action an empty list clears one */
+  sectors?: string[];
+  industries?: string[];
   sic?: string;
   band?: "lt100m" | "100m-1b" | "1b-10b" | "10b-100b" | "gte100b";
   growth?: number;

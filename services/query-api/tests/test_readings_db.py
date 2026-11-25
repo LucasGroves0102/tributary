@@ -526,6 +526,17 @@ def test_sectors_read_the_same_joined_for_the_page_or_for_every_company(conn, to
     grouped = screen(conn, token, columns=["revenue_ttm"], sort="sector", limit=50)["rows"]
     keys = [f"{r['sector']} / {r['sector_industry']}".lower() for r in grouped if r["sector"]]
     assert keys == sorted(keys) and len(keys) == sum(1 for v in every.values() if v[0])
+    # several sectors and industries: a tree (Technology narrowed to Semiconductors, Financials
+    # whole), and a sector with an industry inside it reads as it always did (sector AND industry)
+    tree = screen(conn, token, columns=["revenue_ttm"], sector=["Technology", "Financials"],
+                  sector_industry=["Semiconductors"], sort="name", limit=50)
+    assert [r["name"] for r in tree["rows"]] == sorted(
+        n for n, (s, i) in every.items() if i == "Semiconductors" or s == "Financials")
+    assert "Bank Co" in [r["name"] for r in tree["rows"]]
+    semis = screen(conn, token, columns=["revenue_ttm"], sector=["Technology"],
+                   sector_industry=["Semiconductors"], sort="name", limit=50)
+    assert [r["name"] for r in semis["rows"]] == sorted(
+        n for n, (_, i) in every.items() if i == "Semiconductors")
 
 
 def test_financials_reads_not_meaningful_only_when_asked(conn, token):

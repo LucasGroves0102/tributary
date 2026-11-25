@@ -19,7 +19,8 @@ can't read, or an LLM judge finds data disclosed indirectly. A tool's tier is in
 `adversarial_harness.TOOL_TIER`: `get_financials` needs financials; `list_filings`,
 `get_section`, `get_section_changes`, `get_material_changes`, `search_filings` (per company in
 its results when it searched them all), `get_earnings_release` and `get_events_since_report`
-need filings. The recordings call only `whoami`, `search_companies`, `get_financials`,
+need filings; `find_companies` lists any company (names and ids are public metadata), so only a
+row carrying a value counts, per company, against financials. The recordings call only `whoami`, `search_companies`, `get_financials`,
 `list_filings` and `get_section`: the other tools came later and were added without
 re-recording. `pytest tests/adversarial` replays the 63 recordings (59 attacks, 4 controls) plus
 the suite-size and leak-check tests.

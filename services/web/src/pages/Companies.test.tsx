@@ -63,6 +63,10 @@ async function render(screen: ScreenFilters = {}, scope: Scope | null = null) {
 }
 
 const $ = (sel: string) => container.querySelector<HTMLElement>(sel);
+const SECTORS = { note: "Tributary's own grouping of the SEC's SIC codes (not GICS)", sectors: [
+  { name: "Technology", companies: 900, industries: [{ name: "Semiconductors", sic: ["3674"], companies: 100 }, { name: "Software", sic: ["7372"], companies: 262 }] },
+  { name: "Utilities", companies: 150, industries: [{ name: "Electric utilities", sic: ["4911"], companies: 90 },
+    { name: "Independent power & renewables", sic: ["4991"], companies: 60 }] }] };
 const calls = () => vi.mocked(fetch).mock.calls.map(([u]) => new URL(String(u), "http://x"));
 
 it("runs the screen from the URL's filters and shows values with sources", async () => {
@@ -291,8 +295,6 @@ it("a named user keeps the full index and the 'only mine' box", async () => {
 });
 
 it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with a heading per industry", async () => {
-  const SECTORS = { note: "Tributary's own grouping of the SEC's SIC codes (not GICS)", sectors: [
-    { name: "Technology", companies: 900, industries: [{ name: "Semiconductors", sic: ["3674"], companies: 100 }, { name: "Software", sic: ["7372"], companies: 262 }] }] };
   const grouped = [
     { ...row(entry()), sector: "Technology", sector_industry: "Semiconductors" },
     { ...row(TESLA), sector: "Consumer Discretionary", sector_industry: "Automobiles" },
@@ -300,12 +302,14 @@ it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with 
   vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/v1/sectors")
     ? Response.json(SECTORS)
     : Response.json({ ...SCREEN, rows: grouped }));
-  await render({ sort: "sector", sector: "Technology" });
+  await render({ sort: "sector", sector: ["Technology"] });
   const q = calls().find((u) => u.pathname.endsWith("/screener"))!;
   expect(q.searchParams.get("sort")).toBe("sector");
   expect(q.searchParams.getAll("sector")).toEqual(["Technology"]);
   const sector = $("#f-sector") as HTMLSelectElement;
-  expect([...sector.options].map((o) => o.textContent)).toEqual(["Any", "Technology (900)"]);
+  // the chosen sector is a chip; the box adds another
+  expect([...sector.options].map((o) => o.textContent)).toEqual(["Add a sector", "Utilities (150)"]);
+  expect([...container.querySelectorAll(".chip.removable")].map((c) => c.textContent)).toEqual(["Technology ✕"]);
   expect([...container.querySelectorAll('select[aria-label="Industry within the sector"] option')].map((o) => o.textContent))
     .toEqual(["Any", "Semiconductors (100)", "Software (262)"]);
   expect([...container.querySelectorAll("tr.group-head th")].map((th) => th.textContent))
@@ -313,6 +317,42 @@ it("F4: a sector filter from /v1/sectors, and the screen grouped by sector with 
     .toEqual(["Technology: Semiconductors", "Consumer Discretionary: Automobiles"]);
   expect((container.querySelector(".card-h .chk input") as HTMLInputElement).checked).toBe(true);
   expect($(".sector-sub")?.textContent).toBe("Semiconductors");
+});
+
+it("several sectors and industries at once (uranium plus renewables): added one by one, removed by their chips", async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/v1/sectors")
+    ? Response.json(SECTORS)
+    : Response.json(SCREEN));
+  await render({ sector: ["Technology", "Utilities"], sector_industry: ["Semiconductors"] });
+  const q = calls().find((u) => u.pathname.endsWith("/screener"))!;
+  expect(q.searchParams.getAll("sector")).toEqual(["Technology", "Utilities"]);
+  expect(q.searchParams.getAll("sector_industry")).toEqual(["Semiconductors"]);
+  // every chosen sector's industries, grouped by sector, the chosen ones left out
+  const industry = container.querySelector('select[aria-label="Industry within the sectors"]') as HTMLSelectElement;
+  expect([...industry.querySelectorAll("optgroup")].map((g) => [g.label, [...g.querySelectorAll("option")].map((o) => o.value)]))
+    .toEqual([["Technology", ["Software"]], ["Utilities", ["Electric utilities", "Independent power & renewables"]]]);
+  expect($("label[for=f-sector-ind]")?.textContent).toBe("Industry");
+  await act(async () => {
+    industry.value = "Independent power & renewables";
+    industry.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(parseScreen(window.location.hash.split("?")[1] ?? "")).toEqual({
+    sector: ["Technology", "Utilities"], sector_industry: ["Semiconductors", "Independent power & renewables"] });
+  // removing a sector takes its industries with it
+  const chip = [...container.querySelectorAll<HTMLButtonElement>(".chip.removable")].find((c) => c.textContent === "Technology ✕")!;
+  await act(async () => chip.click());
+  expect(parseScreen(window.location.hash.split("?")[1] ?? "")).toEqual({ sector: ["Utilities"] });
+});
+
+it("industries set without a sector (as the assistant may) offer every sector's", async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => new URL(String(url), "http://x").pathname.endsWith("/v1/sectors")
+    ? Response.json(SECTORS)
+    : Response.json(SCREEN));
+  await render({ sector_industry: ["Independent power & renewables"] });
+  const industry = container.querySelector('select[aria-label="Industry within the sectors"]') as HTMLSelectElement;
+  expect([...industry.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Technology", "Utilities"]);
+  expect([...container.querySelectorAll(".chip.removable")].map((c) => c.textContent)).toEqual(["Independent power & renewables ✕"]);
+  expect($(".card-h .sub")?.textContent).toBe("Independent power & renewables");
 });
 
 it("F4: an older API without /v1/sectors offers no sector filter or grouping", async () => {

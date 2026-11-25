@@ -143,6 +143,30 @@ def test_the_sector_is_joined_for_the_page_unless_a_filter_or_sort_needs_it(scre
     assert ("ss.industry AS sector_industry" in page) is not early
 
 
+def test_one_list_of_sectors_or_industries_filters_as_it_always_did():
+    """A sector list alone or an industry list alone: the SQL before several of each."""
+    assert "ss.sector = ANY(%(sectors)s)" in compile_screen(Screen(sectors=["Energy"]), None).sql
+    c = compile_screen(Screen(sector_industries=["Refining & marketing"]), None)
+    assert "ss.industry = ANY(%(sector_industries)s)" in c.sql
+    assert c.params["sector_industries"] == ["Integrated oil, refining & marketing"]
+    assert "EXCEPT" not in c.sql
+
+
+def test_sectors_and_industries_together_are_a_tree_not_an_and():
+    """Uranium plus renewables: a sector counts whole unless one of its industries is chosen,
+    and an industry of a sector not chosen adds it; never sector AND industry (which listed no
+    company for Utilities with Metals & mining)."""
+    c = compile_screen(Screen(sectors=["Utilities", "Materials"],
+                              sector_industries=["Metals & mining"]), None)
+    base = c.sql.split("ranked AS (")[0]
+    assert ("(ss.industry = ANY(%(sector_industries)s) OR ss.sector = ANY(ARRAY(SELECT "
+            "unnest(%(sectors)s::text[]) EXCEPT SELECT x.sector FROM silver.sic_sectors x "
+            "WHERE x.industry = ANY(%(sector_industries)s))))") in base
+    assert "ss.sector = ANY(%(sectors)s)" not in c.sql
+    assert (c.params["sectors"], c.params["sector_industries"]) == (
+        ["Utilities", "Materials"], ["Metals & mining"])
+
+
 def test_industry_sorts_by_its_name():
     c = compile_screen(Screen(sort="-sic"), None)
     assert "ORDER BY lower(b.industry) DESC NULLS LAST" in c.sql

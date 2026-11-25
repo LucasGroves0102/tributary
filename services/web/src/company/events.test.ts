@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { EarningsResponse, EventsResponse } from "../types";
-import { eventLabels, firstQuarter, keyStatFlag, NO_PRO_FORMA, passageLines, quarterName, splitEvents, staleFlags, staleLine, windowLine, windowRubric } from "./events";
+import { eventLabels, firstQuarter, keyStatFlag, NO_PRO_FORMA, passageLines, quarterName, resultsPending, splitEvents, staleFlags, staleLine, windowLine, windowRubric } from "./events";
 import DECK_EARNINGS from "./fixtures/deck-earnings.json";
 import VRT_EARNINGS from "./fixtures/vrt-earnings.json";
 import VRT_EVENTS from "./fixtures/vrt-events.json";
@@ -124,5 +124,29 @@ describe("the Overview's one line about figures a later 8-K may have changed", (
     const two = staleLine([flag("cash", "Cash", AUG), flag("total_assets", "Total assets", "the Sep 3, 2026 8-K (Other events)")])!;
     expect(two.text).toBe("Cash is as of Jul 26, 2026; the Aug 17, 2026 8-K (Material agreement) may have changed it. Total assets is as of Jul 26, 2026; the Sep 3, 2026 8-K (Other events) may have changed it.");
     expect(staleLine([])).toBeNull();
+  });
+});
+
+describe("results announced before their report (NVIDIA, Nov 2026)", () => {
+  const release = { accession_no: "0001045810-26-000101", form: "8-K", filed: "2026-11-17", accepted_at: null, items: [],
+    section_key: "EX-99.1", title: null, total_chars: null, document_url: null, filing_url: null };
+  const quarter = (period_end: string, over = {}) => ({ period_end, estimated: true, report: null, release, headline: null, outlook: [],
+    adjustments: [], other_releases: [], ...over });
+  const answer = (...quarters: ReturnType<typeof quarter>[]) => ({ company_id: "0001045810", as_of: "", method: "", quarters }) as EarningsResponse;
+
+  it("the newest quarter with a release and no 10-Q or 10-K, waiting for the report its fiscal year says", () => {
+    expect(resultsPending(answer(quarter("2026-10-25")), "0125")).toEqual({ periodEnd: "2026-10-25", announced: "2026-11-17",
+      accessionNo: "0001045810-26-000101", sectionKey: "EX-99.1", form: "10-Q" });
+    // the fiscal year's last quarter waits for the 10-K, a 52/53-week year's end in the first week too
+    expect(resultsPending(answer(quarter("2026-09-26")), "0926")?.form).toBe("10-K");
+    expect(resultsPending(answer(quarter("2027-01-02")), "0103")?.form).toBe("10-K");
+    expect(resultsPending(answer(quarter("2026-10-25")), null)?.form).toBe("10-Q or 10-K");
+  });
+
+  it("nothing once the report is filed, without a release, or with no quarters", () => {
+    expect(resultsPending(answer(quarter("2026-10-25", { estimated: false, report: { accession_no: "a", form: "10-Q", filed: "2026-11-20" } })), "0125")).toBeNull();
+    expect(resultsPending(answer(quarter("2026-10-25", { release: null })), "0125")).toBeNull();
+    expect(resultsPending(answer(), "0125")).toBeNull();
+    expect(resultsPending(null, "0125")).toBeNull();
   });
 });

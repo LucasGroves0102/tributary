@@ -404,7 +404,14 @@ four quarters added on today's share basis, derived, no seal), a once-a-year fil
 unless a split was applied), the screener's quarter only from an older API, labelled "quarter"
 (`data.ts` `epsStat`; Riley, test 10, finding 1). A balance a later 8-K may have changed keeps its figure in the ink with a red "*". On results day (an 8-K
 with item 2.02 filed after the latest 10-Q or 10-K, `events.ts` `resultsOut`) a **Results out** section
-opens the Overview with the press release. **Since the last report** (red-letter days, below); **Latest quarter**, the recap
+opens the Overview with the press release. Without it, when the earnings answer's newest quarter has a
+release and no 10-Q or 10-K (`events.ts` `resultsPending`, `/earnings` with one quarter and no tables,
+asked only of a filings reader), one quiet line under the figures says the quarter's results were
+announced on that day (the 8-K linked) and that detailed figures arrive with the 10-Q (the 10-K for
+the fiscal year's last quarter); Statements says the same above its table (NVIDIA, Nov 2026: its Oct 25
+quarter announced on Nov 17, the statements ended in July with no word why). A company with figures but
+no revenue (one before revenue) reads "No revenue reported" where the revenue chart would be, never
+as having no data. **Since the last report** (red-letter days, below); **Latest quarter**, the recap
 set as a statement (a change from a zero or negative base reads n/m with the API's
 `pct_not_meaningful` in its hover; changes carry no colour: debt and costs are in it); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
 foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
@@ -817,7 +824,13 @@ duplicate: two SEC registrants, each with its own statements, a parent's includi
 
 Sectors (#136): the screener's filters have a Sector and an Industry within it (`/v1/sectors`,
 Tributary's own grouping of SIC codes, not GICS), and "Group by sector" sorts by sector and industry
-with a heading row for each. The SIC label stays: the Industry column shows it with the sector's
+with a heading row for each. Several of each (uranium plus renewables): each box adds one, the
+chosen ones are removable chips under it (removing a sector takes its industries), and the Industry
+box offers the chosen sectors' industries grouped by sector (every sector's when the assistant set
+industries alone). The API reads them as a tree: an industry narrows its own sector, a sector with
+none of its industries chosen counts whole. The URL repeats `sector` and `sector_industry`; a saved
+screen keeps one as the string screens always saved, several as a list (an old address or saved
+screen reads as a list of one). The SIC label stays: the Industry column shows it with the sector's
 industry under it, and the company header reads "Technology · Semiconductors · Semiconductors & Related
 Devices (SIC 3674)".
 
@@ -927,7 +940,12 @@ The assistant sends the screen as `context` with each question (`assistant/actio
 applies the agent's `action` events (chart layers and options, screener filters, watchlist) with
 an Undo per action (`assistant/useUiActions.ts`): undo restores the chart and page from before
 it, reverses watchlist calls, deletes an item the assistant saved (`save_to_workspace`), and
-also undoes every later action.
+also undoes every later action. The screen's sectors and industries go to agent-api as `sectors`
+and `industries`, and come back the same way in a screen action (an empty list clears one); the
+data-check filter, the grouping sort and the user's own metrics never go. Below 1200px the drawer
+floats over the page, so a change to a page (the chart, Companies, Compare) is made behind it: the
+applied line then has Show, which closes the drawer (the conversation stays; Ctrl J opens it again).
+Beside the page there is nothing to show and no Show.
 
 ## Saved work and reports
 
@@ -1616,7 +1634,8 @@ F6: every `/v1/alerts` route answering 404 means no alerts yet: no bell, and the
 Monitor step's lists and Settings' section say alerts aren't available on this server yet; an older
 API's notification without `filing_url` links EDGAR from the company id. The thesis's Write view and
 the comps table change no request, and Home's new default arrangement asks nothing new. F1, F7b, F8b:
-`/earnings`, `/events`, `/insiders` and `/text-kpis` answering 404 read "not available here yet"
+`/earnings`, `/events`, `/insiders` and `/text-kpis` answering 404 read "not available here yet" (the
+Overview's and Statements' results-announced line just doesn't show)
 (`api.ts` `orNullOn404`); a model's price currency is the user's work, so like F2's fields it is never
 stripped from a save an older API refuses. API keys: `/v1/api-keys` answering 404 hides the Settings
 section, and `/v1/openapi-keys.json` answering 404 makes Using the API say the server doesn't take
@@ -1628,7 +1647,10 @@ tags-only wording); nothing new is requested. Portfolio: `/v1/portfolio` and the
 the unread answer has it. Your data: `/v1/datasets` answering 404 says it isn't available on this
 server yet; the company page's Your data panel asks `/v1/companies/{id}/datasets` and shows nothing
 on a 404; a saved screen refused for its own metrics (`metric`, or a sort on an `m_` column) is
-saved again without them; the screener sends `metric` only when the user chose one. Watched
+saved again without them; the screener sends `metric` only when the user chose one. Several
+sectors and industries: an agent-api older than them refuses the question's context (422, before
+anything is counted), and `ask` asks once more without the screen's `sectors` and `industries`;
+a saved screen with one of each saves the strings an older Query API took (`stateOf`). Watched
 screens: `/v1/watches` and `/v1/alerts/screens` answering 404 (or a 503 without the app database)
 show no watch and no screen alerts (`orNullOn404`); nothing else is asked differently. Connected
 apps: `/v1/oauth/connections` answering 404 hides Settings' section (`orNullOn404`); the consent

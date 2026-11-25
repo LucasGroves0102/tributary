@@ -60,6 +60,9 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 COMPANY_TOOLS = ("get_financials", "list_filings", "get_section", "get_section_changes",
                  "search_filings", "get_earnings_release", "get_events_since_report",
                  "get_material_changes")
+# tools that list companies beyond any scope (they take no company_id): refused in a report or
+# a thesis check, which read only their own companies
+LISTING_TOOLS = ("find_companies",)
 
 REPORT_RULES = """
 
@@ -261,6 +264,13 @@ def screen_params(s: dict) -> dict:
                                 ("exchange", "exchange", True), ("filer", "filer_category", True)):
         if s.get(key) is not None:
             p[param] = [s[key]] if as_list else s[key]
+    # the sector grouping: one saved as a string, several as a list
+    for key, param in (("sector", "sector"), ("sector_industry", "sector_industry")):
+        names = s.get(key)
+        if isinstance(names, str) and names:
+            p[param] = [names]
+        elif isinstance(names, list) and names:
+            p[param] = [n for n in names if isinstance(n, str)]
     if s.get("mine"):
         p["access"] = "financials"
     return p
@@ -317,6 +327,9 @@ class ScopedTools:
         self.results: list[str] = []
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
+        if name in LISTING_TOOLS:
+            return (f"not run: {self._what} covers only the companies in {self._where}; "
+                    f"{name} lists others"), True
         if name in COMPANY_TOOLS:
             cid = args.get("company_id")
             if name == "search_filings" and cid is None:

@@ -21,16 +21,23 @@ reports and thesis checks: [DESIGN.md](DESIGN.md).
 | `search_filings` | `GET /v1/search` (`limit` up to 20, `offset` 0-1,000 as its schema says, clamped in `_route`) |
 | `get_earnings_release` | `GET /v1/companies/{id}/earnings` (`quarters` 1-4, default 1; a quarter's quoted adjustments whole up to 6,000 characters, the rest keep heading and citation and say to read them with `get_section`) |
 | `get_events_since_report` | `GET /v1/companies/{id}/events` (an event flagged from its 7.01/8.01 announcement carries `announced`) |
+| `find_companies` | `GET /v1/screener` with `sector`/`sector_industry` (Tributary's grouping, names from `GET /v1/sectors`), a name (`q`) or `revenue_band`; largest TTM revenue first, 15 rows by default, 25 at most; compact rows (identity, sector and industry, SIC label, TTM revenue, growth, operating margin, total assets, currency, readings, the revenue's filing; values null where the user can't read them) |
 
 The filings tools need the `filings` tier: the adversarial harness counts a result for a company
-the user can't read filings for as a leak. Tools added after the recorded suites
-(`search_filings`, `get_section_changes`, `get_material_changes`, the earnings and events tools)
-needed no re-recording: the suites don't depend on the tool list
-([DESIGN.md](DESIGN.md#tools-added-after-the-recordings)).
+the user can't read filings for as a leak, and a `find_companies` row carrying a value for a
+company the user can't read financials for. Tools added after the recorded suites
+(`search_filings`, `get_section_changes`, `get_material_changes`, the earnings and events tools,
+`find_companies`) needed no re-recording: the suites don't depend on the tool list
+([DESIGN.md](DESIGN.md#tools-added-after-the-recordings)). Reports and thesis checks refuse
+`find_companies`: they read only their own companies.
 
 `get_financials`' metric names come from `GET /v1/metrics` (`MetricTools`, fetched once; until
-the Query API answers, the tool lists no names and the API rejects unknown ones). For a company
-reporting in another currency it says so per row (`unit`) and on the answer (`currency`).
+the Query API answers, the tool lists no names and the API rejects unknown ones); the sector and
+industry names of `find_companies` from `GET /v1/sectors` (`SectorCatalog`, read once a process;
+an unknown name is a tool error naming the closest). For a company reporting in another currency
+it says so per row (`unit`) and on the answer (`currency`). When an asked-for metric has no
+figures but the company has others (a company before revenue), the answer says so in
+`no_figures` (the metrics, and a sentence naming the metrics it does have).
 
 At the round limit (6 rounds of tool calls in chat, 12 in a report, 16 in a thesis check) one
 more call without tools answers from what was found and says first what it couldn't finish; the
@@ -69,7 +76,9 @@ state; `ui.UiContext`, strict, at most 4,000 bytes). It reaches the model as dat
 untrusted and never decides who the user is. agent-api adds `propose_ui_action` (chart layers and
 options, screener filters, comps, watchlist) and `save_to_workspace` (a chart, comps or screen the
 screen shows); each proposal is checked as the user through the Query API and streams as an
-`action` event for the app to apply with Undo
+`action` event for the app to apply with Undo. Screener filters take Tributary's `sectors` and
+`industries` (names checked against `/v1/sectors`); a screen that would list no company
+(`/v1/screener`, one row) is not applied and the model is told why
 ([DESIGN.md](DESIGN.md#page-context-and-ui-actions)). The web app's `context.page` is one of home,
 companies, company, filing, chart, compare, search, ask, about, workspace, report, thesis, model.
 

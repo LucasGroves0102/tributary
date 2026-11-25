@@ -2,9 +2,10 @@
 argument."""
 
 import copy
+import difflib
 import json
 import re
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
@@ -22,6 +23,17 @@ SEARCH_MAX_OFFSET = 1000  # search_filings' schema maximum, enforced in _route t
 # get_earnings_release: quoted adjustments (reconciliation tables) kept whole up to this many
 # characters per quarter; the rest keep their heading and citation (get_section reads them)
 ADJUSTMENT_CHARS = 6000
+# find_companies: rows by default and at most (the schema's, enforced in _route too)
+FIND_ROWS, MAX_FIND_ROWS = 15, 25
+# the Query API's /v1/screener limits for the grouping's names (ui.py: at most 12 and 20)
+MAX_SECTORS, MAX_INDUSTRIES = 12, 20
+SECTOR_CHARS, INDUSTRY_CHARS = 40, 60
+# the screener columns find_companies reads: what it shows, and total assets so a company
+# before revenue (Terrestrial Energy, Deep Fission) still has a figure and is listed
+FIND_COLUMNS = ["revenue_ttm", "revenue_growth_ttm", "operating_margin_ttm", "total_assets_q"]
+FIND_SORTS = ("-revenue_ttm", "revenue_ttm", "-revenue_growth_ttm", "-operating_margin_ttm",
+              "-total_assets_q", "name")
+BANDS = ("lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b")
 
 TOOLS: list[dict] = [
     {
@@ -232,6 +244,48 @@ TOOLS: list[dict] = [
             "additionalProperties": False,
         },
     },
+    {
+        # added after the recorded suites (they never call it); enums: with_sectors
+        "name": "find_companies",
+        "description": "Lists companies by industry: Tributary's sectors and industries (its own "
+                       "grouping of the SEC's SIC codes, not GICS), largest TTM revenue first. "
+                       "Use it, before search_filings, for \"which companies are in X\", \"list "
+                       "X companies\" or \"the biggest X companies\": search_filings finds "
+                       "passages that mention words, not an industry's companies. Each row: "
+                       "company_id, name, tickers, sector, industry, the SIC code and its SEC "
+                       "label, TTM revenue, revenue growth and operating margin (fractions) and "
+                       "total assets, with the currency and any reading (old, n/m); a value is "
+                       "null where the user can't read the company's financials or it reports "
+                       "none. The grouping is coarse: a SIC code is the filer's own and a theme "
+                       "can span several industries (renewables: Independent power & "
+                       "renewables, Electric utilities, Electrical equipment, Semiconductors; "
+                       "uranium miners file under Metals & mining), so ask for each and check "
+                       "what a company does (get_section, its 10-K's Item 1) before you put it "
+                       "in a theme. The figures are for finding and ranking: read one you state "
+                       "with get_financials, which cites its filing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sectors": {"type": "array", "items": {"type": "string"},
+                            "maxItems": MAX_SECTORS,
+                            "description": "sector names, e.g. Utilities: the whole sector "
+                                           "unless industries names some of its industries"},
+                "industries": {"type": "array", "items": {"type": "string"},
+                               "maxItems": MAX_INDUSTRIES,
+                               "description": "industry names, e.g. Independent power & "
+                                              "renewables"},
+                "name": {"type": "string", "description": "name contains, or an exact ticker"},
+                "revenue_band": {"type": "string", "enum": list(BANDS),
+                                 "description": "TTM revenue in US dollars"},
+                "sort": {"type": "string", "enum": list(FIND_SORTS),
+                         "description": "default -revenue_ttm (largest first); - for "
+                                        "descending"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": MAX_FIND_ROWS,
+                          "description": f"default {FIND_ROWS}"},
+            },
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -244,27 +298,109 @@ def with_metrics(metrics: list[str]) -> list[dict]:
     return tools
 
 
-class MetricTools:
-    """with_metrics(the Query API's metric names), fetched once; plain TOOLS until it answers."""
+def with_sectors(tools: list[dict], grouping: dict[str, list[str]]) -> list[dict]:
+    """`tools` with find_companies' sector and industry names limited to the grouping's."""
+    tools = copy.deepcopy(tools)
+    for tool in tools:
+        if tool["name"] == "find_companies":
+            props = tool["input_schema"]["properties"]
+            props["sectors"]["items"]["enum"] = list(grouping)
+            props["industries"]["items"]["enum"] = [i for s in grouping.values() for i in s]
+    return tools
+
+
+class Calls(Protocol):
+    """QueryApi.call: one Query API request as the token's user."""
+
+    def call(self, method: str, path: str, *, params: dict | None = None,
+             json_body: dict | None = None) -> httpx.Response | None: ...
+
+
+class SectorCatalog:
+    """Tributary's sector grouping (/v1/sectors: sector name -> its industries' names), read
+    once and kept: a classification, it changes only with a migration (the Query API reads it
+    once a process too). None until the Query API answers; never hardcoded."""
 
     def __init__(self) -> None:
+        self._grouping: dict[str, list[str]] | None = None
+
+    def get(self, api: Calls) -> dict[str, list[str]] | None:
+        if self._grouping is None:
+            r = api.call("GET", "/v1/sectors")
+            self._grouping = _grouping(r) if r is not None and r.status_code == 200 else None
+        return self._grouping
+
+
+def _grouping(r: httpx.Response) -> dict[str, list[str]] | None:
+    try:
+        body = r.json()
+    except ValueError:
+        return None
+    out: dict[str, list[str]] = {}
+    for s in (body.get("sectors") if isinstance(body, dict) else None) or []:
+        if isinstance(s, dict) and isinstance(s.get("name"), str):
+            out[s["name"]] = [i["name"] for i in s.get("industries") or []
+                              if isinstance(i, dict) and isinstance(i.get("name"), str)]
+    return out or None
+
+
+def check_names(grouping: dict[str, list[str]] | None, sectors: list[str],
+                industries: list[str]) -> str | None:
+    """None when every name is one of the grouping's (or the grouping isn't known: the Query
+    API then decides); else what's wrong, with the closest valid names, or every one when
+    none is close (a theme, "uranium", is no industry's name)."""
+    if grouping is None:
+        return None
+    every = [i for s in grouping.values() for i in s]
+    problems = []
+    for kind, names, valid in (("sector", sectors, list(grouping)), ("industry", industries,
+                                                                     every)):
+        for name in names:
+            if name in valid:
+                continue
+            close = difflib.get_close_matches(name, valid, n=4, cutoff=0.5) or [
+                v for v in valid if name.lower() in v.lower()][:4]
+            problems.append(f"unknown {kind} {name!r}" + (
+                f"; closest: {', '.join(close)}" if close else ""))
+    if not problems:
+        return None
+    if all("closest" in p for p in problems):
+        return "; ".join(problems)
+    listing = "; ".join(f"{s}: {', '.join(i)}" for s, i in grouping.items())
+    return "; ".join(problems) + f". The sectors and their industries: {listing}"
+
+
+class MetricTools:
+    """with_metrics(the Query API's metric names), fetched once; plain TOOLS until it answers.
+    Given a SectorCatalog, find_companies' names too once it has them (with_sectors)."""
+
+    def __init__(self, sectors: SectorCatalog | None = None) -> None:
         self._tools: list[dict] | None = None
+        self._sectors = sectors
+        self._sectored: tuple[list[dict], list[dict]] | None = None  # (base, with names)
 
     def get(self, api: "QueryApi") -> list[dict]:
         if self._tools is None:
             names = api.metric_names()
-            if not names:
-                return TOOLS
-            self._tools = with_metrics(names)
-        return self._tools
+            if names:
+                self._tools = with_metrics(names)
+        base = self._tools if self._tools is not None else TOOLS
+        grouping = self._sectors.get(api) if self._sectors is not None else None
+        if grouping is None:
+            return base
+        if self._sectored is None or self._sectored[0] is not base:
+            self._sectored = (base, with_sectors(base, grouping))
+        return self._sectored[1]
 
 
 class QueryApi:
     """Runs tool calls against the Query API as the user whose token this holds."""
 
-    def __init__(self, base_url: str, token: str, http: httpx.Client | None = None) -> None:
+    def __init__(self, base_url: str, token: str, http: httpx.Client | None = None,
+                 sectors: SectorCatalog | None = None) -> None:
         self._http = http or httpx.Client(base_url=base_url, timeout=30)
         self._headers = {"Authorization": f"Bearer {token}"}
+        self.sectors = sectors or SectorCatalog()
 
     def metric_names(self) -> list[str] | None:
         """Every metric get_financials accepts (/v1/metrics); None if the API can't say."""
@@ -292,6 +428,11 @@ class QueryApi:
             path, params = _route(name, args)
             max_changes = (_whole(args, "max_changes", 20, MAX_CHANGES)
                            if name == "get_section_changes" else 0)
+            if name == "find_companies":
+                wrong = check_names(self.sectors.get(self), params.get("sector", []),
+                                    params.get("sector_industry", []))
+                if wrong:
+                    raise ValueError(wrong)
         except (KeyError, ValueError) as e:
             return f"invalid call to {name}: {e}", True
         try:
@@ -306,12 +447,49 @@ class QueryApi:
                 body = _top_changes(body, args.get("max_changes", MATERIAL_CHANGES))
             if name == "get_earnings_release":
                 body = _short_adjustments(body)
+            if name == "get_financials":
+                body = self._no_figures(body, path, params)
+            if name == "find_companies":
+                body = _companies(body)
             return json.dumps(body, separators=(",", ":"), default=str), False
         detail = _detail(r)
         if r.status_code == 403:
             return f"permission denied: {detail}. The user's plan and grants don't allow " \
                    "this; do not answer it from other sources.", True
         return f"Query API error {r.status_code}: {detail}", True
+
+    def _no_figures(self, body: Any, path: str, params: dict) -> Any:
+        """Says plainly which asked-for metrics have no figures at all, when the company has
+        others (a company before revenue has no revenue rows but net income, cash, assets):
+        an empty answer for revenue read as "no data in Tributary" (Lucas, Terrestrial Energy).
+        Names only: the other metrics' values aren't added (they are asked for, then cited)."""
+        asked = [m for m in dict.fromkeys(params.get("metrics") or []) if isinstance(m, str)]
+        if not asked or not isinstance(body, dict) or not isinstance(body.get("rows"), list):
+            return body
+        have = {r.get("metric") for r in body["rows"] if isinstance(r, dict)}
+        missing = [m for m in asked if m not in have]
+        if not missing:
+            return body
+        others: list[str] = []
+        if not have:  # nothing for what was asked: does the company have other figures?
+            probe = {k: v for k, v in params.items() if k != "metrics"} | {"quarters": 1}
+            try:
+                r = self._http.get(path, params=probe, headers=self._headers)
+                rows = r.json().get("rows") if r.status_code == 200 else None
+            except (httpx.HTTPError, ValueError, AttributeError):
+                rows = None
+            others = sorted({str(x["metric"]) for x in rows or []
+                             if isinstance(x, dict) and x.get("metric")})
+            if not others:
+                return body  # no figures at all: the empty answer says that
+        what = " or ".join(m.replace("_", " ") for m in missing)
+        note = (f"Tributary has no {what} figures for this company: its filings may report "
+                "none yet (a company before revenue reports no revenue), or the figures "
+                "couldn't be read. It is not missing data for the company: ")
+        note += ("the other metrics returned are its data." if have else
+                 "it has figures for " + ", ".join(others) + "; ask get_financials for them.")
+        body["no_figures"] = {"metrics": missing, "note": note}
+        return body
 
 
 def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
@@ -398,6 +576,34 @@ def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:
                     raise ValueError(f"{arg} must be YYYY-MM-DD")
                 params[param] = a[arg]
         return "/v1/search", params
+    if name == "find_companies":
+        params = {"columns": FIND_COLUMNS, "limit": max(1, _whole(a, "limit", FIND_ROWS,
+                                                                  MAX_FIND_ROWS)), "offset": 0}
+        sort = a.get("sort") or "-revenue_ttm"
+        if sort not in FIND_SORTS:
+            raise ValueError(f"sort is one of {', '.join(FIND_SORTS)}")
+        params["sort"] = sort
+        for arg, param, top, chars in (("sectors", "sector", MAX_SECTORS, SECTOR_CHARS),
+                                       ("industries", "sector_industry", MAX_INDUSTRIES,
+                                        INDUSTRY_CHARS)):
+            names = a.get(arg) or []
+            if not isinstance(names, list) or not all(
+                    isinstance(n, str) and 0 < len(n) <= chars for n in names):
+                raise ValueError(f"{arg} is a list of names")
+            if len(names) > top:
+                raise ValueError(f"at most {top} {arg}")
+            if names:
+                params[param] = list(dict.fromkeys(names))
+        query = " ".join(str(a.get("name") or "").split())
+        if query:
+            if len(query) > 100:
+                raise ValueError("name: at most 100 characters")
+            params["q"] = query
+        if a.get("revenue_band"):
+            if a["revenue_band"] not in BANDS:
+                raise ValueError(f"revenue_band is one of {', '.join(BANDS)}")
+            params["revenue_band"] = a["revenue_band"]
+        return "/v1/screener", params
     raise ValueError(f"unknown tool {name}")
 
 
@@ -460,6 +666,60 @@ def _top_changes(body: dict, limit: Any) -> dict:
         if len(changes) > len(s["changes"]):
             s["changes_omitted"] = len(changes) - len(s["changes"])
     return body
+
+
+def _companies(body: Any) -> dict:
+    """/v1/screener's rows as find_companies' compact ones: identity and the grouping (public
+    metadata), then the values exactly as the API gave them (null where the user can't read
+    the company's financials: the screener nulls them), then any reading and the revenue's
+    filing. The values come before any nested object: the adversarial harness reads a row's
+    values up to its first brace (tool_leaks)."""
+    body = body if isinstance(body, dict) else {}
+    rows = []
+    for r in body.get("rows") or []:
+        if not isinstance(r, dict) or not isinstance(r.get("company_id"), str):
+            continue
+        values = _dict(r.get("values"))
+        readings = _dict(r.get("readings"))
+        sources = _dict(r.get("sources"))
+        currency = next((x.get("unit") for x in readings.values() if isinstance(x, dict)
+                         and x.get("status") == "other_currency" and x.get("unit")), None)
+        if currency is None and any(values.get(k) is not None
+                                    for k in ("revenue_ttm", "total_assets_q")):
+            currency = "USD"
+        row = {"company_id": r["company_id"], "name": r.get("name"),
+               "tickers": r.get("tickers") or [], "sector": r.get("sector"),
+               "industry": r.get("sector_industry"), "sic": r.get("sic"),
+               "sic_label": r.get("industry"),
+               "revenue_ttm": values.get("revenue_ttm"),
+               "revenue_growth_ttm": values.get("revenue_growth_ttm"),
+               "operating_margin_ttm": values.get("operating_margin_ttm"),
+               "total_assets": values.get("total_assets_q"), "currency": currency}
+        notes = {k.removesuffix("_q"): x["status"] + (f": {x['reason']}" if x.get("reason") else "")
+                 for k, x in readings.items()
+                 if isinstance(x, dict) and isinstance(x.get("status"), str)
+                 and x["status"] != "other_currency"}
+        if notes:
+            row["readings"] = notes
+        src = sources.get("revenue_ttm") or sources.get("total_assets_q")
+        if isinstance(src, dict) and src.get("accession_no"):
+            row["source"] = {k: src.get(k) for k in ("accession_no", "form", "filed",
+                                                     "period_end")}
+        rows.append(row)
+    out: dict[str, Any] = {"as_of": body.get("as_of"), "total": body.get("total"),
+                           "companies": rows}
+    total = body.get("total")
+    if isinstance(total, int) and total > len(rows):
+        out["more"] = (f"{total - len(rows)} more match: raise limit (at most "
+                       f"{MAX_FIND_ROWS}), narrow the industries, or sort another way")
+    out["note"] = ("No companies match: check the names, or widen the search." if not rows else
+                   "Amounts in each row's currency; growth and margin are fractions. null: the "
+                   "user can't read the company's financials, or it reports none.")
+    return out
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def _short_adjustments(body: dict) -> dict:

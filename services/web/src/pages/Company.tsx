@@ -242,7 +242,8 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
         <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={row.access.includes("filings")}
           canReadFinancials={row.access.includes("financials")} />
       )}
-      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} asOf={asOf} />}
+      {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={row.not_applicable} view={statements} asOf={asOf}
+        canRead={row.access.includes("filings")} fiscalYearEnd={row.fiscal_year_end} />}
       {tab === "revenue" && (
         <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
       )}

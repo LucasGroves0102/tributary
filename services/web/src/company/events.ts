@@ -15,9 +15,10 @@
  * - A passage is read as lines: bullets ("•◦▪●") as list items, a reconciliation as a table (its
  *   lines kept), everything else as paragraphs. */
 
+import { fyeMonth, MONTHS } from "../companies/screen";
 import { day } from "../format";
 import { EIGHT_K_ITEMS } from "../reader/sections";
-import type { EarningsQuarter, EventAnnouncement, EventItem, EventsResponse, FilingEvent, ReleasePassage } from "../types";
+import type { EarningsQuarter, EarningsResponse, EventAnnouncement, EventItem, EventsResponse, FilingEvent, ReleasePassage } from "../types";
 
 /** what a stale flag calls each metric the API can list */
 export const METRIC_LABEL: Record<string, string> = {
@@ -145,6 +146,22 @@ export function resultsOut(r: EventsResponse | null | undefined): FilingEvent | 
   const last = r?.latest_report;
   if (!r || !last) return null;
   return r.events.find((e) => !e.amendment && e.items.some((i) => i.item === "2.02") && e.filed > last.filed) ?? null;
+}
+
+/** Results announced, report not filed (NVIDIA, Nov 2026: its Oct 25 quarter's release on Nov 17, no
+ * 10-Q yet, so the statements ended in July with no word why): the newest quarter of the API's
+ * earnings answer when it has a release and no 10-Q or 10-K. `form` is the report it waits for: a
+ * 10-K for the quarter ending in the fiscal year's last month (`fyeMonth`'s 7-day rule), else a 10-Q;
+ * "10-Q or 10-K" without a fiscal year end. Words the API's answer only; null otherwise. */
+export function resultsPending(r: EarningsResponse | null | undefined, fiscalYearEnd: string | null):
+  { periodEnd: string; announced: string; accessionNo: string; sectionKey: string | null; form: string } | null {
+  const q = r?.quarters[0];
+  if (!q || q.report || !q.release) return null;
+  const last = fyeMonth(fiscalYearEnd);
+  const [, m, d] = q.period_end.slice(0, 10).split("-").map(Number);
+  const month = MONTHS[(d! <= 7 ? m! + 10 : m! - 1) % 12];
+  return { periodEnd: q.period_end, announced: q.release.filed, accessionNo: q.release.accession_no, sectionKey: q.release.section_key,
+    form: last === null ? "10-Q or 10-K" : month === last ? "10-K" : "10-Q" };
 }
 
 /** The quarter a page opens on: the newest with a release, else the newest. */
