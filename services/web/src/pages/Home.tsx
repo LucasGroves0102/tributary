@@ -4,7 +4,7 @@ import { Choices } from "../components/Choices";
 import { FigureText } from "../components/FigureText";
 import { FormMark } from "../components/FormMark";
 import { toast } from "../components/Toasts";
-import { ErrorPanel, LedgerShape, Skeleton } from "../components/States";
+import { ErrorPanel, LedgerShape } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
 import { ago, change, day, periodPhrase, UNNAMED } from "../format";
 import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
@@ -453,7 +453,7 @@ function sortWatch(rows: WatchRow[], key: string, desc: boolean): WatchRow[] {
 }
 
 function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boolean }) {
-  if (filings === null) return <Skeleton lines={5} label="Loading recent filings" />;
+  if (filings === null) return <LedgerShape label="Loading recent filings" first="Filed" columns={["Form", "Company"]} rows={5} />;
   if (filings.length === 0) {
     return (
       <p className="empty">
@@ -508,7 +508,7 @@ function FilingFeed({ filings, bold }: { filings: FilingItem[] | null; bold: boo
 }
 
 function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
-  if (expected === null) return <Skeleton lines={4} label="Loading expected filings" />;
+  if (expected === null) return <LedgerShape label="Loading expected filings" first="Date" columns={["Company", "Form", "Period end"]} rows={4} />;
   if (expected.length === 0) {
     return (
       <p className="empty">

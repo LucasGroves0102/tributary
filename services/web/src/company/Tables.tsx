@@ -371,12 +371,14 @@ export function BlanksLegend() {
 
 /** Statement, period, basis and range live in the address (route.ts), so a view can be linked,
  * bookmarked and undone with Back. Range applies to Quarterly and TTM; Annual is ten years. */
-export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {}, asOf, canRead = false, fiscalYearEnd = null }: TableProps & {
+export function Statements({ token, companyId, name, ticker, notApplicable = [], view = {}, asOf, canRead = false, fiscalYearEnd = null, resultsInHeader = false }: TableProps & {
   view?: StatementView;
   asOf?: string;
   /** the user reads the company's filings: a quarter's results out before its report are said (ResultsPending) */
   canRead?: boolean;
   fiscalYearEnd?: string | null;
+  /** the company header's notice already says results are out: the statement doesn't say it again */
+  resultsInHeader?: boolean;
 }) {
   const kind: Statement = view.kind ?? "is";
   // the address keeps TTM for the statements that have one
@@ -493,7 +495,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
         <button className="btn" onClick={exportCsv} disabled={!table?.rows.length}>Export CSV</button>
       </div>
       {behind && <BehindNotice behind={behind} companyId={companyId} name={name} url={newest?.filing_url ?? null} />}
-      {!asOf && !behind && canRead && load?.state === "ok" && !load.data.annualOnly && (
+      {!asOf && !behind && canRead && !resultsInHeader && load?.state === "ok" && !load.data.annualOnly && (
         <ResultsPending token={token} companyId={companyId} fiscalYearEnd={fiscalYearEnd} />
       )}
       {asOf && kind === "is" && !asFiled && load?.state === "ok" && load.data.perShare && (

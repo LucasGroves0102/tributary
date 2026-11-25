@@ -460,7 +460,9 @@ incorporated in words from `companies/places.ts`, the CIK, confidence with its r
 actions on the title's line (Watching, Compare, `···` with Chart, Ask, New thesis and New model, then Start
 an analysis, the one primary; on a phone the primary and `···`, which then holds Watch and Compare too); at
 most one notice: on results day (an 8-K with item 2.02 after the latest 10-Q or 10-K, `events.ts`
-`resultsOut`) "Results out Nov 17" with the release, else the As of day's note; then the tabs (links with
+`resultsOut`) "Results out Nov 17" with the release, else the As of day's note (while it shows, the Overview's
+figures and the statements don't repeat it: `ResultsPending`'s line under them shows only when the header
+says nothing, from `/earnings`); then the tabs (links with
 `aria-current`, a 2px indicator) with As of as Today | Pick a day (a typed day, never the browser's date
 input). The header asks the 8-Ks since the last report once (`/events`) for the notice and the Overview.
 

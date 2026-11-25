@@ -54,6 +54,7 @@ export function Overview({
   access,
   asOf,
   events,
+  resultsInHeader = false,
 }: {
   token: string;
   companyId: string;
@@ -64,6 +65,8 @@ export function Overview({
   asOf?: string;
   /** the 8-Ks since the last report (the page asks once: the header's notice, the flags and the list) */
   events?: Load<EventsResponse | null> | null;
+  /** the company header's notice already says results are out: the figures don't say it again */
+  resultsInHeader?: boolean;
 }) {
   const canFin = access.includes("financials");
   const canRead = access.includes("filings");
@@ -98,7 +101,7 @@ export function Overview({
     () => financialsView(token, companyId, 1, ["revenue"], "ttm", "fiscal", false, false, asOf).then((f) => f.rows.find((r) => r.metric === "revenue") ?? null));
   // no 8-K since the last report says results are out (or none read yet): the earnings answer may
   // still have a release with no 10-Q or 10-K, said under the figures (once the 8-Ks are settled)
-  const pending = !asOf && canRead && !foreign && !!events && events.state !== "loading"
+  const pending = !asOf && canRead && !foreign && !resultsInHeader && !!events && events.state !== "loading"
     ? <ResultsPending token={token} companyId={companyId} fiscalYearEnd={row.fiscal_year_end} /> : null;
   // a footing term outlines its bar (§4 Chart): the quarter in focus or under the pointer
   const [hl, setHl] = useState<string | null>(null);

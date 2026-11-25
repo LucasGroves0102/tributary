@@ -578,6 +578,23 @@ it("results announced before the 10-Q (NVIDIA, Nov 17): the Overview's figures a
   container.remove();
   await render("statements");
   expect($(".statements .results-pending")?.textContent).toContain("Detailed figures arrive with the 10-Q.");
+  // once the header's notice says results are out, the figures and the statement don't say it again
+  const earnings = override;
+  override = (u) => u.pathname.endsWith("/events") ? Response.json({
+    company_id: NVDA, as_of: "", since: "2026-07-26", window: "since_report", more: false, stale: [], method: "",
+    latest_report: { accession_no: ACC, form: "10-Q", filed: "2026-08-26", period_end: "2026-07-26" },
+    events: [{ accession_no: release, form: "8-K", filed: "2026-11-17", accepted_at: null, event_date: "2026-11-17",
+      items: [{ item: "2.02", title: "Results of Operations and Financial Condition", kind: "earnings" }], items_from: "parsed",
+      material: true, amendment: false, affects: [], sections_available: true, excerpt: null,
+      release: { section_key: "EX-99.1", title: "Press release" }, filing_url: null, document_url: null }],
+  }) : earnings(u);
+  for (const tab of ["overview", "statements"] as const) {
+    await act(async () => root.unmount());
+    container.remove();
+    await render(tab);
+    expect($(".results-out")?.textContent).toContain("Nvidia released its results on November 17, 2026.");
+    expect($(".results-pending")).toBeNull();
+  }
 });
 
 it("names the company from the directory while its figures load (Riley, test 10, finding 15)", async () => {

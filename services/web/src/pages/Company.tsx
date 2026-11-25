@@ -275,13 +275,13 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
             Statements and Ratios follow the day. <a href={href({ view: "company", companyId, tab })}>Back to today</a>
           </p>
         )}
-        {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={r} access={r.access} asOf={asOf} events={events} />}
+        {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={r} access={r.access} asOf={asOf} events={events} resultsInHeader={!asOf && !!results} />}
         {tab === "earnings" && (
           <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")}
             canReadFinancials={r.access.includes("financials")} />
         )}
         {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} view={statements} asOf={asOf}
-          canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} />}
+          canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} resultsInHeader={!asOf && !!results} />}
         {tab === "revenue" && (
           <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
         )}

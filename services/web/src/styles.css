@@ -1035,68 +1035,6 @@ table.t {
 }
 
 /* Companies: filter rail and screener table */
-
-/* The filters sit above the table: a rail beside it took 244px from the numbers. */
-.screener {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-6);
-}
-
-/* the filters: a band ruled above and below, on the page's ground */
-.filter-band.card {
-  background: transparent;
-  border-width: 1px 0;
-  border-color: var(--rule);
-}
-
-.filter-band > summary {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-4);
-  padding: var(--sp-5) 0;
-  cursor: pointer;
-  list-style: none;
-}
-
-.filter-band > summary b {
-  font-weight: 600;
-}
-
-.filter-band > summary::-webkit-details-marker {
-  display: none;
-}
-
-.filter-band > summary::before {
-  content: "▸";
-  color: var(--ink-3);
-}
-
-.filter-band[open] > summary::before {
-  content: "▾";
-}
-
-.filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: var(--sp-6) var(--sp-7);
-  align-items: end;
-  padding: 0 0 var(--sp-7);
-}
-
-.filter-note {
-  grid-column: 1 / -1;
-}
-
-/* a field's label: sans 13, the second ink, regular weight (bold sans labels read as a form's soup) */
-.filters label:not(.chk) {
-  display: block;
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  margin-bottom: var(--sp-2);
-  font-weight: 500;
-}
-
 /* One control (Riley pattern 9): every text field, select and date field is the same box, 32px, square,
    on the page's ground (a field receives, so it sits inset), a 1px rule, sans 14. A select is drawn
    here, not by the system: its chevron is two gradients (no image, for the CSP). */
