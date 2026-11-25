@@ -56,8 +56,9 @@
 
 /* --- no cards (§2.4): a section is its title over a 1px ink rule, on the page's ground ------------- */
 
-.page .card,
-.page section.card {
+/* (a report's embeds stay sheets: they print as the report's own figures on white) */
+.page .card:not(.report-embed),
+.page section.card:not(.report-embed) {
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -285,8 +286,10 @@
 }
 
 /* the loading ledger: its own headers, blank values (§7.6) */
+/* (clipped, never scrolled: a placeholder wider than a phone must not widen the page) */
 .ledger-shape {
   padding: 0;
+  overflow: hidden;
 }
 
 .ledger-shape .t.shape {
