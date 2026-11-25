@@ -96,6 +96,20 @@ Row counts are exact: pg-backup counts every table in an exported snapshot and d
 snapshot (`pg_dump --snapshot`), so the restore must match to the row, whatever changed in the
 live database since.
 
+## Direct read login for side projects (`supplychain`)
+
+The owner's Supply Chain Explorer reads public SEC tables straight from hermes (2026-11-25), as login
+`supplychain`, made by hand on the host: `LOGIN BYPASSRLS CONNECTION LIMIT 5`, read-only by default,
+`statement_timeout` 60 s. BYPASSRLS because those tables' row security lets only `query_api` read them;
+it is safe only because the login's grants are SELECT on public SEC tables in `gold`, `silver` and
+`bronze` (business relations, sections, tables, companies, filings and the documents behind the
+sections view): no `userdata` or `ops` schema, no `app` database. `pg_hba.conf` admits it to the
+`tributary` database only from the owner's laptop's Tailscale address, and `ufw` opens 5432 only to
+that address on `tailscale0`. It reads Tributary's internals directly: a migration that renames or
+reshapes these tables can break the side project (the Query API is the stable contract). Remove it:
+`DROP ROLE supplychain`, the `pg_hba.conf` line, and `sudo ufw delete allow in on tailscale0 from
+100.127.233.68 to any port 5432 proto tcp`.
+
 ## Postgres settings
 
 `/etc/postgresql/16/main/conf.d/tributary.conf`, installed from `postgresql-tributary.conf` here,
