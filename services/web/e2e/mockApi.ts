@@ -781,5 +781,6 @@ function koEarnings(tables: boolean) {
 export async function startDemo(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "Try the demo" }).click();
-  await page.locator(".sandbox-banner").waitFor();
+  // signed in to the sandbox: the top bar's account chip says so
+  await page.locator(".top .who").waitFor({ state: "attached" });
 }

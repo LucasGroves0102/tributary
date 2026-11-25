@@ -14,47 +14,61 @@ company](#finding-a-company), [Chart builder](#chart-builder), [Compare](#compar
 API](#api-keys-and-using-the-api), [End-to-end flows](#end-to-end-flows), [Performance](#performance), [Deploy
 window](#deploy-window).
 
-## Look (Seal)
+## Look
 
-**Look ("Seal").** The design system of record is `.interface-design/system.md` at the repo root: an
-annual report kept as a ledger. A white page (a warm near-black in dark), black serif figures, red
-rubrics in the margin, ledger rules, red-letter days, a double-ruled bottom line, and a red wax seal on
-every figure taken from a filing; gold appears only on the seal. Tokens (both palettes, type scale,
-spacing, square corners, motion) are in `src/tokens.css`, with the older names (`--panel`, `--text`,
-`--accent`...) read from Seal's so screens not yet redrawn keep working; `src/seal.css` holds Seal's
-own components and `src/styles.css` the rest. Red is never "a loss": a fall keeps its minus sign in
-the ink (`.neg`), a rise is green. Since Riley's audit (2026-11-15) red belongs to the seal, the margin
-rubrics, red-letter days and a "may have changed" mark only: the one primary button is the ink filled
-(`--action`, inverted in dark), a link is the ink with a rule under it (`--link`; links that are
-controls, nav or a table's figures carry no rule), an error has its own `--error`, checkboxes and focus
-are the ink, hovers are the recessed sheet rather than a red wash. Pointing `--action` at the red in
-`tokens.css` gives actions the red back in one place. Forms are marked by `components/FormMark` (10-K
-filled ink, 10-Q outlined, the rest quieter, expected dashed; the hover names the form). Fonts are Source Serif 4 (names, sentences, figures; lining, tabular numerals) and Archivo
-(controls, navigation, meta), both OFL and self-hosted: pinned `@fontsource-variable` packages
-imported in `main.tsx`, bundled into `/assets` by the build, because the CSP allows fonts only from
-this origin. No monospace for data, no all-caps labels.
+**The build spec.** The design of record is `.interface-design/system.md` at the repo root (Noor's build spec,
+2026-11-24): paper, ink and pencil; Archivo for the interface and every figure, Source Serif 4 only for the
+filing's own words; one seal red for the tick and the logo, green and rust for a change's direction only,
+yellow for inserted text only; hairlines and surface steps, one shadow (`--float`) on things that float. The
+first batch (2026-11-25) rebuilt the foundations, the shell and the company page's header, Overview and
+Statements; the other screens read the new tokens through the older names and keep their own layout until
+their pass.
 
-Seal's pieces: `components/Seal.tsx` (the seal drawn once, `SealSprite` in `main.tsx`, and used by
-reference; `SealLink` is a seal on a figure: it opens the filing at its statements, and its source is
-a Radix tooltip on hover or focus and the link's description for a screen reader, replacing the
-hover-only source), `components/Folio.tsx` (a section with its rubric in the margin: a 190px column
-of red labels beside each section, above it when the page has under 1100px), `components/Choices.tsx`
-(one of a few views: a Radix toggle group, arrow keys between options). Controls with behaviour use
-Radix Primitives (pinned exact versions), styled only with the tokens: the company page's More menu
-(DropdownMenu, `modal={false}`: a modal one locks scrolling with an injected style), the toggle groups, the seal's
-tooltip, and the confirm dialog (`workspaces/Actions.tsx` `ConfirmDelete`, a Radix alert dialog). Radix
-places popovers through the CSSOM, which the CSP allows; Radix's dialog Overlay isn't used, because
-its scroll lock injects a `<style>` element the CSP refuses (the dialog draws its own backdrop).
-Money negatives read in parentheses on every table (statements, ledgers, the recap, the screener, and since
-Riley's audit the watchlist, Peers, Compare and the model through `components/FigureText`; `format.ts`
-`paren`: display only; the CSV and the hover keep the sign, and F5's `outflow` stays the one place a
-sign is decided); percentages and multiples keep their minus sign. An amount has four significant figures at
-most: two decimals below 100 in its scale, one from 100 ("$46.74B", "$227.0M", never "$227.00M"); a row
-takes its largest value's decimals, and a value that would round to nothing keeps its own scale. Compare's
-comps say the quarter's end date ("Jul 26, 2026": two companies a quarter apart read apart), the calendar
-and fiscal labels in the hover; a target with no peers starts with the five suggested ones; Make target
-and Remove are buttons, a removal a toast with Undo; the side-by-side charts open indexed when the
-companies are over 100 times apart in size.
+- **Tokens** (`src/tokens.css`): both palettes (`--paper --sheet --well --ink --ink-2 --pencil --disabled --rule
+  --rule-2 --seal --gain --loss --ins-bg --ins-line --bar --bar-edge --bar-latest`, `--float`, `--scrim`), the type
+  steps (11 micro, 12 meta, 13 ui, 14 body, 16 section, 20 figure, 28 title, 48 hero; serif 15 quotes, 17 the
+  reader), the spacing scale (4 8 12 16 24 32 40 48 64), radius (3 controls, 4 a segmented track, 6
+  popovers), the 32px control (40 on a coarse pointer) and the motion tokens. The older names (`--page --sheet-2
+  --ink-3 --red --action --panel --text --accent`...) are aliases of these. `tokens.test.ts` checks every text
+  token on paper, sheet and well (≥ 4.5), outlines and bar edges (≥ 3), the primary button, inserted text and
+  the chart series in both themes, and that the system's dark equals choosing Dark.
+- **Type**: `body` is Archivo 14/22 with `tabular-nums lining-nums`; nothing under 11px and no fractional
+  sizes. Codes (tickers, forms, CIK, key caps) are Archivo at 82% width, 600 (`.code`). Fonts are pinned
+  `@fontsource-variable` packages imported in `main.tsx` (Archivo with its width axis, upright and italic;
+  Source Serif 4 with its optical sizes), bundled, because the CSP allows fonts only from this origin.
+- **Marks** (`components/Mark.tsx`, spec §5): ✓ in seal red, agrees to the filing; Σ added up; *d* derived (the
+  figure italic too); no mark for a ratio or difference. A mark always comes from what the API says of the
+  figure: a key stat's from `data.ts` `statMark` (the same facts as `howFiled`), a `/financials` figure's from
+  `value_source`, a statement cell's from `Tables.tsx` `cellMark` (a `derived:` tag or a split-adjusted
+  per-share figure reads as derived). `components/Seal.tsx` draws the logo disk and the tick once
+  (`SealSprite`); `SealLink` (screens not yet on source cards) is a tick that opens the filing. Tables put no
+  marks in cells: each column names its filing in its header.
+- **Source card** (`components/SourceCard.tsx`): a figure is a button (or a ledger cell) that opens a non-modal
+  `role=dialog` card, 368px: what and which period, the figure as Tributary holds it (`format.ts` `exactAmount`:
+  "$96,221 million", never rounded), its mark in words, how it is made, its filing and where in it, and the
+  filing in the reader and on EDGAR. One card at a time; a standalone figure opens on hover after 200ms on a
+  fine pointer (at once within 400ms of another closing), a table cell only on a click, Enter or Space; opened
+  by keyboard the focus goes into it and Escape returns it. The filing's own printed line is product work
+  (spec §8: a cell-to-line lookup), so a card opens the filing at its statements instead.
+- **Controls**: buttons are 32px (primary ink, one per header; secondary a sheet with a `rule-2` ring; quiet
+  text); `components/Choices.tsx` is the segmented control (a `well` track, a `sheet` thumb that slides
+  180ms); `components/Notice.tsx` is the one-line notice; menus and tooltips are sheets with `--float`, Radix
+  Primitives pinned exact (DropdownMenu `modal={false}`: a modal one locks scrolling with an injected style the
+  CSP refuses; no Dialog Overlay).
+- **Ledgers** (`.led`, `.t.led`): a 1px ink rule under the header, no vertical rules, 32px rows (40 on a coarse
+  pointer), totals in weight under an ink rule, the bottom line double-ruled, derived columns italic.
+  `components/ledgerGrid.ts` is their keyboard: one tab stop per table, arrows between figures, Home/End the
+  row's ends, Enter or Space opens the figure's card. The screener, watchlist and comps keep the row-based
+  `tableNav.ts` until their pass.
+- **Stylesheets**: `tokens.css`, then `styles.css` (the older screens), `seal.css` (their Seal pieces),
+  `ui.css` (the spec's shared components and the view-transition rules), `shell.css`, `company.css`.
+
+Money negatives read in parentheses on every table (`format.ts` `paren`: display only; the CSV and the card
+keep the sign, and F5's `outflow` stays the one place a sign is decided); a signed change takes a true minus
+and is green or rust by direction, except a balance's (a change in debt is uncoloured). An amount has four
+significant figures at most, and a row of amounts one unit (`moneyRow`). The spec's one unit per table
+("USD billions" in the first header cell) is not built yet: it conflicts with the row rule and is a batch-2
+decision; the Overview's footing and bars do use one unit (`ledgerUnit`).
 
 Tags: colour says the form (10-K, 10-Q) or, on saved work, the kind; an expected filing has a dashed outline,
 not a colour, so a colour never means "not filed yet". Bold marks new rows on Home only when some rows aren't,
@@ -62,7 +76,8 @@ and an 8-K's period of report reads as the event date it is (`format.ts` `period
 
 ### The human pass
 
-The human pass (Riley's audit, test 6, branch `riley-fixes`): every select and date field is one styled
+History, kept for its reasons (the Seal look these passes tuned was replaced by the build spec above; its rules on
+controls, pages and words still hold where the spec doesn't say otherwise). The human pass (Riley's audit, test 6, branch `riley-fixes`): every select and date field is one styled
 control, buttons one scale, a page's bar one row (secondary actions in a `components/MenuButton` menu),
 confirmations toasts (`components/Toasts`, at the foot of the window with the delete undo notes), a new page
 opens at its top. The screener fades the last screen's rows with a line saying a new one is running, moves
@@ -97,7 +112,7 @@ Business paragraphs rejoin a sentence a line break cut.
 
 ### The restraint pass (Riley's audit, test 10, findings 37-107)
 
-Red is only the seal, the margin rubrics, red-letter days and the "may have changed" `*`: the Home badge,
+History: the build spec now gives the seal red to the tick and the logo only, and a change its green or rust. Red is only the seal, the margin rubrics, red-letter days and the "may have changed" `*`: the Home badge,
 the bell's count, watchlist new-filing dots, where-you-are rules (nav, tabs, steps, sort, saved screens),
 disclosure triangles, red line states, crossed tags and severity tags are the ink or the ink's greys; a dark
 table's column rules are a warm grey (`--col-rule`; the paper's stay the red hairline). Buttons are one
@@ -114,63 +129,76 @@ one scrolling row; the user's own tables read as labelled cards under 560px.
 
 ## Shell and layout
 
-Every screen sets the browser tab's title (`src/title.ts`: "Nvidia (NVDA) · Statements · Tributary").
-A page that fails to render shows "This page didn't load" with Reload and Home, keeping the shell
-(`components/ErrorBoundary.tsx`, around the page and around the whole app; the error goes to the
-console, never on screen). The "demo" badge shows only on a sandbox; the app names an account the way a
-person knows it (`access.ts` `accountName`: "morgan", not the API's "pw-morgan").
+Every screen sets the browser tab's title (`src/title.ts`: "Nvidia (NVDA) · Statements · Tributary"); with no
+breadcrumb in the top bar the title, the page's heading and the rail's current item say where you are. A
+page that fails to render shows "This page didn't load" with Reload and Home, keeping the shell
+(`components/ErrorBoundary.tsx`). The app names an account the way a person knows it (`access.ts`
+`accountName`).
 
-The shell keeps its sidebar: a sidebar (screens with `g`-then-letter shortcuts, watchlist
-with revenue sparklines, next expected filings, freshness), a top bar (breadcrumb, Ctrl/Cmd-K
-command palette, the filing alerts bell, theme, who is signed in) and the assistant drawer on every page (Ctrl/Cmd-J toggles,
-`/` focuses; the top bar's Assistant is the way in, closed until asked for and then remembered per
-browser). The theme follows the visitor's system (light or dark, `prefers-color-scheme`, read by
-`tokens.css` itself so nothing waits for a script). The top bar's Theme button says which is in force
-and cycles Light, Dark, System: Light and Dark are kept per user in localStorage, System forgets the
-choice (`theme.ts`).
+The frame (spec §3): a 48px **top bar** across the window over a 232px **rail**, both on the paper and still on
+every page change. The top bar (`components/TopBar.tsx`): the logo (Home), the search button (Ctrl/Cmd-K
+opens the palette), the feed's freshness as a status point ("Listed 2 min ago", green in EDGAR's hours; it
+opens a popover with the newest text parsed, the watchlist's values' time, who is signed in, the readable
+count and Data status, in the freshness words: never "live"), Alerts with its count, the Assistant
+(Ctrl/Cmd-J) and the account chip (a sandbox's "Demo sandbox · resets in 23h" with End demo; a GitHub or
+password account's name with Sign out; the named demo users' picker). The rail (`components/Sidebar.tsx`):
+Home, Companies (its count), Compare, Charts, Analysis, Portfolio, Your data (Ask stays a g-key and a palette
+entry); then **Watching** (code, name and "new" for a filing since the last visit, no figures: those are on
+Home's watchlist), then Workspaces; its foot has Data status, API, Settings and Shortcuts, then What
+Tributary covers and the credit. The theme moved to Settings (Display: Light, Dark or System; `theme.ts`), and
+the palette's "toggle theme" stays. Three parts: the screens stay put, the lists scroll (on a phone they open
+at the top), the foot is always whole.
 
-Layout: pages lay out by the room they have, not the window's width, because the assistant takes
-372px at any window size: `.main` is a CSS container and `@container main` rules reflow it (the
-same rules with the panel open at 1440 as at 1024). Above 1200px the panel sits beside the page;
-at or below that it floats over it; under 600px it is full screen. The sidebar has three parts: the
-logo and screens stay put, the lists scroll between them (on a phone they open at the top), and the
-footer is always whole, with the freshness detail behind its summary line. Nothing floats over a
-page. Every data table is a `components/TableScroll`: a table that doesn't fit says how many columns
-are off screen on each side and moves to them, shows a shadow on an edge with more beyond it and on a
-frozen name column once something is under it, blanks a column showing only in part (a number is
-never read with digits missing), and takes arrow keys once focused; a statement opens at its newest
-periods. A long table's header row stays under the top bar while the page scrolls past it: the
-table scrolls sideways, so a `position: sticky` header could only stick inside that scroller, and a
-bounded-height scroller would trap the wheel on pages with several tables; instead the real header
-row moves down (`headerShift`, a `--tw-head-y` variable set through the CSSOM, which the CSP allows),
-so its sort buttons, the frozen first column and the sideways scroll work unchanged and there is no
-copy to keep in step. Numeric headers stack their label over their unit, so a column is as wide as
-its numbers, and as a table narrows the wordy columns give way first (the screener's industry and
-Peers' "Why" move under the name; the watchlist's period end and Compare's fiscal label go to the
-hover). Dollars in a statement, segment or revenue row share one unit (`format.ts` `moneyRow`): the
-largest value's, or the next smaller one when a figure would read under one of the larger and the
-largest still fits four digits ($119M ... $3,955M rather than $0.12B ... $3.96B; $55K, $964K, $2,430K),
-thousands grouped; a figure that would round to nothing keeps its own, and the hover has the exact value. A company header shows its main ticker and "+8 more", with the rest in the hover.
-Charts are drawn for the width they have (`chart/layout.ts` `chartSize`), so their text is its real
-size at any width and titles and footnotes wrap instead of being cut; `svgRef` always gets the
-standard-size drawing, so Export SVG / PNG give the same deck-ready image from a phone or a monitor.
-The chart builder puts the chart first when there's no room for it beside the layers.
+Widths: at 1200px and up the rail sits beside the page and the 400px assistant panel pushes the page (the
+page's room shrinks at once, frame 0, and the panel slides over it); from 768 to 1199 the rail is a 280px
+drawer over a scrim behind Menu and the panel overlays the page (the account chip moves into the drawer's
+foot); under 768 the search is an icon, the freshness point goes, and the panel is full screen. Pages lay out
+by the room they have (`.main` is the `main` container): the Overview stacks its lead and side columns when
+its content box is under 900px, so the open panel at 1440 collapses it as a narrow window does. Content has
+32px sides (16 on a phone) and is at most 1144px wide. No page scrolls sideways; tables scroll inside
+`components/TableScroll`, which opens a statement at its newest periods, moves its real header row under the
+top bar through the CSSOM (`headerShift`), and blanks a column showing only in part. The palette is 560px at
+12vh over a scrim, never animated.
+
+### Motion
+
+`src/motion.ts` (spec §7). Motion says where you went, confirms the tool heard you, and hands loading over to
+content; transform and opacity only, nothing over 280ms, exits faster than entrances, no ease-in, no spring.
+
+- **Page changes** are same-document View Transitions: `route.ts` `useRoute` hands each hash change to
+  `transition()`, which commits the new route with `flushSync` inside `document.startViewTransition`. The kind
+  comes from depth (lists 1, a company 2, a filing 3), not history: forward slides the new content 12px from
+  the right, back from the left, lateral only fades (old 90ms out, new 160ms in after 60ms). `topbar`, `rail`
+  and `assist` are named and frozen; `page-head` is the company header (`.vt-head`) and `content` its tab panel
+  or the page (`.vt-content`). On a tab change the header doesn't move and only the 2px tab indicator slides
+  (180ms). A company's name travels (`entity-title`, 260ms) from the row that was clicked (`data-entity-name` in
+  the screener and Home's watchlist) into the page's h1 (`data-entity-title`), only when both name the same
+  company; back flies it home. The aborted promises are always caught. Without the API the same
+  choreography runs on the Web Animations API (fade and slide, the title by FLIP).
+- **Instant**: anything from the keyboard (an Enter on a link, a shortcut, the palette: `viaKeyboard`,
+  `markKeyboard`), the palette itself, sorting and moving through a table, and the figures (a value swaps;
+  bars appear at their value).
+- **Popovers**: a source card or menu scales from 0.97 at its trigger with opacity (140ms in, 90ms out);
+  instant by keyboard or within 400ms of another closing. The assistant panel slides in 240ms and away 180ms
+  (it stays mounted for its exit; `App` returns the focus to the Assistant button), instantly by Ctrl J; the
+  rail drawer slides 240/180.
+- **Loading**: the company page shows its own shape while its figures load (the header with the name the
+  directory knows, the tabs, the Overview's section titles and row labels, a statement's row labels), each
+  blank value a `well` block; after 1s the blanks pulse slowly; values fade in over 120ms in place (`.landed`).
+- **Reduced motion** (`html[data-motion="reduced"]`, from `prefers-reduced-motion`): nothing travels or
+  overlaps; the old view goes at once and the new fades in 120ms; indicators jump; popovers and panels fade;
+  no press scale or pulse.
+- **Focus**: after a page change the h1 takes the focus (`tabindex=-1`, no ring) and `#route-announce` (a
+  polite live region) says the page ("Nvidia (NVDA) · Statements"); a tab change keeps the focus.
 
 ### States and accessibility
 
-States and accessibility: every data panel loads with a skeleton (`components/States.tsx`),
-errors say what happened in plain words (`api.ts` `failureReason`: a 4xx detail is written for the caller, a 5xx's is for developers and never shown) and offer a retry; only a failure that clears by itself (a 5xx or no answer) adds "It usually clears in a moment", never a 4xx (a 422 is a request to change). Empty states say what to do next. The screener, watchlist and comps rows
-are a roving tab stop (arrows, Page Up/Down, Home/End, Ctrl/Cmd + Up/Down the first and last
-row, Right or Ctrl/Cmd + Left/Right into the cells, then the first and last column; Enter opens:
-`components/tableNav.ts`). `?` opens the keyboard shortcut sheet (`components/ShortcutSheet.tsx`,
-also from the sidebar footer).
-`src/tokens.test.ts` checks every text, state and series token against WCAG AA in both themes, and that
-following the system to dark gives the same palette as choosing Dark. Focus is a 2px ring in the ink
-(`--focus`) for keyboard users; motion is short (a press sinks to 97% in 120 ms, a tooltip fades in) and is dropped
-under `prefers-reduced-motion`.
-Under 900px the sidebar becomes a drawer behind Menu; on a phone Sign out moves into it, the
-screener's filters start folded, and an analysis's steps show their numbers with the current step
-named.
+Every data panel says what it is waiting for, fails in words with a retry (`api.ts` `failureReason`; "It
+usually clears in a moment" only for a 5xx or no answer), and an empty state says what to do next. Focus is
+a 2px ink ring with a 2px offset on every control; a hover tints at once and clears in 80ms on a fine pointer
+only; a button presses to 0.97. `?` opens the shortcut sheet (`components/ShortcutSheet.tsx`, also from the
+rail's foot). The screener, watchlist and comps rows are a roving tab stop (`components/tableNav.ts`); the
+company page's ledgers are one tab stop each (`components/ledgerGrid.ts`).
 
 ## Screens (hash routes)
 
@@ -377,67 +405,62 @@ the bar says no figure can be marked yet and points to Data notes (finding 8).
 
 ### Head and Overview
 
-Seal pages so far (the first batch): the front door (the seal and name, a headline, the way in under
-it; on the right, ruled off in ink, the live figures from `/v1/status/data` and what's in it), Data
-status, the shell, the company page and Statements, and the screener; the others read through the
-tokens until their own pass. The company page's head has the sector in the margin, the name, then
-the facts as separate items (listing, SIC industry, fiscal year end, filer category, where it's
-incorporated in words: `companies/places.ts` maps EDGAR's state and country codes, "Y9" is Jersey,
-and a code EDGAR doesn't list isn't shown; currency; confidence, its reasons a tap away; the CIK, its
-hover the CIK's; "Your plan: ..." only for a plan short of a tier), the next expected filing only when
-the API has one ("expected around Nov 25, 2026 (an estimated date)", or due about now, or later than
-estimated), two actions in the open (Start an
-analysis, the one primary, and Watch) with Chart, Compare, Ask, New thesis and New model under More,
-and the tabs. The Overview: **The year**, the twelve months as a sentence
-(revenue, its growth, net income and net cash or net debt, `data.ts` `yearStory`: API values only,
-and a figure from another period is left out rather than mixed in), sealed to its filing only when its
-twelve months are the 10-K's year (from a 10-Q they are four quarters added up, and the margin says
-"Four quarters to ..."); **Figures**, the key figures as a ledger (amounts, then rates), with Cash and
-short-term investments (what net debt subtracts) beside Cash and a negative net debt read as "Net cash"
-(the exact figure in its hover). A seal says "taken from the filing", so only a figure the filing
-states carries one (`data.ts` `howFiled`, `statFiled`: a balance, a quarter from its 10-Q, the year from the 10-K);
-a ratio, a difference (net debt, free cash flow), four quarters added up or a fourth quarter worked out
-from the year has no seal, and its hover says what it is worked out from (`COMPUTED_FROM`, the API's
-definitions in words; ROE is twelve months' net income over the average of equity now and a year
-earlier). EPS (diluted) is the twelve months' like the block's other flows: `/per-share`'s TTM (the
-four quarters added on today's share basis, derived, no seal), a once-a-year filer's latest year (sealed
-unless a split was applied), the screener's quarter only from an older API, labelled "quarter"
-(`data.ts` `epsStat`; Riley, test 10, finding 1). A balance a later 8-K may have changed keeps its figure in the ink with a red "*". On results day (an 8-K
-with item 2.02 filed after the latest 10-Q or 10-K, `events.ts` `resultsOut`) a **Results out** section
-opens the Overview with the press release. Without it, when the earnings answer's newest quarter has a
-release and no 10-Q or 10-K (`events.ts` `resultsPending`, `/earnings` with one quarter and no tables,
-asked only of a filings reader), one quiet line under the figures says the quarter's results were
-announced on that day (the 8-K linked) and that detailed figures arrive with the 10-Q (the 10-K for
-the fiscal year's last quarter); Statements says the same above its table (NVIDIA, Nov 2026: its Oct 25
-quarter announced on Nov 17, the statements ended in July with no word why). A company with figures but
-no revenue (one before revenue) reads "No revenue reported" where the revenue chart would be, never
-as having no data. **Since the last report** (red-letter days, below); **Latest quarter**, the recap
-set as a statement (a change from a zero or negative base reads n/m with the API's
-`pct_not_meaningful` in its hover; changes carry no colour: debt and costs are in it); **Business**; **Revenue and operating margin**; **Backlog and orders**. A
-foreign private issuer (`company/data.ts` `foreignReport`: its figures come from 20-F, 40-F or 6-K
-filings and none from a 10-K or 10-Q, by the API's sources) files no 10-Q, 10-K or 8-K: Since the last
-report says it files current reports on 6-K (no 8-K list is asked for), Latest quarter that it files
-annual reports on 20-F (or 40-F) and interim ones on 6-K, so there is no quarterly recap, and Business
-that its description is in that report, whose text Tributary doesn't read (analyst test 4: Birkenstock
-read "no 10-Q or 10-K values" and an empty 8-K list). A
-statement is a ledger table: red column rules, subtotals heavier, the bottom line (net income, total
-assets, cash at the end of the period) double-ruled, the newest period washed, derived figures italic,
-and its choices (statement, period, range, basis) are toggle groups. Under a statement and under
-the screener one sentence stays in view; the rest of the notes (definitions, blanks, signs) are behind
-"How to read these figures", closed by default, the blanks as a legend. The screener's column rules
-run between its figures only.
+The header (`pages/Company.tsx`, spec §4) ends at most 270px from the top at 1440: a crumb (Companies /
+Tributary's sector / the SEC's industry and SIC code); the name at 28px with its ticker and exchange (the
+other share classes in the hover); one meta row (fiscal year end, currency, filer category, where it is
+incorporated in words from `companies/places.ts`, the CIK, confidence with its reasons a tap away, "Your plan:
+..." only for a plan short of a tier, and the next expected report when nothing else is said of it); the
+actions on the title's line (Watching, Compare, `···` with Chart, Ask, New thesis and New model, then Start
+an analysis, the one primary; on a phone the primary and `···`, which then holds Watch and Compare too); at
+most one notice: on results day (an 8-K with item 2.02 after the latest 10-Q or 10-K, `events.ts`
+`resultsOut`) "Results out Nov 17" with the release, else the As of day's note; then the tabs (links with
+`aria-current`, a 2px indicator) with As of as Today | Pick a day (a typed day, never the browser's date
+input). The header asks the 8-Ks since the last report once (`/events`) for the notice and the Overview.
+
+The Overview (`company/Overview.tsx`, spec §6), lead column then side column, stacked under 900px of room:
+
+- **The hero**: twelve-month revenue at 48px (net revenue for a bank, the year for a once-a-year filer) with
+  its mark (Σ for four quarters from a 10-Q, ✓ for the 10-K's year) and its change on the twelve months
+  before, green or rust. Under it **the footing** (spec §5.3): the twelve months' quarters exactly as the API
+  lists them (`/financials?view=ttm` `inputs.quarters`), each a 44px figure button with its own mark from the
+  quarter's `/financials` row (✓ reported at that value, *d* derived) and its quarter under it, then "=" and
+  the API's twelve-month total with Σ and the unit (`format.ts` `ledgerUnit`, "USD billions"); a term outlines
+  its bar. The terms are rounded to two decimals, so they can differ from the total by a cent of a billion:
+  the total is never re-added here. Then the legend of the marks used, and the year as a sentence
+  (`data.ts` `yearStory`, API values only).
+- **The rest of the twelve months**: the other key figures as a two-column ledger (amounts, then rates), each
+  a figure button with its mark and card (`company/sources.ts` `statCard`: how a figure no filing states is
+  worked out, from `COMPUTED_FROM` and `epsStat`); EPS is `/per-share`'s TTM (Σ). A figure that isn't a plain
+  one reads "—" with a reading letter (a not reported, b none filed since a date, k a bank's line) explained
+  on the legend line; a balance a later 8-K may have changed keeps its figure with "*" and a line under it.
+- **Latest quarter**: the recap as a ledger (`company/RecapTable.tsx`): each column its quarter, period end
+  and filing; each figure opens its card; QoQ and YoY green or rust by direction, a balance's uncoloured; a
+  change from a zero or negative base reads n/m with the API's reason.
+- **Revenue by quarter** (side): eight bars at their value, the latest in ink, history a light fill with a
+  3:1 edge, a derived fiscal Q4 hatched, gridlines at round values, the first and last labelled; "View as
+  table" lists the same figures with their cards. It is today's, as the other sections past the key figures.
+- **Since the last report** (side): the 8-Ks as rows (the day filed, what it is, the 8-K's own words in the
+  serif, where to read it).
+- Then the business (10-K Item 1's opening, in the serif), backlog and orders, and the user's own data.
+
+A foreign private issuer (`foreignReport`) files no 10-Q, 10-K or 8-K: those sections say so (it files 6-Ks,
+annual reports on 20-F or 40-F) and ask for nothing. When the earnings answer's newest quarter has a release
+and no report (`events.ts` `resultsPending`), one line under the ledger (and above the statement) says when
+its results were announced and that the figures arrive with the 10-Q or 10-K. Not built from the spec yet:
+the release's outlook quoted in the side column and peers as a dot plot (batch 2).
 
 ### Statements
 
-Company page (`pages/Company.tsx`): Statements keeps statement, period, basis and range in the
-address (`#/company/{id}/statements?kind=bs&period=ttm&range=5y`, `company/statementView.ts`, defaults
-left out, so a view can be linked), with a range control for Quarterly and TTM (8 quarters, 5y, 10y,
-Max; wide tables open at their newest end); Annual stays ten years. Filings opens on Reports (10-K,
-10-Q, 8-K; All is one click away), headed by fiscal year with gold's rule (`data.ts` `fiscalYear`,
-migration 014; `filingHeadings`: on a newest-first page a heading only moves back in time, since a
-10-K for FY2026 is filed in FY2027 beside that quarter's 8-Ks), and says "not parsed yet" only on
-forms that get parsed. What changed sits under the table, so the table has the page's width; its
-actions stay in view on narrow pages (sticky) and long 8-K item lists wrap.
+Statements (`company/Tables.tsx`) keeps statement, period, basis, range and the per-share basis in the address
+(`#/company/{id}/statements?kind=bs&period=ttm&range=5y`, `company/statementView.ts`, defaults left out). One
+toolbar (spec §6): the statement and the period as segmented controls, a view menu ("8 quarters · Fiscal ▾":
+the range for Quarterly and TTM, off for Annual's ten years; Fiscal or Calendar; per share split-adjusted or
+as filed), Export CSV at the right. The table is a ledger (`MetricTableView`): the first header cell names
+the statement and its currency, each column its period, end and filing ("10-Q Aug 26, 2026"; "10-K d" for a
+derived fiscal Q4, italic); each row keeps one unit (`moneyRow`); every figure opens its card (the exact
+figure, ✓ or d, the filing and where in it, the reader and EDGAR, a callout's sentence or a restatement); one
+tab stop, arrows inside, Enter opens a card. Segments' tables share the cell. Filings opens on Reports (10-K,
+10-Q, 8-K), headed by fiscal year with gold's rule (`data.ts` `fiscalYear`, `filingHeadings`).
 
 Statements since F5 (migration 049; `company/data.ts` `STATEMENTS`, `cashBridges`, `company/callouts.ts`,
 `company/components.ts`, `company/Components.tsx`):
@@ -459,7 +482,7 @@ Statements since F5 (migration 049; `company/data.ts` `STATEMENTS`, `cashBridges
   recognised, the nearest tagged figure to a backlog; Caterpillar $49.4B, NVIDIA $3.2B; Vertiv tags none).
   A dotted label has its definition in the hover.
 - **Callouts** (Quarterly): a quarter the API calls out (`/financials?callouts=true`, query-api README
-  "Statement callouts") carries a dot before its figure, its sentence in the hover, and a line under the
+  "Statement callouts") carries a dot before its figure, its sentence in its card, and a line under the
   table in **Worth a look** with a link to its filing: "Dividends paid, FY2027 Q2: -$6.05B, 25 times the two
   quarters before it (-$242.00M and -$243.00M). The filing says why." A row whose sign changes in three or
   more of the shown quarters is said once ("Net cash from operating activities changes sign in 6 of these

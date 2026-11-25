@@ -12,7 +12,9 @@ test("try the demo lands on Home with the sandbox and its watchlist", async ({ p
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Tributary" })).toBeVisible();
   await page.getByRole("button", { name: "Try the demo" }).click();
-  await expect(page.locator(".sandbox-banner")).toContainText("Demo sandbox: 4 companies");
+  // the sandbox is the top bar's account chip (spec §4): what it covers in its title
+  await expect(page.locator(".top .who")).toContainText("Demo sandbox · resets in");
+  await expect(page.locator(".top .who button")).toHaveAttribute("title", /\(4 companies\)/);
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   const rows = page.locator("table.watchlist tbody tr");
   await expect(rows).toHaveCount(2);
@@ -399,7 +401,7 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
 
   // it's all there after a reload
   await page.reload();
-  await expect(page.locator(".sandbox-banner")).toBeVisible();
+  await expect(page.locator(".top .who")).toBeVisible();
   await expect(titles.first()).toHaveText("Continue where you left off");
   await expect(page.locator("table.watchlist thead")).toContainText("Gross mgn");
   expect(fake.calls.some((c) => c.startsWith("GET /api/query/v1/watchlist?") && c.includes("columns=gross_margin_ttm"))).toBe(true);
@@ -413,7 +415,7 @@ test("customizable views: Home arrangement and table columns, saved and reset", 
   expect(fake.views.screener).toEqual({ columns: [
     "revenue_ttm", "revenue_growth_ttm", "gross_margin_ttm", "operating_margin_ttm", "free_cash_flow_ttm", "net_debt_q", "debt_to_equity_q", "net_margin_ttm",
   ] });
-  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(page.locator("table.screen thead")).not.toContainText("Net margin");
   expect(fake.views.screener).toBeUndefined();
 });

@@ -378,6 +378,7 @@ function PanelSkeleton({ tab }: { tab: CompanyTab }) {
       ) : tab === "statements" ? (
         <section className="folio statements">
           {title("Statement")}
+          <div className="tw-skel">
           <table className="t led statement">
             <thead><tr><th className="first">{STATEMENTS.is.label}</th>{Array.from({ length: 8 }, (_, i) => <th key={i}><span className="blank-v w-48" /></th>)}</tr></thead>
             <tbody>
@@ -389,6 +390,7 @@ function PanelSkeleton({ tab }: { tab: CompanyTab }) {
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       ) : (
         <Skeleton lines={6} label="Loading the company" />

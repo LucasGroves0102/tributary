@@ -364,7 +364,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
               <tr key={r.companyId} className="clk" {...navRow(i, r.name)} onClick={() => go({ view: "company", companyId: r.companyId })}>
                 <td className="first">
                   <a className="co" href={href({ view: "company", companyId: r.companyId })} onClick={(e) => e.stopPropagation()}>
-                    <b>{r.name}</b>
+                    <b data-entity-name="">{r.name}</b>
                     {r.ticker && <span className="faint mono">{r.ticker}</span>}
                   </a>
                 </td>

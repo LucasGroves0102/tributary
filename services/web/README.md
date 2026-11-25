@@ -17,33 +17,42 @@ Each screen's detail, the rules behind it and the measurements are in [DESIGN.md
 
 ## Look
 
-"Seal": an annual report kept as a ledger. The design record is
-[`.interface-design/system.md`](../../.interface-design/system.md). A white page (a warm near-black in
-dark), black serif figures, red rubrics in the margin, ledger rules, red-letter days, a double-ruled
-bottom line, and a red wax seal on every figure taken from a filing. Red belongs to the seal, the
-rubrics, red-letter days and the "may have changed" mark only; a fall keeps its minus sign in the ink.
+Noor's build spec, [`.interface-design/system.md`](../../.interface-design/system.md): paper, ink and pencil;
+Archivo for the interface and every figure, Source Serif 4 only for the filing's own words; one seal red for
+the tick (a figure that agrees to its filing) and the logo; green and rust for a change's direction only. The
+first batch rebuilt the foundations, the shell and the company page's header, Overview and Statements; the
+other screens read the new tokens through the older names until their pass.
 
-- Tokens (both palettes, type, spacing, motion) are in `src/tokens.css`; Seal's components in
-  `src/seal.css`, the rest in `src/styles.css`. Screens not redrawn yet read Seal's tokens through the
-  older names.
-- Fonts: Source Serif 4 and Archivo, self-hosted from pinned `@fontsource-variable` packages (the CSP
-  allows fonts only from this origin).
+- Tokens (both palettes, type, spacing, radius, the 32px control, motion) are in `src/tokens.css`; the spec's
+  shared components in `src/ui.css`, the shell in `src/shell.css`, the company page in `src/company.css`; the
+  older screens in `src/styles.css` and `src/seal.css`.
+- Every figure opens its source card (`components/SourceCard`): the figure as Tributary holds it, its mark
+  (✓ agrees to the filing, Σ added up, *d* derived; from the API's sources only), its filing, the reader and
+  EDGAR. Ledgers are one tab stop each, arrows inside (`components/ledgerGrid`).
+- Motion (`src/motion.ts`): page changes are view transitions (the shell still, content fading and sliding by
+  depth, a company's name travelling from its row into the title); anything from the keyboard is instant;
+  reduced motion fades only.
+- Fonts: Source Serif 4 and Archivo (with its width axis), self-hosted from pinned `@fontsource-variable`
+  packages (the CSP allows fonts only from this origin).
 - Controls with behaviour use Radix Primitives (pinned exact), styled only with the tokens.
-- The theme follows the system; the top bar's Theme menu picks Light, Dark or System (`theme.ts`).
+- The theme follows the system; Settings picks Light, Dark or System (`theme.ts`).
 
-More: [DESIGN.md, Look](DESIGN.md#look-seal) and [Shell and layout](DESIGN.md#shell-and-layout).
+More: [DESIGN.md, Look](DESIGN.md#look), [Shell and layout](DESIGN.md#shell-and-layout) and
+[Motion](DESIGN.md#motion).
 
 ## Shell
 
-A sidebar (screens with `g`-then-letter shortcuts, g p Portfolio and g n Analysis; the watchlist, next
-expected filings, freshness; at its foot What Tributary covers, Data status, Using the API, Settings), a
-top bar (breadcrumb, Ctrl/Cmd-K command palette, the filing alerts bell, theme, who is signed in) and
-the assistant drawer (Ctrl/Cmd-J; `/` focuses). The palette finds companies, the nav's screens, Alerts,
-Settings, Using the API, Data status, saved screens and, where the API allows them, API keys and
-Connected apps (`PalettePlace`, built in App). Every screen sets the tab's title (`src/title.ts`). A
-page that fails to render shows "This page didn't load" and keeps the shell
-(`components/ErrorBoundary.tsx`). Pages lay out by the room they have (`@container main`), since the
-assistant takes 372px at any window size. `?` opens the keyboard shortcuts.
+A 48px top bar over a 232px rail, both still on every page change. The top bar: the logo, search (Ctrl/Cmd-K
+opens the command palette), the feed's freshness (a status point that opens what it means and Data status),
+the filing alerts with their count, the Assistant (Ctrl/Cmd-J; `/` focuses it) and the account chip (a
+sandbox's reset and End demo, an account's Sign out). The rail: the screens (with `g`-then-letter shortcuts,
+g p Portfolio and g n Analysis), Watching (code, name, "new"), Workspaces, and at its foot Data status, API,
+Settings, Shortcuts and What Tributary covers. The palette finds companies, the nav's screens, Alerts, Settings,
+Using the API, Data status, saved screens and, where the API allows them, API keys and Connected apps
+(`PalettePlace`, built in App). Every screen sets the tab's title (`src/title.ts`). A page that fails to render
+shows "This page didn't load" and keeps the shell (`components/ErrorBoundary.tsx`). Pages lay out by the room
+they have (`@container main`): the 400px assistant panel pushes the page at 1200px and up, overlays it on a
+tablet and fills a phone; under 1200px the rail is a drawer behind Menu. `?` opens the keyboard shortcuts.
 
 ## Screens
 
@@ -93,10 +102,11 @@ front door, keeps the request in the tab while you sign in, and opens again afte
 - **Times** are the viewer's local date and clock with the zone (`format.ts` `localTime`).
 - **Freshness words**: *listed* (in the filing index), *parsed* (text in the reader), *checks last
   ran*, *last checked* (one company) ([Freshness and times](DESIGN.md#freshness-and-times)).
-- **A seal** marks only a figure the filing states: the Overview's ledger and lead sentence, a tag
-  disagreement's two figures, and a Statements cell a filing reports (on hover or focus, opening EDGAR;
-  a derived cell keeps the ↗). A computed figure (TTM, ratios, the screener, Compare, Portfolio) has
-  none and says how it is worked out, on hover or a tap.
+- **A tick** (✓, seal red) marks only a figure the filing states as shown; Σ a sum of marked figures; *d* a
+  derived one (italic); a ratio or difference has no mark. The marks come from the API's sources
+  (`data.ts` `statMark`, a row's `value_source`, `Tables.tsx` `cellMark`). The Overview's figures and every
+  Statements cell open a source card; a statement's column names its filing. A computed figure elsewhere
+  (the screener, Compare, Portfolio) has no mark and says how it is worked out, on hover or a tap.
 - **Confidence** (migration 074) is the API's level and reasons, worded by `companies/rows.ts`
   `confidenceWords`: quiet text with a dotted underline whose reasons open on a tap as well as a hover
   (`components/Why`), in the company header always and in the screener only when medium or low; never a
@@ -108,7 +118,8 @@ front door, keeps the request in the tab while you sign in, and opens again afte
   save, an export, an alert setting, a red line, End demo. Empty states are one line and one action;
   how a screen works folds behind `details.how-to-read`.
 - **A phone**: tables of the user's own records read as labelled cards under 560px (`.t.cards-narrow`,
-  labels from `data-label`); the company header keeps the minor facts (`.co-minor`) for wider pages.
+  labels from `data-label`); the company header keeps the minor facts (`.co-minor`) for wider pages and one
+  action row (the primary and `···`).
 - **Model output** renders only through `src/markdown.ts` (marked + DOMPurify); an accession number
   becomes an EDGAR link only if a tool returned it. A user's thesis renders the same way, without the
   citation check.

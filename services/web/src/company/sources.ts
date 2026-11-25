@@ -59,7 +59,7 @@ export function rowCard(r: FinancialRow, label: string, companyId: string, span 
  * no filing states is worked out, the filing it is read from. */
 export function statCard(s: KeyStat, companyId: string, extra?: string | null): SourceInfo | null {
   if (s.value === null && !s.title) return null;
-  const mark = s.value === null ? null : statMark(s);
+  const mark = statMark(s);
   const filing = statFiled(s);
   const src: ValueSource | null = s.source;
   const how = filing.filed ? null : `${s.label}, ${filing.how}.`;
@@ -74,6 +74,6 @@ export function statCard(s: KeyStat, companyId: string, extra?: string | null): 
       const note = [mark === "ok" ? null : s.title, extra].filter(Boolean).join(" ");
       return note ? { note } : {};
     })()),
-    reader: src && s.value !== null ? readerAt(companyId, src) : null,
+    reader: src && (s.value !== null || s.status === "other_currency") ? readerAt(companyId, src) : null,
   };
 }

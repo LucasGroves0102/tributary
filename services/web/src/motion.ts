@@ -73,7 +73,9 @@ export function installMotion(): void {
   // the row a pointer clicked: its company's name travels into the page title (§7.4)
   window.addEventListener("click", (e) => {
     if (e.detail === 0) return;
-    const a = (e.target as HTMLElement | null)?.closest?.<HTMLAnchorElement>('a[href^="#/company/"]');
+    const t = e.target as HTMLElement | null;
+    // the company's link, or the row it sits in (a screener or watchlist row opens on a click anywhere)
+    const a = t?.closest?.<HTMLAnchorElement>('a[href^="#/company/"]') ?? t?.closest?.('tr')?.querySelector<HTMLAnchorElement>('a[href^="#/company/"]');
     clicked = a ? { el: a.querySelector<HTMLElement>("[data-entity-name]") ?? a, href: a.getAttribute("href") ?? "" } : null;
   }, true);
 }

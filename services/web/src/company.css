@@ -213,6 +213,11 @@ html[data-motion="reduced"] .tab-ink {
   min-width: 0;
 }
 
+/* a statement's shape while it loads scrolls inside itself, as the table will */
+.tw-skel {
+  overflow-x: hidden;
+}
+
 /* blanks while the header and the panel load: the value to come's width */
 .blank-v.w-48 { width: 48px; }
 .blank-v.w-64 { width: 64px; }

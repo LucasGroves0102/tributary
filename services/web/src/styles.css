@@ -3928,8 +3928,9 @@ button.link.num {
   gap: var(--sp-4);
 }
 
-/* one, two or three charts a row, each at least 380px; a short last row is centred, its charts the
-   same size as the rest (#199: eight charts in rows of three left an empty cell at the end) */
+/* one, two or three charts a row, each at least 350px (three fit the spec's 1144px of content); a short
+   last row is centred, its charts the same size as the rest (#199: eight charts in rows of three left an
+   empty cell at the end) */
 .multiples {
   container: multiples / inline-size;
   display: flex;
@@ -3956,7 +3957,7 @@ button.link.num {
   }
 }
 
-@container multiples (min-width: 1164px) {
+@container multiples (min-width: 1094px) {
   .multiple {
     flex-basis: calc((100% - 2 * var(--sp-6)) / 3);
   }

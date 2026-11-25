@@ -157,7 +157,8 @@ function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
   const rev = stats.find((s) => s.key === "revenue_ttm");
   const growth = stats.find((s) => s.key === "revenue_growth_ttm");
   const story = yearStory(row);
-  if (!rev || rev.value === null || !rev.source) return null;
+  // another currency's figure is shown in it (its value stays out of sorts and medians, never out of sight)
+  if (!rev || (rev.value === null && rev.status !== "other_currency") || !rev.source) return null;
   const mark = statMark(rev);
   const src = rev.source;
   const currency = header(row).currency ?? "USD";
@@ -166,7 +167,7 @@ function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
   const footing = mark === "sum" && twelve && Array.isArray(twelve.inputs?.quarters) && (twelve.inputs!.quarters as unknown[]).length > 1 ? twelve : null;
   const loadingFooting = mark === "sum" && (!ttm || ttm.state === "loading" || !quarters);
   const termMarks = footing && quarters ? footingTerms(footing, quarters).map((t) => t.mark).filter((m): m is MarkKind => !!m) : [];
-  const g = growth && growth.value !== null && !growth.status ? growth : null;
+  const g = growth && growth.value !== null && (!growth.status || growth.status === "other_currency") ? growth : null;
   return (
     <section className="ov-hero" aria-label={`${rev.label}, ${annual ? "the year" : "twelve months"}`}>
       <p className="ov-label">
@@ -389,7 +390,7 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
   const flagged = [...new Map(rest.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
   const letters = [...new Set(rest.map((s) => readingOf(s, bank)).filter((l): l is string => !!l))];
   const marks = [...new Set(rest.map((s) => statMark(s)).filter((m): m is MarkKind => !!m))];
-  const unmarked = rest.some((s) => s.value !== null && !statMark(s));
+  const unmarked = rest.some((s) => (s.value !== null || s.status === "other_currency") && !statMark(s));
   const amounts = rest.filter((s) => s.kind === "usd" || s.kind === "eps");
   const rates = rest.filter((s) => !(s.kind === "usd" || s.kind === "eps"));
   return (
@@ -435,7 +436,7 @@ function LedgerRow({ s, common, companyId, armNote, bank }: { s: Stat; common: s
             <span className="figure">—</span>
             <sup className="rdg" title={READINGS[letter]}>{letter}</sup>
           </>
-        ) : s.value === null ? (
+        ) : s.value === null && s.status !== "other_currency" ? (
           <span className="figure">{s.text}</span>
         ) : (
           <FigureButton text={s.kind === "usd" || s.kind === "eps" ? paren(s.text) : s.text} mark={mark}

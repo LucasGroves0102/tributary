@@ -237,8 +237,8 @@ export function howFiled(key: string, source: Pick<ValueSource, "form" | "period
  * filing states it as shown; Σ for twelve months of quarters added up (a TTM from a 10-Q, TTM EPS from
  * /per-share's four quarters); d for a figure worked out from a filing (a fiscal Q4, a split-adjusted
  * year); none for a ratio or a difference. Words the API's sources only; nothing is computed here. */
-export function statMark(s: Pick<KeyStat, "key" | "source" | "how" | "value">): "ok" | "sum" | "d" | null {
-  if (s.value === null || !s.source) return null;
+export function statMark(s: Pick<KeyStat, "key" | "source" | "how" | "value" | "status">): "ok" | "sum" | "d" | null {
+  if ((s.value === null && s.status !== "other_currency") || !s.source) return null;
   const metric = s.key.replace(/_(ttm|q)$/, "");
   if (COMPUTED_FROM[metric]) return null;
   if (s.how) return s.key.endsWith("_ttm") && s.how.startsWith("the four quarters") ? "sum" : "d";

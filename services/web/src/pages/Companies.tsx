@@ -612,7 +612,7 @@ function Table({
                   <td className="first">
                     <a className="co" href={href({ view: "company", companyId: r.companyId })}
                       onClick={(e) => e.stopPropagation()}>
-                      <b title={r.name}>{r.name}</b>
+                      <b title={r.name} data-entity-name="">{r.name}</b>
                       {r.ticker && <span className="ticker">{r.ticker}</span>}
                       {!r.readable && (
                         <span className="tag" title={MASKED_TITLE}>metadata only</span>
