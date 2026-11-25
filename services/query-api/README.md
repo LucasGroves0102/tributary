@@ -77,6 +77,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `GET /v1/filing-index?company_id=&form=&from=&to=&limit=&offset=` | token | the same across up to 50 companies (default: the caller's readable companies) |
 | `GET /v1/filings/latest?limit=` | token | newest parsed filings the caller can read |
 | `GET /v1/companies/{id}/sections/{key}?form=&accession_no=&limit=&max_chars=` | filings | section text + citation; `form` 10-K, 10-Q, 8-K, 20-F, 40-F or 6-K; `max_chars` default 8,000, up to 1,000,000 |
+| `GET /v1/companies/{id}/relations?limit=` | filings | companies its business section (10-K Item 1, 20-F Item 4) names outside competition, and those whose business sections name it (`names`, `named_by`): each with the sentence as filed and its filing; not classified; `limit` sentences a side 1-500 (default 200), `truncated` (`gold.business_relations`, 160) |
 | `GET /v1/companies/{id}/filings/{accession}/changes?section=&basis=&kind=&view=&q=&numbers=` | filings | new / removed / rewritten Risk Factors and MD&A paragraphs against the earlier filing; `view` reads them for materiality ([What changed](#what-changed)) |
 | `GET /v1/search?q=&company=&form=&section=&from=&to=&limit=&offset=&sort=&window=` | filings (every company searched) | best passage per section, with snippet, citation and a total ([Search](#search)) |
 | `GET /v1/companies/{id}/events` | filings | 8-Ks since the latest 10-Q/10-K period end: items, an excerpt, the press release, `announced`, `stale` figures ([Earnings and events](#earnings-and-events)) |

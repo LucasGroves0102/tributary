@@ -15,6 +15,7 @@ off-site storage.
 | `pg-backup.service`, `pg-backup.timer` | systemd units: run `/usr/local/bin/pg-backup` nightly at 05:00 New York, after the 02:00-04:00 CronJobs (`backfill`, `companies`, `financials`) and alongside the bulk loads that start at 05:00 and 05:30 (each dump is one consistent snapshot), sandboxed to the backup and textfile directories |
 | `pg-restore-test.sh` | restores the latest full backup (`--slim` or `RESTORE_FROM=slim`: the latest nightly) into a throwaway Postgres instance (initdb in a temp directory, socket only, never the live cluster): `globals.sql`, then each database; checks every table and its exact row count against `<db>.rowcounts` (tables in `<db>.schema-only-tables` must be empty); always stops and deletes the instance; writes `pg_restore_test_last_result`, `pg_restore_test_last_success_timestamp_seconds` and friends for node-exporter |
 | `pg-restore-test.service`, `pg-restore-test.timer` | systemd units: run `/usr/local/bin/pg-restore-test` every Sunday at 11:00 New York, six hours after the weekly full backup starts; sandboxed like the backup, writing only `/var/lib/postgresql/restore-test` (the throwaway instance) and the textfile directory |
+| `postgresql-tributary.conf` | Postgres settings for hermes, copied to `/etc/postgresql/16/main/conf.d/tributary.conf`: logical replication, the WAL cap, and memory |
 
 Settings (env, with defaults): `BACKUP_DIR` (`/var/backups/postgres`), `KEEP_DAYS` (14),
 `DATABASES` (`tributary app openfga`), `TEXTFILE_DIR`
@@ -95,9 +96,25 @@ Row counts are exact: pg-backup counts every table in an exported snapshot and d
 snapshot (`pg_dump --snapshot`), so the restore must match to the row, whatever changed in the
 live database since.
 
+## Direct read login for side projects (`supplychain`)
+
+The owner's Supply Chain Explorer reads public SEC tables straight from hermes (2026-11-25), as login
+`supplychain`, made by hand on the host: `LOGIN BYPASSRLS CONNECTION LIMIT 5`, read-only by default,
+`statement_timeout` 60 s. BYPASSRLS because those tables' row security lets only `query_api` read them;
+it is safe only because the login's grants are SELECT on public SEC tables in `gold`, `silver` and
+`bronze` (business relations, sections, tables, companies, filings and the documents behind the
+sections view): no `userdata` or `ops` schema, no `app` database. `pg_hba.conf` admits it to the
+`tributary` database only from the owner's laptop's Tailscale address, and `ufw` opens 5432 only to
+that address on `tailscale0`. It reads Tributary's internals directly: a migration that renames or
+reshapes these tables can break the side project (the Query API is the stable contract). Remove it:
+`DROP ROLE supplychain`, the `pg_hba.conf` line, and `sudo ufw delete allow in on tailscale0 from
+100.127.233.68 to any port 5432 proto tcp`.
+
 ## Postgres settings
 
-`/etc/postgresql/16/main/conf.d/tributary.conf` sets `wal_level = logical`,
+`/etc/postgresql/16/main/conf.d/tributary.conf`, installed from `postgresql-tributary.conf` here,
+sets the memory (shared_buffers 3GB, work_mem 32MB, maintenance_work_mem 1GB, the file says why;
+`shared_buffers` needs `sudo systemctl restart postgresql`) and `wal_level = logical`,
 `listen_addresses = '*'` (pods reach it over the k3s bridge; `pg_hba.conf` limits who) and
 `max_slot_wal_keep_size = 20GB`. The last one caps how much WAL a replication slot may hold:
 Debezium's slot only advances on app-database traffic (it writes a heartbeat every 10 s to

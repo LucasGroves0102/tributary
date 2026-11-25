@@ -53,6 +53,7 @@ SEC = frozenset({
     ("GET", "/v1/companies/{company_id}/filing-index"),
     ("GET", "/v1/companies/{company_id}/expected-filings"),
     ("GET", "/v1/companies/{company_id}/peers"),
+    ("GET", "/v1/companies/{company_id}/relations"),
     ("GET", "/v1/companies/{company_id}/peers/check/{candidate_id}"),
     ("GET", "/v1/companies/{company_id}/data-notes"),
     ("GET", "/v1/companies/{company_id}/events"),

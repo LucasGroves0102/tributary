@@ -221,6 +221,12 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "competitors either one names, industry and size, with figures for the companies you can "
         "read. `limit` (default 10), `columns` (screener column keys), `access=financials` for "
         "only companies you can read."),
+    ("GET", "/v1/companies/{company_id}/relations"): (
+        "Companies named in its business section",
+        "Suppliers, customers, partners, subsidiaries and owners its annual report's business "
+        "section names (and, under `named_by`, the companies whose business sections name it), "
+        "each with the sentence as the filing states it and the filing. The sentence says what "
+        "the relation is; it isn't classified. `limit` (sentences a side, default 200)."),
     ("GET", "/v1/companies/{company_id}/peers/check/{candidate_id}"): (
         "Can a company be a peer",
         "Whether `candidate_id` can join this company's comparison and, if not, why: a foreign "

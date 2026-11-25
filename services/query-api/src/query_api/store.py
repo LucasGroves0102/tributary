@@ -378,6 +378,43 @@ class Store:
             return {"profile": profile, "peers": peers, "mentions": mentions,
                     "relations": cur.fetchall()}
 
+    RELATIONS = """
+        SELECT r.company_id, r.named_id, r.accession_no, r.section_key, r.char_start, r.char_end,
+               r.ownership, s.form, s.filed, s.cik, s.sentence,
+               c.name AS other_name, c.tickers AS other_tickers
+        FROM gold.business_relations r
+        LEFT JOIN LATERAL (
+            SELECT x.form, x.filed, x.cik,
+                   substr(x.text, r.char_start - x.char_start + 1, r.char_end - r.char_start)
+                       AS sentence
+            FROM gold.filing_sections x
+            WHERE x.company_id = r.company_id AND x.accession_no = r.accession_no
+              AND x.section_key = r.section_key
+              AND x.char_start <= r.char_start AND r.char_end <= x.char_end
+            LIMIT 1) s ON true
+        LEFT JOIN silver.companies c ON c.company_id = {other}
+        WHERE {side} = %(c)s
+        ORDER BY {other}, r.accession_no, r.char_start
+        LIMIT %(limit)s
+        """
+
+    def business_relations(self, user_id: str, company_id: str, limit: int) -> dict:
+        """Business relations (migration 160) both ways for one company, under RLS (`filings` on
+        the company whose text states each one): `names` are the sentences of its own business
+        section naming another company, `named_by` the sentences of other companies' business
+        sections naming it. Each row carries the sentence sliced from the served section by the
+        relation's document offsets (NULL when no served section holds them) and the other
+        company's public name and tickers. At most `limit` + 1 rows a side (the route says
+        `truncated`). An index read each way: the primary key, then business_relations_named."""
+        out: dict = {}
+        with self._session(user_id) as cur:
+            for key, side, other in (("names", "r.company_id", "r.named_id"),
+                                     ("named_by", "r.named_id", "r.company_id")):
+                cur.execute(self.RELATIONS.format(side=side, other=other),
+                            {"c": company_id, "limit": limit + 1})
+                out[key] = cur.fetchall()
+        return out
+
     def business_text(self, user_id: str, company_id: str, days: int) -> dict | None:
         """The company's latest stored annual report (10-K or 20-F) filed in the last `days` and
         its business section as parsed (a 10-K's Item 1, a 20-F's Item 4; the longest parse:
