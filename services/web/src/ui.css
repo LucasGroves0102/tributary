@@ -404,7 +404,7 @@ html[data-motion="reduced"] .choices-thumb {
 @media (pointer: coarse) {
   .choices > button,
   .choices-thumb {
-    height: 36px;
+    height: 40px;
   }
 }
 
@@ -729,7 +729,9 @@ html[data-motion="reduced"] [data-loading="slow"] .blank-v {
 .landed .v,
 .landed .mk,
 .landed .qbars,
-.landed .fig {
+.landed .fig,
+.ledger dd .fig,
+.t.led td[data-cell] {
   animation: values-in var(--t-values) var(--ease-enter);
 }
 
@@ -743,7 +745,9 @@ html[data-motion="reduced"] [data-loading="slow"] .blank-v {
 html[data-motion="reduced"] .landed .v,
 html[data-motion="reduced"] .landed .mk,
 html[data-motion="reduced"] .landed .qbars,
-html[data-motion="reduced"] .landed .fig {
+html[data-motion="reduced"] .landed .fig,
+html[data-motion="reduced"] .ledger dd .fig,
+html[data-motion="reduced"] .t.led td[data-cell] {
   animation-timing-function: linear;
 }
 
@@ -787,6 +791,10 @@ html[data-motion="reduced"] .landed .fig {
 
 ::view-transition-old(root) {
   display: none;
+}
+
+::view-transition-group(root) {
+  animation: none;
 }
 
 ::view-transition-new(root) {

@@ -328,9 +328,28 @@ html[data-motion="reduced"] .fresh-pop {
 }
 
 .side .sect button {
+  display: inline-grid;
+  place-items: center;
   width: 24px;
   height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
   color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .side .sect button:hover:not(:disabled) {
+    background: var(--well);
+  }
+}
+
+.side .side-links .cover-link.link {
+  padding: 0;
+  font-weight: 400;
 }
 
 .wl a {

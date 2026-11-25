@@ -838,7 +838,7 @@ export function App(props: Props = {}) {
           {/* the page's own parts take the view transition's names (a company: its head stays on a tab change) */}
           <main className={route.view === "company" ? "content" : "content vt-content"}>
             <ErrorBoundary resetKey={window.location.hash}>
-            <Suspense fallback={<div className="page"><Skeleton lines={6} label="Loading the page" /></div>}>
+            <Suspense fallback={<div className="page" aria-busy="true"><span className="visually-hidden" role="status">Loading the page</span></div>}>
             {route.view === "status" ? (
               <Status readable={me ? readableTotal(me) : null} />
             ) : route.view === "api" ? (

@@ -260,6 +260,37 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
   );
 }
 
+/** A statement's shape while its figures load (spec §7.6): the real lines and rules, each figure a blank
+ * the width of one to come, the table's one cell the busy one. After a second the blanks pulse slowly. */
+export function StatementShape({ label, lines, columns }: { label: string; lines: Line[]; columns: number }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const id = window.setTimeout(() => setSlow(true), 1000);
+    return () => window.clearTimeout(id);
+  }, []);
+  return (
+    <div className="tw-skel" data-loading={slow ? "slow" : ""} aria-busy="true">
+      <span className="visually-hidden" role="status">Loading the {label.toLowerCase()}</span>
+      <table className="t led statement" aria-hidden="true">
+        <thead>
+          <tr>
+            <th className="first">{label}</th>
+            {Array.from({ length: columns }, (_, i) => <th key={i} className="n"><span className="blank-v w-48" /></th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {lines.slice(0, 14).map(([m, l, , opts]) => (
+            <tr key={m} className={[opts?.sub && "sub", opts?.total && "total", opts?.grand && "grand"].filter(Boolean).join(" ") || undefined}>
+              <td className="first">{l}</td>
+              {Array.from({ length: columns }, (_, i) => <td key={i} className="n"><span className="blank-v w-48" /></td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** "Worth a look": the table's callouts in words, each with its filing (F5, #106, #112). */
 export function CalloutList({ table, companyId }: { table: MetricTable; companyId: string }) {
   const lines = calloutLines(table);
@@ -288,8 +319,12 @@ export function CalloutList({ table, companyId }: { table: MetricTable; companyI
   );
 }
 
-export function Gate({ load, name, what, children }: { load: Load<unknown> | null; name: string; what: string; children: () => ReactNode }) {
-  if (!load || load.state === "loading") return <Skeleton lines={5} label={`Loading ${what.toLowerCase()}`} />;
+export function Gate({ load, name, what, children, shape }: {
+  load: Load<unknown> | null; name: string; what: string; children: () => ReactNode;
+  /** the section's own shape while it loads (spec §7.6), in place of the generic lines */
+  shape?: ReactNode;
+}) {
+  if (!load || load.state === "loading") return shape ? <div aria-busy="true">{shape}</div> : <Skeleton lines={5} label={`Loading ${what.toLowerCase()}`} />;
   if (load.state === "denied") return <p className="empty locked">{what} for {name} aren't included in your access.</p>;
   if (load.state === "error") return <ErrorPanel what={what.toLowerCase()} detail={load.message} onRetry={load.retry} />;
   return <>{children()}</>;
@@ -493,6 +528,8 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
       {kind === "bs" && load?.state === "ok" && financeArmNote(companyId, name) && (
         <p className="foot debt-note" role="note">{financeArmNote(companyId, name)}</p>
       )}
+      {/* while it loads, the statement's own shape: its lines and rules, the figures blank (spec §7.6) */}
+      {!load || load.state === "loading" ? <StatementShape label={STATEMENTS[kind].label} lines={metrics} columns={period === "a" ? 10 : Math.min(12, RANGE_QUARTERS[range])} /> : (
       <Gate load={load} name={name} what="Financials">
         {() =>
           table!.rows.length ? (
@@ -513,6 +550,7 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           )
         }
       </Gate>
+      )}
       {/* the period table's blank said in the line under it, not only in the legend (Riley, test 10, finding 57) */}
       <p className="foot read-first">Each column names its filing; italic columns are fiscal Q4s derived from the 10-K (d). Select a figure, or move with the arrow keys and press Enter, for its source. A negative amount is in parentheses, and {NO_DATA} marks a period with no figure.</p>
       <details className="how-to-read">

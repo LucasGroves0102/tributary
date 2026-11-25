@@ -477,7 +477,7 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
       ) : !accession ? (
         <p className="empty">No 10-Q or 10-K values for {name} yet. Its Filings tab lists what it has filed.</p>
       ) : (
-        <Gate load={load} name={name} what="Financials">
+        <Gate load={load} name={name} what="Financials" shape={<RecapShape />}>
           {() => (
             <>
               <RecapTable data={data!} label="Latest quarter" companyId={companyId} />
@@ -506,6 +506,22 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
         </Gate>
       )}
     </Folio>
+  );
+}
+
+/** The latest quarter's shape while it loads: its lines and columns, the figures blank. */
+function RecapShape() {
+  return (
+    <table className="t led recap" aria-hidden="true">
+      <thead>
+        <tr><th className="first">Latest quarter</th>{[0, 1, 2, 3, 4].map((i) => <th key={i}><span className="blank-v w-48" /></th>)}</tr>
+      </thead>
+      <tbody>
+        {["Revenue", "Gross profit", "Operating income", "Net income", "EPS (diluted)"].map((l) => (
+          <tr key={l}><td className="first">{l}</td>{[0, 1, 2, 3, 4].map((i) => <td key={i} className="n"><span className="blank-v w-48" /></td>)}</tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
