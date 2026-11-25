@@ -38,11 +38,12 @@ def test_versions_live_with_their_rules():
         # 072 bumped both company checks (the catch-up re-checks every company) and added
         # the parser-output checks, per document; 074 the statement reconciliation; 077 gold's
         # net income rules, 080 its revenue industry tags, 155 its debt, citations and gross
-        # profit (every company rebuilt); 095 the parser-output checks' keys for 20-F, 40-F and
-        # 6-K (every document re-checked)
+        # profit (every company rebuilt), 165 a results release's figures (scoped: the companies
+        # whose releases are read); 095 the parser-output checks' keys for 20-F, 40-F and 6-K
+        # (every document re-checked)
         assert c.execute("SELECT gold.rules_version(), ops.check_financials_version(),"
                          " ops.check_segments_version(), ops.check_sections_version()"
-                         ).fetchone() == (155, 74, 72, 95)
+                         ).fetchone() == (165, 74, 72, 95)
         assert c.execute("SELECT kind, baseline FROM ops.catchup WHERE baseline IS NOT NULL"
                          " ORDER BY 1").fetchall() == [
             ("check_financials", 57), ("check_segments", 70), ("gold", 64),
@@ -110,7 +111,7 @@ def test_state_tells_paused_from_stalled(conn):
 def test_ops_reader_sees_the_status_only(conn):
     run(conn, "gold", 1, behind=3, done=1)
     conn.execute("SET LOCAL ROLE ops_reader")
-    assert conn.execute("SELECT count(*) FROM ops.catchup_status").fetchone() == (9,)
+    assert conn.execute("SELECT count(*) FROM ops.catchup_status").fetchone() == (10,)
     for table in ("ops.catchup", "ops.catchup_runs", "ops.company_builds"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
             conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
