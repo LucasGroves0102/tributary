@@ -514,6 +514,7 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
 /** The latest quarter's shape while it loads: its lines and columns, the figures blank. */
 function RecapShape() {
   return (
+    <div className="tw-skel">
     <table className="t led recap" aria-hidden="true">
       <thead>
         <tr><th className="first">Latest quarter</th>{[0, 1, 2, 3, 4].map((i) => <th key={i}><span className="blank-v w-48" /></th>)}</tr>
@@ -524,6 +525,7 @@ function RecapShape() {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
