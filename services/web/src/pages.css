@@ -2498,8 +2498,9 @@ html[data-motion="reduced"] .release-table-box summary::before {
 
 /* key-value ledgers (Data status' figures): rows on hairlines, never tiles */
 .page .kv {
-  gap: 0;
-  border-top: 1px solid var(--ink);
+  gap: 0 24px;
+  background: transparent;
+  border-top: 0;
 }
 
 .page .kv > div {
@@ -2552,4 +2553,30 @@ html[data-motion="reduced"] .release-table-box summary::before {
   .t.cards-narrow tbody td.first {
     height: auto;
   }
+}
+
+/* an h3 without its own size reads at 14px, never the browser's 1.17em (16.38px: §2.1 has no fractional sizes) */
+:where(.page, .ai, .welcome) h3 {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* only the first summary row sits under the ink rule (the median); High and Low follow on hairlines */
+.t tr.agg + tr.agg td {
+  border-top: 1px solid var(--rule);
+}
+
+/* the 10-K's Item 1 in the Business step is the filing's words: the serif, at a reading measure */
+.item1 p {
+  max-width: 720px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.item1 .item1-h {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+  font-weight: 600;
 }
