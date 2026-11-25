@@ -84,6 +84,22 @@ Statements; batches 2 and 3 (`ui-overhaul-2`) the rest, page by page.
   GAAP kept, the filing's own title on hover). Peers' Why is short pencil tags (`Reason.short`: "named as a
   competitor · same industry · similar size"; business keywords and every reason whole on the cell's
   hover); the median is a total row under an ink rule. Data notes are rows ruled apart.
+- **The assistant's insides** (batch 3): the question in 14/600 (no bubble), the answer in Archivo 14/22 with
+  its figures 600, a quoted passage in the serif beside a bar, the sources and the machine check in the ink
+  (never a gain's green), suggestions as chips, the quota an 11px pencil line (the meter is gone). `#/ask` is
+  the same panel at the reader's width, a sheet with a hairline.
+- **Front door** (batch 3): no card; the wordmark (the h1) at the head, the headline in Source Serif 56/60 (40
+  on a phone), the lead, Try the demo (the primary, 40px) and Sign in with GitHub; the proof as one ledger
+  row between rules (`proofFigures`, live from Data status), then What's in it and Not here, on purpose. The
+  spec's specimen (a 10-Q's income-statement lines) isn't drawn: signed out there is no figure to read live,
+  and a typed one would be a hard-coded figure.
+- **Analysis** (batch 3): the project's header like a company's (a 12px crumb, no eyebrow; the steps marked
+  done, Company page and the actions at its right), the step list a rail of 32px rows (the current step a
+  sheet chip, a done one ticked in the ink), each step's head over an ink rule and its end one primary, "Next:
+  …". Rename, Duplicate and Delete stay in the open on a workspace or project page (Workspaces.test: "in the
+  open"), Delete in the ink, never red.
+- **Empty states** show the table's shape: Portfolio's empty page is the holdings ledger's header and a dash
+  row over its one line and Import from Fidelity.
 
 Money negatives read in parentheses on every table (`format.ts` `paren`: display only; the CSV and the card
 keep the sign, and F5's `outflow` stays the one place a sign is decided); a signed change takes a true minus

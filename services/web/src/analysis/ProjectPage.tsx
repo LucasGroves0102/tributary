@@ -294,7 +294,7 @@ function Project({ token, user, projectId, step: asked, itemId, saved, readable,
         {body}
         {next && (
           <div className="step-next">
-            <a className="btn" href={href({ view: "analysis", projectId, step: next })}>Next: {stepInfo(next).label} →</a>
+            <a className="btn primary" href={href({ view: "analysis", projectId, step: next })}>Next: {stepInfo(next).label} →</a>
           </div>
         )}
       </section>

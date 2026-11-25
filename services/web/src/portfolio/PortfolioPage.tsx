@@ -166,6 +166,25 @@ function Holdings({ token, data, onChanged }: { token: string; data: Portfolio; 
 function Empty() {
   return (
     <div className="portfolio-empty">
+      {/* the empty state shows the table's shape (spec §4 States): its header and a dash row */}
+      <table className="t portfolio-table empty-shape" aria-hidden="true">
+        <thead>
+          <tr>
+            <th className="first">Holding</th>
+            {["Shares", "Cost", "Price", "Value", "Gain", "Weight"].map((h) => <th key={h} className="n">{h}</th>)}
+            <th>Next report</th>
+            <th>Research</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td className="first">—</td>
+            {[0, 1, 2, 3, 4, 5].map((i) => <td key={i} className="n">—</td>)}
+            <td>—</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
       <p className="empty-line">No holdings yet. Track what you own against the research behind it: add one, or import Fidelity's positions file.</p>
       <a className="btn" href={href({ view: "portfolio", import: true })}>Import from Fidelity</a>
       <details className="how-to-read">

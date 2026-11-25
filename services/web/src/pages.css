@@ -1852,3 +1852,694 @@ html[data-motion="reduced"] .release-table-box summary::before {
 .co-panel .t.aligned {
   min-width: 0;
 }
+
+/* --- the assistant's insides (§4 Assistant panel): the question 14/600, the answer in Archivo 14/22 with its
+   figures 600, quoted passages in the serif, the sources, the machine check; the input in the footer with
+   the quota as an 11px pencil line. The full page (#/ask) is the same component at reader width. ---------- */
+
+.ai-h {
+  padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-h .chip {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.ai-m {
+  gap: 24px;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ai-m .empty {
+  color: var(--ink-2);
+}
+
+.message {
+  line-height: 22px;
+}
+
+/* the question: 14/600, no bubble */
+.message.user {
+  align-self: stretch;
+  padding: 0 0 0 0;
+  background: transparent;
+  border-radius: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.message.assistant .answer {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink);
+}
+
+.answer strong,
+.answer b,
+.answer .figure {
+  font-weight: 600;
+}
+
+/* a passage the answer quotes is the filing's words: the serif, beside a bar */
+.answer blockquote {
+  margin: 8px 0;
+  padding: 0 0 0 16px;
+  border-left: 2px solid var(--ink-2);
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.answer table {
+  font-size: 13px;
+}
+
+.answer th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--ink);
+}
+
+/* the machine check: the ink and a tick, never the colour of a gain */
+.badge.ok {
+  color: var(--ink-2);
+}
+
+.badge.warn {
+  color: var(--ink);
+}
+
+.sources {
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+
+.sources h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.sources ul {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.trace-toggle {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.trace-list {
+  background: transparent;
+  border-left: 2px solid var(--rule);
+  border-radius: 0;
+  padding: 4px 0 4px 12px;
+}
+
+.trace-list .status,
+.tool.allowed .status,
+.tool.denied .status {
+  background: transparent;
+  color: var(--ink-2);
+}
+
+.denied-count {
+  background: transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.act {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--ink);
+}
+
+/* suggestions: chips, one per line of their own words */
+.ai-s {
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.ai-s .btn.suggestion {
+  min-height: var(--control-h);
+  height: auto;
+  padding: 6px 12px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* the input in the footer */
+.ai-i {
+  gap: 8px;
+  padding: 8px 16px 4px;
+}
+
+.ai-i textarea {
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ai-i textarea:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* the quota: a line in pencil, not a meter */
+.ai-meter {
+  padding: 0 16px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+.ai-meter meter {
+  display: none;
+}
+
+.ai-meter.low {
+  color: var(--ink-2);
+}
+
+.ai-f {
+  padding: 2px 16px 12px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--pencil);
+}
+
+/* the full page: the same panel at the reader's width, a sheet with a hairline */
+.ask-page .ai-page {
+  max-width: 760px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.ask-page .ai-page .ai-m {
+  padding: 24px 32px;
+}
+
+/* --- the front door (§6): no card; the headline in Source Serif 56, the lead, Try the demo (the primary, 40px)
+   and Sign in with GitHub; the proof as one ledger row read live from Data status; then what's in it and
+   what isn't, on purpose. No eyebrow, no stat tiles, no numbered list. -------------------------------------- */
+
+.welcome {
+  display: block;
+  padding: 0;
+  background: var(--paper);
+}
+
+.welcome-layout {
+  max-width: calc(1144px + 64px);
+  margin: 0 auto;
+  padding: 24px 32px 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "head"
+    "card"
+    "proof"
+    "more";
+  grid-template-rows: none;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.welcome-head {
+  padding: 0;
+}
+
+/* the h1 is the wordmark, at the head of the page like the app's top bar */
+.welcome-brand {
+  margin: 0 0 64px;
+  gap: 8px;
+}
+
+.welcome-brand .wordmark {
+  font-size: 22px;
+}
+
+.welcome-headline {
+  max-width: 14em;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 56px;
+  line-height: 60px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variation-settings: normal;
+  color: var(--ink);
+}
+
+.welcome-lead {
+  max-width: 40em;
+  margin: 24px 0 0;
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--ink-2);
+}
+
+.welcome-layout > .card.welcome-card {
+  padding: 32px 0 0;
+  gap: 24px;
+  max-width: 640px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.welcome-try {
+  gap: 12px;
+}
+
+.welcome-try > .btn,
+.welcome-account .btn {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+
+.welcome-try > .small,
+.welcome-account > .small {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.welcome-account {
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+}
+
+.welcome-notice {
+  padding: 8px 12px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  font-size: 13px;
+}
+
+/* the proof: one ledger row between ink rules, each figure over what it counts */
+.welcome-proof {
+  grid-area: proof;
+  margin: 64px 0 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.welcome .proof {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--rule);
+}
+
+.welcome .proof > div {
+  padding: 16px 24px 16px 0;
+}
+
+.welcome .proof > div + div {
+  padding-left: 24px;
+  border-left: 1px solid var(--rule);
+}
+
+.welcome .proof > div:last-child:nth-child(odd) {
+  grid-column: auto;
+}
+
+.welcome .proof dt {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 650;
+}
+
+.welcome .proof dd {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+.welcome-more {
+  grid-area: more;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 24px;
+  margin: 48px 0 0;
+}
+
+.welcome-sect {
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 24px;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.welcome-list {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.welcome-list li {
+  padding: 8px 0;
+}
+
+.welcome-not {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+.welcome-status {
+  margin: 0 0 4px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+@container welcome (max-width: 900px) {
+  .welcome-more {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+}
+
+@container welcome (max-width: 600px) {
+  .welcome-layout {
+    padding: 16px 16px 48px;
+  }
+
+  .welcome-brand {
+    margin-bottom: 40px;
+  }
+
+  .welcome-headline {
+    font-size: 40px;
+    line-height: 44px;
+  }
+
+  .welcome .proof {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .welcome .proof > div,
+  .welcome .proof > div + div {
+    padding: 12px 12px 12px 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+}
+
+/* --- Analysis (§6): the project's header like a company's, the step list on the left, the step's work in the
+   centre, each step ending in one "Next: …" (the primary of the step) --------------------------------------- */
+
+.page .project-head.card {
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.project-head .co-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 24px;
+  padding: 0;
+}
+
+/* the crumb: 12px, no eyebrow */
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--pencil);
+}
+
+.eyebrow a {
+  color: var(--ink-2);
+  text-decoration-color: var(--rule-2);
+}
+
+.project-head h1 {
+  font-size: 28px;
+  line-height: 36px;
+}
+
+.project-head .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.project-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  max-width: 520px;
+  margin-left: auto;
+}
+
+.project-progress .bar {
+  width: 96px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--well);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+
+.project-progress .fill {
+  background: var(--ink);
+}
+
+.project-progress .ws-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.project-body {
+  grid-template-columns: 208px minmax(0, 1fr);
+  gap: 32px;
+}
+
+/* the step list: the rail's look; the current step a sheet chip, a done one ticked in the ink */
+.step-rail a {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: var(--r-control);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.step-rail a[aria-current="step"] {
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  border-left: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.step-rail .n {
+  width: 22px;
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.step-rail a.done .n {
+  color: var(--ink);
+  font-weight: 650;
+  background: transparent;
+}
+
+.step-head {
+  gap: 16px;
+  padding: 0 0 16px;
+  margin: 0 0 24px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.step-n {
+  font-size: 12px;
+  color: var(--pencil);
+}
+
+.step-head h2 {
+  margin: 2px 0 4px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 650;
+}
+
+.step-head p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.step-done {
+  min-height: var(--control-h);
+  padding: 0 12px;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule-2);
+  font-size: 13px;
+}
+
+/* each step ends in one action: the next step */
+.step-next {
+  margin-top: 40px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+/* a step's charts and tables are sections like any other (no cards) */
+.page .numbers-chart.card {
+  padding: 0;
+}
+
+@container main (max-width: 900px) {
+  .project-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* the projects list */
+.project-row {
+  border-radius: 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .project-row:hover {
+    background: var(--sheet);
+  }
+}
+
+/* --- Portfolio, Alerts, Your data, Settings, Status, API, About (§6: a page header, one ledger each, empty
+   states that show the table's shape) ------------------------------------------------------------------- */
+
+.portfolio-empty .empty-shape {
+  width: 100%;
+  margin: 0 0 12px;
+}
+
+.portfolio-empty .empty-shape td {
+  color: var(--pencil);
+}
+
+.portfolio-empty .empty-line {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink-2);
+}
+
+@container main (max-width: 700px) {
+  .portfolio-empty .empty-shape th:nth-child(n + 3),
+  .portfolio-empty .empty-shape td:nth-child(n + 3) {
+    display: none;
+  }
+}
+
+/* a section title over an ink rule (the alerts' screens and filings) */
+.alerts-h {
+  margin: 0 0 16px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--ink);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.alerts-page .card .empty,
+.alerts-page .empty {
+  padding: 0;
+}
+
+/* key-value ledgers (Data status' figures): rows on hairlines, never tiles */
+.page .kv {
+  gap: 0;
+  border-top: 1px solid var(--ink);
+}
+
+.page .kv > div {
+  padding: 12px 16px 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.page .kv .k {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.page .kv .v {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.page .kv .p {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+/* Using the API: a reference layout, the contents beside (3 columns) the content (9) */
+.api-code {
+  background: var(--well);
+  border: 0;
+  border-radius: var(--r-control);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font-size: 13px;
+}
+
+/* the 404 and other empty pages: one line and one action */
+.notfound .empty,
+.page > .empty {
+  max-width: 640px;
+}

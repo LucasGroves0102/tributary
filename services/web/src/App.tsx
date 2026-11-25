@@ -984,12 +984,12 @@ export function App(props: Props = {}) {
               />
             ) : route.view === "ask" ? (
               <div className="page ask-page">
-                <div className="row">
+                <div className="row page-bar">
                   <h1 className="grow">Ask</h1>
                 </div>
                 <AssistantPanel variant="page" {...panelProps} />
                 <p className="faint small">
-                  The same assistant as the side panel, full width. It answers only from data{" "}
+                  The same assistant as the side panel, at the reader's width. It answers only from data{" "}
                   {session?.kind === "sandbox" ? "your sandbox" : session ? "your account" : (user ?? "you")} can read,
                   with the filing behind every
                   number.
