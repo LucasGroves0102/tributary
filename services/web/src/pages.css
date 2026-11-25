@@ -386,7 +386,7 @@ button.chip.on,
 
 /* --- Companies (the screener, §6) --------------------------------------------------------------- */
 
-.screener-page {
+.page.screener-page {
   gap: 24px;
 }
 
@@ -757,7 +757,7 @@ button.chip.on,
    outline (208), the page (a sheet with a hairline, the filing's words in Source Serif 17/28 on a 660px
    measure) */
 
-.reader {
+.page.reader {
   gap: 24px;
 }
 
@@ -918,9 +918,8 @@ button.chip.on,
   color: var(--ink);
 }
 
-.section-text > p,
-.section-text .blk,
-.section-text .blk p {
+/* the reader's measure: 660px of the filing's words (§2.1) */
+.section-text p {
   max-width: 660px;
 }
 
@@ -2545,4 +2544,12 @@ html[data-motion="reduced"] .release-table-box summary::before {
 .notfound .empty,
 .page > .empty {
   max-width: 640px;
+}
+
+/* a table read as labelled cards on a phone (styles.css cards-narrow): its cells take their own height */
+@container tw (max-width: 560px) {
+  .t.cards-narrow tbody td,
+  .t.cards-narrow tbody td.first {
+    height: auto;
+  }
 }

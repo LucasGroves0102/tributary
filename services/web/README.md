@@ -20,12 +20,14 @@ Each screen's detail, the rules behind it and the measurements are in [DESIGN.md
 Noor's build spec, [`.interface-design/system.md`](../../.interface-design/system.md): paper, ink and pencil;
 Archivo for the interface and every figure, Source Serif 4 only for the filing's own words; one seal red for
 the tick (a figure that agrees to its filing) and the logo; green and rust for a change's direction only. The
-first batch rebuilt the foundations, the shell and the company page's header, Overview and Statements; the
-other screens read the new tokens through the older names until their pass.
+first batch rebuilt the foundations, the shell and the company page's header, Overview and Statements;
+batches 2 and 3 every other page (sections instead of cards, every table a ledger, the screener's filter
+chips, the reader's What changed mode as a blackline, Home's lead and side columns, the front door).
 
 - Tokens (both palettes, type, spacing, radius, the 32px control, motion) are in `src/tokens.css`; the spec's
-  shared components in `src/ui.css`, the shell in `src/shell.css`, the company page in `src/company.css`; the
-  older screens in `src/styles.css` and `src/seal.css`.
+  shared components in `src/ui.css`, the shell in `src/shell.css`, the company page in `src/company.css`, what
+  every other page shares and each page's own in `src/pages.css` (loaded last); the older rules those build on
+  in `src/styles.css` and `src/seal.css`.
 - Every figure opens its source card (`components/SourceCard`): the figure as Tributary holds it, its mark
   (✓ agrees to the filing, Σ added up, *d* derived; from the API's sources only), its filing, the reader and
   EDGAR. Ledgers are one tab stop each, arrows inside (`components/ledgerGrid`).

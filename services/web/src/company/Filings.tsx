@@ -245,7 +245,8 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
             </a>
             <button className="btn sm ghost" onClick={closeDiff}>Close</button>
           </div>
-          <Changes key={diff} token={token} companyId={companyId} accessionNo={diff} name={name} form={diffFiling?.form ?? null} />
+          {/* keyed by the form too: once the index names it, a 10-Q opens against a year earlier */}
+          <Changes key={`${diff}|${diffFiling?.form ?? ""}`} token={token} companyId={companyId} accessionNo={diff} name={name} form={diffFiling?.form ?? null} />
         </section>
       )}
     </>
