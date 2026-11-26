@@ -667,6 +667,8 @@ export interface FinancialRow {
     xbrl_tag: string;
     source_accessions: string[] | null;
     filing_url: string | null;
+    /** 165: read from a 6-K results release's table, not XBRL (gold's `release:` tag) */
+    release?: ReleaseCell;
   };
   freshness: { filed: string; ingested_at: string };
   /** asked for with `originals` (query_api/point_in_time.py): a figure a later filing changed, its
@@ -677,6 +679,15 @@ export interface FinancialRow {
   as_filed?: string | null;
   splits?: PerShareSplit[];
   derivation?: PerShareDerivation;
+}
+
+/** Where a figure read from a foreign filer's 6-K results release came from (migration 165): its
+ * section ("EX-99.1"), table, row and column, each counted from 0 (the web shows them from 1). */
+export interface ReleaseCell {
+  section: string;
+  table: number;
+  row: number;
+  column: number;
 }
 
 /** A restated figure's first version (query_api/point_in_time.py): the value first believed, the
@@ -766,11 +777,12 @@ export interface ComponentFigure {
   unit: string;
   value_source: string;
   how: ComponentsHow;
-  citation: { accession_no: string; form: string; filed: string; xbrl_tag: string | null; source_accessions: string[] | null; filing_url: string | null };
+  citation: { accession_no: string; form: string; filed: string; xbrl_tag: string | null; source_accessions: string[] | null; filing_url: string | null; release?: ReleaseCell };
 }
 
-/** 155: `none` is a long-term debt of zero where the filings show none (`derived:no-debt`). */
-export type ComponentsHow = "derived" | "ttm" | "sum" | "computed" | "ytd" | "reported" | "none";
+/** 155: `none` is a long-term debt of zero where the filings show none (`derived:no-debt`); 165:
+ * `release` a figure read from a 6-K results release's table (a `release:` tag). */
+export type ComponentsHow = "derived" | "ttm" | "sum" | "computed" | "ytd" | "reported" | "none" | "release";
 
 /** /v1/companies/{id}/components (F5, query_api/components.py): what one figure is made of. */
 export interface Components {

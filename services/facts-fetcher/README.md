@@ -55,7 +55,10 @@ leaves whole companies and the nightly jobs wait for a batch rather than interle
 that raises is retried a company at a time; one that still raises is recorded
 (`ops.company_builds.failed_version`, `error`) and left until the next version. Progress:
 `ops.catchup_status` (a new version's backlog is recorded when its first run starts). A full gold catch-up of hermes' ~8,100 companies is about 1-2 hours of
-rebuilding, so it is done within a few hours of the deploy; the checks within the first run.
+rebuilding, so it is done within a few hours of the deploy; the checks within the first run. A
+company's gold is also due when parser-index reads one of its 6-K results releases after its last
+build (migration 165: gold reads the release's figures where no XBRL figure covers the period), and
+a rules bump may be scoped: 165 stamped every company its rules don't touch as built at 165.
 
 Which fact gold believes is one SQL function, `gold.best_facts` (migration 039, latest body 080,
 over `gold.usable_facts`): the quarters, the annual fallback for TTM (040) and the checks' annual

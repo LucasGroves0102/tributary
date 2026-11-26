@@ -13,10 +13,10 @@ BEGIN;
 SET LOCAL lock_timeout = '10s';
 
 -- guard (scripts/backout_guards.py writes it; db/backout/README.md, Order). It refuses, changing
--- nothing, unless every newer backout has run (newest first: analyst_fixes_155.sql,
--- point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql,
--- readings_069.sql, revenue_part_064.sql) and this one hasn't, and unless the login owns the
--- functions (the migrate login; header).
+-- nothing, unless every newer backout has run (newest first: release_figures_165.sql,
+-- analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql,
+-- screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql) and this
+-- one hasn't, and unless the login owns the functions (the migrate login; header).
 DO $guard$
 DECLARE
     w record;
@@ -74,7 +74,9 @@ BEGIN
         ('ops.check_financials(text[])', 'a8a94bf23f986a93f3f61c8fc5f35461'),
         ('ops.company_backlog(text)', '97bd3cf942ea7f5c87ed866c0ba563d8'),
         ('ops.company_rule_version(text)', '60744ba7ead2e38d3dc3791e5630df38'),
+        ('ops.coverage_found()', '096f77959baa05c70f1dfd1e0c31b974'),
         ('ops.rebuild_soon(text[])', 'c5a3427c2fac8f4cfdddb3ad14021fd7'),
+        ('ops.release_backlog(text)', NULL),
         ('silver.refresh_filing_facts(text[])', '3b400f0ebef7ea4ae47aeac60b50cca6'),
         ('silver.refresh_financial_facts(text[])', '813785ee2a47de9ea6e3a86f6176fef2')
     ) v(fn, want) LOOP
@@ -87,7 +89,7 @@ BEGIN
         IF w.want IS DISTINCT FROM (SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = w.id) THEN
             RAISE EXCEPTION USING MESSAGE = format('%s is not where this backout starts: run '
                 'the newer backouts first, newest first (%s), and this one only once. Nothing was '
-                'changed.', w.fn, 'analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql');
+                'changed.', w.fn, 'release_figures_165.sql, analyst_fixes_155.sql, point_in_time_085.sql, revenue_fallbacks_080.sql, screener_figures_078.sql, net_income_077.sql, readings_069.sql, revenue_part_064.sql');
         END IF;
     END LOOP;
 END

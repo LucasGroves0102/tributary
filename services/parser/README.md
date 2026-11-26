@@ -181,6 +181,22 @@ own XBRL on 97-100% of the lines it finds in 97 recent 10-Ks; on hermes' first 3
 10-K/10-Qs, 4 findings in 367 comparisons (two gold's side, two the reader's: migration 074's
 header). A rule change bumps `READER`: the catch-up re-reads every filing.
 
+### Release figures (migration 165)
+
+For each 6-K it indexes, section-index reads the results release's own tables with
+`filing_parser/releases.py` (its docstring is the spec; `READER`): revenue, net income (the
+owners' share first), operating income and total assets of the release's own period ("3Q26",
+"Three months ended September 30, 2026", a 6-K dated by its filing reads the quarter it reports),
+times the scale the table names, in the currency it names, one figure per metric and period or none
+(`silver.release_figures` with the section, table, row and column; one `silver.release_reads` row per
+6-K with what was left out and why). Gold reads them after every XBRL tag, only where no XBRL figure
+of the metric ends near the period (migration 165); a read makes the company's gold due, so the
+facts-fetcher catch-up rebuilds it within the hour. A re-read with the same figures keeps its rows (a
+re-parse makes nothing due). Measured against the XBRL ~470 companies' 6-Ks carry: 99.3% of the
+figures gold would read equal the filing's own facts (migration 165's header). A rule change bumps
+`READER`: the catch-up kind `releases` re-reads every stored 6-K (and each company's history replays
+from its first release).
+
 ### Search without page furniture (migration 068)
 
 `gold.refresh_section_search` blanks a section's page furniture (as spaces, so offsets stay)
@@ -217,11 +233,14 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
 3. reads the statement lines (074) of every stored 10-K/10-Q with tables that the current
    `statements.READER` hasn't read, oldest filing first, 100 a transaction, for up to 5 minutes
    (kind `statements`, `ops.statement_backlog`);
-4. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
+4. reads the release figures (165) of every stored 6-K with tables that the current
+   `releases.READER` hasn't read, oldest filing first, 100 a transaction, for up to 5 minutes (kind
+   `releases`, `ops.release_backlog`); each read makes its company's gold due;
+5. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
    the next hour's run is never skipped), oldest filing first, under the same lock as
    `section-passages` (one waits for the other; both take the same filings, so they can overlap in
    time without harm);
-5. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
+6. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
 Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,

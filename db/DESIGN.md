@@ -1184,3 +1184,47 @@ Readings (no bump): `gold.not_meaningful_for(metric, sic)` (a lender's gross mar
 year-earlier figure under a fifth of this one) is n/m for revenue, net income and EPS growth, as
 `shapes.percent_change` reads any change; `gold.company_confidence`'s "no report since" names the later
 report the figures lack (076's `figures_behind`) as Tributary's gap. Backout: `analyst_fixes_155.sql`.
+
+### 165_release_figures.sql
+
+Foreign filers' quarters (roadmap item f's last part). A company filing 20-F or 40-F reports its
+quarters only in 6-K results releases (1,179 of the 1,246 with gold had under four revenue quarters in
+two years); 095 stores them and the parsers split them. No parser change: parser-index reads the
+stored tables with `filing_parser/releases.py` (statements.py's sibling: a pure reader, its docstring
+the spec, `READER`) into `silver.release_figures`, and gold reads those.
+
+- The reader takes revenue, net income (the owners' share first), operating income and total assets
+  of the release's own period, times the scale and in the currency the table names, one figure per
+  metric and period or none; it never reads a part of the company (segments, guarantors, a parent's or
+  separate statements), an adjusted view or a movement, and takes net income and operating income only
+  from the table that gives the period's revenue. Doubt leaves a figure out, counted by reason.
+- Gold has one picker: `gold.usable_facts` adds release figures after every tag, and only where the
+  company's XBRL gives the metric no figure ending within 7 days. So the 20-F/40-F year always stands
+  (a fiscal Q4 is the year less the releases' nine months) and a release figure never meets an XBRL
+  fact in `best_facts`' windows. Revenue and total assets must be of a size the company's own XBRL
+  years and balance sheets bear out; net income and operating income need the release's revenue
+  beside them. The source tag `release:<section>/<table>/<row>/<column>` keeps the cell (FR6); the
+  API's citation gains `release` and the web says "from the press release".
+- Measured against the XBRL 467 companies' 6-Ks carry: 99.3% of the figures gold would read equal the
+  filing's own facts (revenue 727/733, net income 652/664, operating income 516/517, total assets
+  793/794). On the year-ends of 152 companies without 6-K XBRL, 140 of 147 equal their 20-F/40-F, the
+  rest other GAAP (STMicro's statutory IFRS report, Taiwan-IFRS releases) at dates gold never reads.
+- Over every stored 6-K (16,182): 626 companies get figures, 286 quarterly revenue (2,244
+  company-quarters). Known limits: half-year reporters gain no quarters (gold has none); a release in
+  another GAAP than the 20-F (Taiwan-IFRS, STMicro) gives quarters whose sum can differ from the year
+  by ~1-2%; a 52-53 week quarter whose start differs from the XBRL year's by a day derives no Q4.
+- The rules bump is scoped: with no release figures `usable_facts` and `knowledge_facts` give 155's and
+  086's rows (the reference set's test compares the bodies), so the migration stamps every company
+  built at 155 as built at 165; a release read makes its company's gold due (`ops.company_backlog`)
+  and its history replays from its first release's day (`gold.knowledge_facts`). Budget in the
+  migration's header: a few hourly runs to read the 6-Ks, 977 gold rebuilds, 67 history replays,
+  ~50 MB.
+- Coverage (read time, no rebuild): a commodity pool or trust (SIC 6221) is out of scope for
+  `history_short` and `figures_behind` too (cause `trust`), as 081 made it for `metric_missing`: its
+  figures are net assets and gains on what it holds. 11 gaps on hermes were `fixable` (8 and 3).
+  The rest of the fixable coverage gaps, measured from every company's raw companyfacts (the scan in
+  the branch's report): of 362 `revenue_tag`, 164 have no revenue-like tag at all in those years
+  (pre-revenue biotechs, SPAC shells) and 198 an industry or own line gold doesn't read; telling them
+  apart in SQL needs revenue evidence tags in silver (silver's own evidence, no cost of revenue and no
+  operating profit, is 92% right: it would hide real gaps), i.e. re-projecting the ~3,100 CIKs that
+  carry such tags. Left for the owner. Backout: `release_figures_165.sql`.
