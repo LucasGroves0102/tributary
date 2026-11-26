@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from query_api.app import create_app
+from query_api.ui import RECAP_METRICS
 
 from .conftest import SECRET
 from .test_api import NVDA, TSLA, FakeAuthorizer, FakeStore
@@ -298,6 +299,98 @@ def test_recap_denied_and_unknown_look_the_same(token):
 def test_recap_only_for_periodic_reports(token):
     c = recap_client({"alice": {NVDA: {"financials"}}})
     assert c.get(f"/v1/filings/{ACC_8K}/recap", headers=token("alice")).status_code == 422
+
+
+TSMC, ACC_6K, ACC_20F = "0001046179", "0001046179-26-000726", "0001046179-26-000210"
+
+
+def release_row(comparison, value, period_end, tag="release:EX-99.1/0/1/1", acc=ACC_6K,
+                form="6-K", source="reported"):
+    """A foreign filer's quarter as gold.filing_recap gives it (165): read from its 6-K results
+    release's table (a `release:` tag) or, for its fiscal Q4, derived from the 20-F's year."""
+    return {**recap_row(comparison, "revenue", value, period_end, "TWD"),
+            "source_tag": tag, "accession_no": acc, "form": form, "value_source": source,
+            "filed": date(2026, 10, 15), "source_accessions": [acc]}
+
+
+class ReleaseRecapStore(RecapStore):
+    def filing(self, user_id, accession_no):
+        self.calls.append(("filing", accession_no))
+        # a 6-K's period of report is often its filing day, not the quarter it reports
+        return {ACC_6K: {"company_id": TSMC, "cik": TSMC, "form": "6-K",
+                         "filing_date": date(2026, 10, 15), "period_end": date(2026, 10, 15)},
+                ACC_NVDA: {"company_id": NVDA, "cik": "0001045810", "form": "10-Q",
+                           "filing_date": date(2026, 8, 26), "period_end": date(2026, 7, 26)},
+                }.get(accession_no)
+
+    def recap(self, user_id, company_id, accession_no, period_end, metrics):
+        self.calls.append(("recap", company_id, period_end, tuple(metrics)))
+        if company_id != TSMC:
+            return super().recap(user_id, company_id, accession_no, period_end, metrics)
+        return [release_row("current", "1494243000000", date(2026, 9, 30)),
+                release_row("prior_quarter", "1270400000000", date(2026, 6, 30),
+                            tag="release:EX-99.1/2/3/1", acc="0001046179-26-000451"),
+                release_row("year_ago", "759690000000", date(2025, 9, 30),
+                            tag="ifrs-full:Revenue", acc=ACC_20F, form="20-F")]
+
+
+def release_client(grants):
+    store = ReleaseRecapStore()
+    c = TestClient(create_app(FakeAuthorizer(grants), store, SECRET))
+    c.store = store
+    return c
+
+
+def test_a_6k_recaps_the_quarter_its_results_release_reports(token):
+    """165: a foreign filer's 6-K recaps its release's quarter (the latest gold cites the 6-K
+    for, never its period of report, here its filing day); a figure read from the release's
+    table cites the table and cell, every other citation keeps exactly its keys."""
+    c = release_client({"bob": {TSMC: {"financials", "filings"}}})
+    r = c.get(f"/v1/filings/{ACC_6K}/recap", headers=token("bob"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert ("recap", TSMC, None, tuple(RECAP_METRICS)) in c.store.calls
+    assert (body["form"], body["period_end"]) == ("6-K", "2026-09-30")
+    rev = body["metrics"][0]
+    assert (rev["current"]["value"], rev["current"]["value_source"]) == ("1494243000000",
+                                                                         "reported")
+    assert rev["current"]["citation"]["release"] == {"section": "EX-99.1", "table": 0, "row": 1,
+                                                     "column": 1}
+    assert rev["prior_quarter"]["citation"]["release"]["table"] == 2
+    assert "release" not in rev["year_ago"]["citation"]  # the 20-F's own fact
+    assert rev["year_ago"]["citation"]["form"] == "20-F"
+    assert rev["current"]["citation"]["filing_url"] == \
+        "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000726/"
+    # the release's EX-99 text is read for one-time items like an 8-K's
+    assert ("filing_flags", ACC_6K) in c.store.calls
+
+
+def test_a_6k_recaps_the_quarter_asked_for(token):
+    """The earnings answer's quarter: its first 6-K may not be the one gold's figures cite."""
+    c = release_client({"bob": {TSMC: {"financials"}}})
+    body = c.get(f"/v1/filings/{ACC_6K}/recap?period_end=2026-09-30", headers=token("bob")).json()
+    assert ("recap", TSMC, date(2026, 9, 30), tuple(RECAP_METRICS)) in c.store.calls
+    assert body["period_end"] == "2026-09-30"
+
+
+def test_period_end_is_only_for_a_6k(token):
+    c = release_client({"alice": {NVDA: {"financials"}}})
+    r = c.get(f"/v1/filings/{ACC_NVDA}/recap?period_end=2026-04-26", headers=token("alice"))
+    assert r.status_code == 422
+    assert not any(call[0] == "recap" for call in c.store.calls)
+    # without it, a 10-Q's recap is exactly as before: its own period of report
+    body = c.get(f"/v1/filings/{ACC_NVDA}/recap", headers=token("alice")).json()
+    assert body["period_end"] == "2026-07-26"
+    assert all("release" not in e["current"]["citation"] for e in body["metrics"])
+
+
+def test_a_6k_of_a_company_you_cant_read_is_the_same_403(token):
+    c = release_client({"alice": {NVDA: {"financials"}}})
+    denied = c.get(f"/v1/filings/{ACC_6K}/recap?period_end=2026-09-30", headers=token("alice"))
+    unknown = c.get("/v1/filings/0000000000-26-000001/recap", headers=token("alice"))
+    assert denied.status_code == unknown.status_code == 403
+    assert denied.json() == unknown.json()
+    assert not any(call[0] in ("recap", "filing_flags") for call in c.store.calls)
 
 
 @pytest.mark.parametrize("path", ["/v1/filings/0001045810-26-75/recap",

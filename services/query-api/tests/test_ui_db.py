@@ -247,6 +247,36 @@ def test_recap_and_flags_respect_rls(recap_conn, token):
     assert "goodwill impairment" in flags[0]["snippet"]
 
 
+def test_a_6k_recaps_the_quarter_its_release_reports(recap_conn, token):
+    """165: a foreign filer's 6-K, whose period of report is its filing day: the recap reads the
+    quarter gold cites it for (or the one asked for) and the release's table and cell."""
+    six_k, press = f"{R}-26-000726", f"{R}-26-000700"
+    recap_conn.execute(
+        "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+        " value, unit, value_source, source_tag, accession_no, form, filed,"
+        " source_accessions, ingested_at) VALUES (%s, 'revenue', '2026-07-01', '2026-09-30',"
+        " 150, 'USD', 'reported', 'release:EX-99.1/0/1/1', %s, '6-K', '2026-10-15', ARRAY[%s],"
+        " now())", (R, six_k, six_k))
+    for acc in (six_k, press):
+        recap_conn.execute("INSERT INTO bronze.submission_filings (accession_no, cik, form,"
+                           " filing_date, report_date) VALUES (%s, %s, '6-K', '2026-10-15',"
+                           " '2026-10-15')", (acc, R))
+    c = client(recap_conn)
+    body = c.get(f"/v1/filings/{six_k}/recap?metrics=revenue", headers=token("t-free")).json()
+    assert (body["form"], body["period_end"]) == ("6-K", "2026-09-30")
+    [rev] = body["metrics"]
+    assert rev["current"]["citation"]["release"] == {"section": "EX-99.1", "table": 0, "row": 1,
+                                                     "column": 1}
+    assert (rev["prior_quarter"]["value"], rev["year_ago"]) == ("130", None)
+    assert "release" not in rev["prior_quarter"]["citation"]
+    # the quarter's first 6-K, which gold doesn't cite: the quarter asked for, else nothing
+    asked = c.get(f"/v1/filings/{press}/recap?metrics=revenue&period_end=2026-09-30",
+                  headers=token("t-free")).json()
+    assert asked["metrics"][0]["current"]["value"] == "150"
+    assert c.get(f"/v1/filings/{press}/recap?metrics=revenue",
+                 headers=token("t-free")).json()["metrics"] == []
+
+
 P1, P2, P3, P4 = "9100000011", "9100000012", "9100000013", "9100000014"
 
 

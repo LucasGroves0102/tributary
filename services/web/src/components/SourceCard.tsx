@@ -14,7 +14,8 @@ export interface SourceInfo {
   /** the figure as Tributary holds it ("$96,221 million" when exact, else as shown) */
   value: string;
   mark: MarkKind | null;
-  /** the mark's words when they need more than MARK_WORDS ("derived: …") */
+  /** the mark's words when they need more than MARK_WORDS ("derived: …"); with no mark, what the figure
+   * is instead ("from the press release") */
   words?: string;
   /** where it sits: the form and its filing date, the statement */
   where?: string[];
@@ -179,9 +180,10 @@ function Card({ id, info, anchor, keyboard, quick, cardRef, onClose, onHover }: 
       <p className="sc-title">{info.title}</p>
       <p className="sc-value">
         <b className={info.mark === "d" ? "derived" : undefined}>{info.value}</b>
-        {info.mark && words && (
-          <span className={`sc-agree sc-${info.mark}`}>
-            <Mark kind={info.mark} />
+        {/* a mark with its words; or, with no mark, words of their own (a figure from a press release) */}
+        {words && (
+          <span className={info.mark ? `sc-agree sc-${info.mark}` : "sc-agree"}>
+            {info.mark && <Mark kind={info.mark} />}
             {words}
           </span>
         )}

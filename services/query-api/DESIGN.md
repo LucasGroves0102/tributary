@@ -295,8 +295,9 @@ point-in-time history reads it). So no reader seals one as a figure the filing s
 release's table (gold's source tag `release:<section>/<table>/<row>/<column>`, read where no XBRL
 figure covers the period) is `value_source: "reported"` (the release states it) and its citation
 gains `release: {section, table, row, column}` (`shapes.release_cell`, counted from 0 like the stored
-tables), on `/financials`, the recap and `/components` (whose `how` is `release`); every other
-citation keeps exactly its keys. The web words it "from the press release" with the table and row.
+tables), on `/financials`, the recap (a 6-K's too: [Filing recap](#filing-recap)) and
+`/components` (whose `how` is `release`); every other citation keeps exactly its keys. The web words
+it "from the press release" with the table and row.
 
 **How a value reads** (`readings`, migration 035, the only definition, used by the screener, watchlist
 and peers): `not_meaningful` (with `reason`): a margin on under $100K of revenue, a gross or operating
@@ -453,6 +454,13 @@ litigation settlement) in MD&A and EX-99 sections, each citing section and chara
 without it `flags` is null. Flags are optional: they run under their own 2 s timeout, and if they
 fail the recap still answers with `flags: null` and `flags_unavailable` saying why (the same field
 explains a plan without `filings`).
+
+A 6-K (165) recaps too: a foreign filer that reports its quarters only in 6-K results releases has
+them in gold, read from the release's tables (or, where a 6-K carries XBRL, its own facts). A 6-K's
+period of report is often its filing day, so its quarter is `period_end` when given (the earnings
+answer's: a quarter's first 6-K may not be the one gold cites) or the latest quarter gold cites the
+6-K for, and the answer's `period_end` is that quarter. `period_end` on a 10-Q or 10-K is a 422: they
+recap their own period, byte for byte as before. Flags read the release's EX-99 text like an 8-K's.
 
 ## Peers
 

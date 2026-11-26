@@ -223,6 +223,9 @@ it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with th
 it("a foreign filer's 6-K results release beside its 20-F, worded as such (migration 095)", async () => {
   const q = earnings!.quarters[0]!;
   const sixK = { ...q.release!, form: "6-K", items: [], section_key: "EX-99.1" };
+  // a Query API one release older recaps no 6-K (its 422): the quarter's figures read as before
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).includes(`/filings/${RELEASE}/recap`)
+    ? Response.json({ detail: "recaps are for 10-K and 10-Q filings" }, { status: 422 }) : respond(url))));
   earnings!.quarters = [
     { ...q, period_end: "2026-09-30", estimated: false, report: null, release: sixK,
       other_releases: [{ accession_no: "0001046179-26-000801", filed: "2026-11-13", filing_url: null }] },
@@ -238,6 +241,38 @@ it("a foreign filer's 6-K results release beside its 20-F, worded as such (migra
   await act(async () => $$(".earnings-pick .seg button").find((b) => b.textContent?.startsWith("Dec 31, 2025"))!.click());
   expect($(".release-card .sub")?.textContent).toBe("Fiscal year ended Dec 31, 2025");
   expect($(".release-card")?.textContent).toContain("No results release (a 6-K) stored for this year");
-  // no recap for a 20-F: its figures are by fiscal year, on the Financials tab
-  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("/recap"))).toHaveLength(0);
+  // the 6-K's quarter was asked for by its end; no recap for a 20-F: its figures are by fiscal year, on the Financials tab
+  expect(vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("/recap")).map(([u]) => new URL(String(u), "http://x").search))
+    .toEqual(["?period_end=2026-09-30"]);
+});
+
+it("a foreign filer's quarter read from its 6-K results release: the figures, no tick, the table and row (165)", async () => {
+  const q = earnings!.quarters[0]!;
+  earnings!.quarters = [{ ...q, period_end: "2026-09-30", estimated: false, report: null,
+    release: { ...q.release!, form: "6-K", items: [], section_key: "EX-99.1" }, other_releases: [] }];
+  const cell = (comparison: string, value: string, end: string, release: object | null, over = {}) => ({
+    value, period_start: null, period_end: end, fiscal_period: comparison === "current" ? "FY2026 Q3" : "FY2025 Q3",
+    calendar_period: null, value_source: "reported", freshness: { filed: "2026-10-15", ingested_at: "" },
+    citation: { accession_no: RELEASE, form: "6-K", filed: "2026-10-15", xbrl_tag: release ? "release:EX-99.1/0/1/1" : "ifrs-full:Revenue",
+      source_accessions: [RELEASE], filing_url: null, ...(release ? { release } : {}) }, ...over });
+  const recap = { accession_no: RELEASE, company_id: VRT, form: "6-K", filed: "2026-10-15", period_end: "2026-09-30", as_of: "", note: "",
+    flags: null, flags_unavailable: "one-time-item flags need filings access",
+    metrics: [{ metric: "revenue", span: "quarter", unit: "TWD",
+      current: cell("current", "1494243000000", "2026-09-30", { section: "EX-99.1", table: 0, row: 1, column: 1 }),
+      prior_quarter: null,
+      year_ago: cell("year_ago", "759690000000", "2025-09-30", null, { change: "734553000000", pct_change: "0.966913" }) }] };
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => (String(url).includes(`/filings/${RELEASE}/recap`) ? Response.json(recap) : respond(url))));
+  await render(view());
+  const figures = $$(".card").find((c) => c.querySelector("h3")?.textContent === "Reported figures")!;
+  expect(figures.querySelector(".sub")?.textContent).toBe("6-K filed Oct 15, 2026, against the same quarter a year ago");
+  // in its own currency, never "$" (the recap ledger said "$1.49T" for New Taiwan dollars before)
+  expect(figures.querySelector("tbody tr")?.textContent).toBe("RevenueTWD 1.49TTWD 759.7B+96.7%");
+  expect(figures.querySelector(".foot")?.textContent).toContain("read from its own tables where no XBRL covers the quarter, so those figures carry no tick");
+  // the release's figure: no tick, its own words, the table and row, the reader at the release
+  await act(async () => (figures.querySelector("td[data-cell]") as HTMLElement).click());
+  const card = document.querySelector(".source-card")!;
+  expect(card.querySelector(".mk-ok")).toBeNull();
+  expect(card.querySelector(".sc-agree")?.textContent).toBe("from the press release");
+  expect(card.textContent).toContain("EX-99.1, table 1, row 2");
+  expect(card.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${VRT}/${RELEASE}/EX-99.1`);
 });

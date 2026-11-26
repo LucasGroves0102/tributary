@@ -42,6 +42,8 @@ import {
   withPerShare,
   yearStory,
 } from "./data";
+import { rowCard, rowMark } from "./sources";
+import { cellLinks, cellMark } from "./Tables";
 
 describe("the header's listing line", () => {
   it("names the main ticker and counts the rest, whose tickers go in the hover", () => {
@@ -103,10 +105,43 @@ describe("header and key stats", () => {
     expect(foreignReport(nvdaRow({ sources: {} }))).toBeNull();
   });
 
-  it("recaps only a 10-Q or 10-K", () => {
+  it("recaps a 10-Q or 10-K, or a foreign filer's 6-K (165), never a 20-F's year", () => {
     expect(recapAccession(nvdaRow())).toBe(ACC);
+    expect(recapAccession(nvdaRow({ sources: { revenue_q: { ...SRC, form: "6-K" } } }))).toBe(ACC);
+    expect(recapAccession(nvdaRow({ sources: { revenue_q: { ...SRC, form: "20-F" } } }))).toBeNull();
     expect(recapAccession(nvdaRow({ sources: { revenue_q: { ...SRC, form: "8-K" } } }))).toBeNull();
     expect(recapAccession(nvdaRow({ sources: {} }))).toBeNull();
+  });
+});
+
+describe("a figure read from a 6-K results release's table (165)", () => {
+  const cell = { section: "EX-99.1", table: 0, row: 1, column: 1 };
+  const release = fin("revenue", "2026-09-30", "1494243000000", "FY2026 Q3", {
+    unit: "TWD", citation: { accession_no: ACC, form: "6-K", filed: "2026-10-15", xbrl_tag: "release:EX-99.1/0/1/1", source_accessions: [ACC],
+      filing_url: null, release: cell } });
+
+  it("carries no tick: the source card says it is from the press release, where, and opens the release", () => {
+    expect(rowMark(release)).toBeNull();
+    expect(rowMark(fin("revenue", "2026-07-26", "1", "FY2027 Q2"))).toBe("ok");
+    // a derived figure stays derived, whatever it was worked out from
+    expect(rowMark({ ...release, value_source: "derived" })).toBe("d");
+    const card = rowCard(release, "Revenue", NVDA);
+    expect([card.mark, card.words]).toEqual([null, "from the press release"]);
+    expect(card.where).toEqual(["6-K filed Oct 15, 2026", "EX-99.1, table 1, row 2"]);
+    expect(card.reader).toEqual({ href: `#/filing/${NVDA}/${ACC}/EX-99.1`, label: "Open the 6-K at its press release" });
+    expect(card.value).toBe("TWD 1,494,243 million");
+  });
+
+  it("in a statement: no mark, and its links open the release", () => {
+    const table = metricTable([release], [["revenue", "Revenue", "usd"]], "q");
+    const c = table.rows[0]!.cells[0]!;
+    expect(c.source?.release).toEqual(cell);
+    expect(cellMark(c)).toBeNull();
+    expect(cellLinks(c, NVDA).reader).toBe(`#/filing/${NVDA}/${ACC}/EX-99.1`);
+    // an XBRL figure's cell keeps its key and its tick
+    const xbrl = metricTable([fin("revenue", "2026-07-26", "1", "FY2027 Q2")], [["revenue", "Revenue", "usd"]], "q").rows[0]!.cells[0]!;
+    expect(xbrl.source && "release" in xbrl.source).toBe(false);
+    expect(cellMark(xbrl)).toBe("ok");
   });
 });
 

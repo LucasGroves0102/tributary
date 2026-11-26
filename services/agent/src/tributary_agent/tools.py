@@ -448,7 +448,7 @@ class QueryApi:
             if name == "get_earnings_release":
                 body = _short_adjustments(body)
             if name == "get_financials":
-                body = self._no_figures(body, path, params)
+                body = _from_releases(self._no_figures(body, path, params))
             if name == "find_companies":
                 body = _companies(body)
             return json.dumps(body, separators=(",", ":"), default=str), False
@@ -490,6 +490,25 @@ class QueryApi:
                  "it has figures for " + ", ".join(others) + "; ask get_financials for them.")
         body["no_figures"] = {"metrics": missing, "note": note}
         return body
+
+
+FROM_RELEASES = (
+    "Rows whose citation has `release` were read from the company's 6-K results release (the "
+    "press release's own table: section, table, row and column, each counted from zero), not from "
+    "XBRL: the company reports those quarters only in its releases. Cite such a figure as that "
+    "6-K's press release, never as an XBRL tag.")
+
+
+def _from_releases(body: Any) -> Any:
+    """Says what a row read from a 6-K results release's table is (Query API migration 165: its
+    citation's `release`), so the model words it as the press release, not XBRL. Only when such
+    a row is there: every other answer stays byte for byte as it was (the recorded suites)."""
+    if not isinstance(body, dict) or not isinstance(body.get("rows"), list):
+        return body
+    if any(isinstance(r, dict) and isinstance(r.get("citation"), dict)
+           and isinstance(r["citation"].get("release"), dict) for r in body["rows"]):
+        body["from_press_release"] = {"note": FROM_RELEASES}
+    return body
 
 
 def _route(name: str, a: dict[str, Any]) -> tuple[str, dict]:

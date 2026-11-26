@@ -665,6 +665,15 @@ export const components = (token: string, companyId: string, metric: string, per
 export const recap = (token: string, accessionNo: string) =>
   get<Recap>(token, `/v1/filings/${accessionNo}/recap`);
 
+/** A foreign filer's 6-K recapped (165): the quarter its results release reports (`periodEnd`, the
+ * earnings answer's; default the latest the figures cite it for). null from a Query API one release
+ * older, which recaps only 10-Qs and 10-Ks (its 422: the deploy window). */
+export const releaseRecap = (token: string, accessionNo: string, periodEnd?: string) =>
+  get<Recap>(token, `/v1/filings/${accessionNo}/recap`, periodEnd ? { period_end: periodEnd } : {}).catch((e) => {
+    if (e instanceof ApiError && e.status === 422) return null;
+    throw e;
+  });
+
 /** null from a Query API one release older (no such route yet: the deploy window), else the answer. */
 function orNullOn404<T>(p: Promise<T>): Promise<T | null> {
   return p.catch((e) => {

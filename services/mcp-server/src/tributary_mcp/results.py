@@ -9,8 +9,10 @@ note when it was cut to size, and, for filing text, a notice that the text is da
 
 Citations are every filing the (trimmed) answer cites, found where the Query API puts them: an
 object with an `accession_no` and a `form` or `filed` (a row's `citation`, a section's, a
-passage's, a screener source). `period` is the cited object's own `period_of_report` or
-`period_end`, else that of the object around it (a /financials row's period for its citation);
+passage's, a screener source); a figure read from a 6-K results release's table (its citation's
+`release`) is cited at that release's section. `period` is the cited object's own
+`period_of_report` or `period_end`, else that of the object around it (a /financials row's period
+for its citation);
 `company_id` likewise. One entry per (filing, section, period, company), at most MAX_CITATIONS.
 
 Size: the JSON text of a result stays under the cap (RESULT_CHARS by default). Over it, the
@@ -70,6 +72,10 @@ def citations_of(data: Any) -> tuple[list[dict], int]:
         cited = "form" in node or "filed" in node
         if isinstance(acc, str) and ACCESSION.fullmatch(acc) and cited:
             section = node.get("section_key") if isinstance(node.get("section_key"), str) else None
+            release = node.get("release")  # a figure read from a 6-K results release's table
+            if section is None and isinstance(release, dict) \
+                    and isinstance(release.get("section"), str):
+                section = release["section"]
             entry = {"accession_no": acc, "form": node.get("form"), "filed": node.get("filed"),
                      "section_key": section, "period": period, "company_id": company,
                      "url": node.get("document_url") or node.get("filing_url")}

@@ -114,7 +114,9 @@ Anthropic SDK or model key is in it.
 The same object is the result's `structuredContent` and its one text block (JSON). `citations`
 lists every filing the answer cites (accession number, form, filed date, section, period, company,
 EDGAR link), found where the Query API puts them, at most 100 (`results.py`'s docstring has the
-rule). `about` appears on tools that return filing text or the user's own writing.
+rule); a figure read from a foreign filer's 6-K results release (its citation's `release`, Query
+API migration 165) is cited at the release's section. `about` appears on tools that return filing
+text or the user's own writing.
 
 ## Safety
 

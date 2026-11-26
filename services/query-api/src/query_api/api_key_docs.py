@@ -99,7 +99,9 @@ ROUTE_DOCS: dict[tuple[str, str], tuple[str, str]] = {
         "Filing recap",
         "A 10-Q's or 10-K's figures against the prior quarter and the same quarter a year earlier, "
         "each cited, and the one-time items its MD&A mentions where you can read filings. "
-        "`metrics` chooses which figures."),
+        "`metrics` chooses which figures. A foreign filer's 6-K recaps the quarter its results "
+        "release reports (`period_end` names it); a figure read from the release's own table "
+        "cites the table and row under `release`."),
     ("GET", "/v1/companies/{company_id}/data-notes"): (
         "Data notes",
         "Notes on one company's figures (gaps, overlapping quarters, restatements, quarters "

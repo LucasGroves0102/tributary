@@ -47,6 +47,7 @@ import { onGridKey } from "../components/ledgerGrid";
 import { useSourceCard, type SourceInfo } from "../components/SourceCard";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
+import { releaseCard } from "./sources";
 import { useLoad, type Load } from "./useLoad";
 import { ResultsPending } from "./ResultsPending";
 
@@ -81,16 +82,19 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
  * focus) is the filing on EDGAR. Only ids of the right shape make a reader link. */
 export function cellLinks(cell: TableCell, companyId: string): { reader: string | null; edgar: string | null } {
   const s = cell.source;
+  // a figure read from a results release (165) opens the release, not the statements
   const reader = s && CIK.test(companyId) && ACCESSION.test(s.accessionNo)
-    ? href({ view: "filing", companyId, accessionNo: s.accessionNo, section: statementSection(s.form) })
+    ? href({ view: "filing", companyId, accessionNo: s.accessionNo, section: s.release?.section ?? statementSection(s.form) })
     : null;
   return { reader, edgar: cell.url?.startsWith("https://www.sec.gov/") ? cell.url : null };
 }
 
 /** A table figure's mark (§5.1): ✓ when its filing prints it as shown; d when derived (a fiscal Q4, a
- * `derived:` tag, a per-share figure split-adjusted from the filing's own). From the API's facts only. */
-export function cellMark(cell: TableCell): "ok" | "d" {
-  return cell.derived || cell.adjusted || !!cell.source?.tag?.startsWith("derived:") ? "d" : "ok";
+ * `derived:` tag, a per-share figure split-adjusted from the filing's own); none for a figure read from a
+ * results release's table (165: its card says "from the press release"). From the API's facts only. */
+export function cellMark(cell: TableCell): "ok" | "d" | null {
+  if (cell.derived || cell.adjusted || !!cell.source?.tag?.startsWith("derived:")) return "d";
+  return cell.source?.release ? null : "ok";
 }
 
 /** What a table figure's card says: the figure as Tributary holds it, its mark, its filing and where in
@@ -100,9 +104,16 @@ function cellCard(cell: TableCell, row: string, column: { label: string; sub: st
   const mark = cellMark(cell);
   const n = Number(cell.raw);
   const exact = cell.raw !== "" && Number.isFinite(n) && /^-?([$€£¥₹₩]|CN¥|[A-Z]{3} )[\d,.]+[TBMK]?$/.test(cell.text.replace(/^\(|\)$/g, ""));
+  const title = `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`;
+  const value = exact ? exactAmount(n, currency) : paren(cell.text);
+  const s = cell.source;
+  if (s?.release && mark === null) {
+    return { title, value, ...releaseCard(s.release, { accession_no: s.accessionNo, form: s.form, filed: s.filed }, companyId),
+      note: [note, cell.restated].filter(Boolean).join(" ") || undefined, edgar };
+  }
   return {
-    title: `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`,
-    value: exact ? exactAmount(n, currency) : paren(cell.text),
+    title,
+    value,
     mark,
     ...(mark === "d" ? { how: cell.adjusted ? "Derived: the filing's own figure, split-adjusted to today's share basis. Shown in italic."
       : "Derived: worked out from the filings, not printed in one as shown (a fiscal Q4 is the 10-K's year less its three 10-Qs). Shown in italic." } : {}),

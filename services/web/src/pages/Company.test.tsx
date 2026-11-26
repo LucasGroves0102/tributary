@@ -9,7 +9,7 @@ import { ACC, entry, fin, NVDA, nvdaRow, TESLA, TSLA } from "../fixtures";
 import type { CompanyTab } from "../route";
 import { ScopeContext, type Scope } from "../scope";
 import { clearNewest } from "../thesis/useRevisit";
-import type { ScreenerRow } from "../types";
+import type { ReleaseCell, ScreenerRow } from "../types";
 import type { Saved } from "../workspaces/useSaved";
 import { Company } from "./Company";
 
@@ -342,14 +342,81 @@ it("overview: a 20-F filer's sections say it files 20-Fs and 6-Ks, and ask for n
   const f20 = { period_end: "2025-12-31", accession_no: "0001977102-26-000004", form: "6-K", filed: "2026-02-12" };
   rowFor = () => nvdaRow({ ...entry({ company_id: BIRK, name: "Birkenstock Holding", tickers: ["BIRK"] }), access: ["filings", "financials"],
     sources: { revenue_ttm: { ...f20, form: "20-F" }, revenue_q: f20, cash_q: f20, eps_diluted_q: f20, revenue_growth_ttm: f20 } });
+  // its latest quarter is a 6-K's: a Query API one release older recaps none (its 422), so the panel says why as before
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => (new URL(url, "http://x").pathname.endsWith("/recap")
+    ? Response.json({ detail: "recaps are for 10-K and 10-Q filings" }, { status: 422 }) : respond(url))));
   await render("overview", BIRK);
   const folio = (name: string) => [...container.querySelectorAll(".folio")].find((f) => f.querySelector(".rubric")?.textContent?.startsWith(name));
   expect(folio("Latest quarter")?.textContent).toContain("Birkenstock Holding files as a foreign private issuer: annual reports on Form 20-F and interim reports on Form 6-K");
   expect(folio("Latest quarter")?.textContent).not.toContain("No 10-Q or 10-K values");
   expect(folio("Since the last report")?.textContent).toContain("current reports on Form 6-K, not 8-Ks");
   expect(folio("Business")?.textContent).toContain("describes its business in its 20-F annual report");
-  // no 8-K list, no recap and no 10-K Item 1 asked for a company that files none
-  expect(paths().some((u) => u.pathname.endsWith("/events") || u.pathname.includes("/recap") || u.pathname.includes("/sections"))).toBe(false);
+  // no 8-K list and no 10-K Item 1 asked for a company that files none; the 6-K's quarter, once
+  expect(paths().some((u) => u.pathname.endsWith("/events") || u.pathname.includes("/sections"))).toBe(false);
+  expect(paths().filter((u) => u.pathname.includes("/recap")).map((u) => u.pathname + u.search)).toEqual([`/api/query/v1/filings/${f20.accession_no}/recap`]);
+});
+
+it("overview: a foreign filer's quarter read from its 6-K results release, in its currency, without the tick (165)", async () => {
+  const TSMC = "0001046179";
+  const SIX_K = "0001046179-26-000726";
+  const s6k = { period_end: "2026-09-30", accession_no: SIX_K, form: "6-K", filed: "2026-10-15" };
+  rowFor = () => nvdaRow({ ...entry({ company_id: TSMC, name: "Taiwan Semiconductor", tickers: ["TSM"] }), access: ["filings", "financials"],
+    sources: { revenue_ttm: s6k, revenue_q: s6k, revenue_growth_ttm: s6k, cash_q: { ...s6k, form: "20-F", period_end: "2025-12-31" } } });
+  const cite = (acc: string, form: string, release?: ReleaseCell) => ({ accession_no: acc, form, filed: form === "20-F" ? "2026-04-16" : "2026-10-15",
+    xbrl_tag: release ? "release:EX-99.1/0/1/1" : "ifrs-full:Revenue", source_accessions: [acc], filing_url: null, ...(release ? { release } : {}) });
+  const cell = { section: "EX-99.1", table: 0, row: 1, column: 1 };
+  const value = (v: string, end: string, fiscal: string, citation: object, over = {}) => ({ value: v, period_start: null, period_end: end, fiscal_period: fiscal,
+    calendar_period: null, value_source: "reported", citation, freshness: { filed: "2026-10-15", ingested_at: "" }, ...over });
+  const RELEASE_RECAP = { ...RECAP, accession_no: SIX_K, company_id: TSMC, form: "6-K", filed: "2026-10-15", period_end: "2026-09-30", flags: [],
+    metrics: [{ metric: "revenue", span: "quarter", unit: "TWD",
+      current: value("1494243000000", "2026-09-30", "FY2026 Q3", cite(SIX_K, "6-K", cell)),
+      prior_quarter: value("1270400000000", "2026-06-30", "FY2026 Q2", cite("0001046179-26-000451", "6-K", { ...cell, table: 2 }), { change: "223843000000", pct_change: "0.176199" }),
+      year_ago: value("759690000000", "2025-09-30", "FY2025 Q3", cite("0001046179-25-000300", "6-K"), { change: "734553000000", pct_change: "0.966913" }) }] };
+  // the twelve months: three quarters from the releases, the fiscal Q4 the 20-F's year less nine months
+  const q = (end: string, v: string, fiscal: string, citation: ReturnType<typeof cite>, over = {}) => fin("revenue", end, v, fiscal, { unit: "TWD", citation, ...over });
+  const quarters = [
+    q("2025-12-31", "868460000000", "FY2025 Q4", cite("0001046179-26-000210", "20-F"), { value_source: "derived" }),
+    q("2026-03-31", "1134100000000", "FY2026 Q1", cite("0001046179-26-000199", "6-K", cell)),
+    q("2026-06-30", "1270400000000", "FY2026 Q2", cite("0001046179-26-000451", "6-K", cell)),
+    q("2026-09-30", "1494243000000", "FY2026 Q3", cite(SIX_K, "6-K", cell)),
+  ];
+  const ttm = q("2026-09-30", "4767203000000", "FY2026 Q3", cite(SIX_K, "6-K"), {
+    value_source: "derived", inputs: { quarters: quarters.map((r) => ({ period_end: r.period_end, value: r.value, accession_no: r.citation.accession_no })) } });
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    const u = new URL(url, "http://x");
+    if (u.pathname.endsWith(`/filings/${SIX_K}/recap`)) return Response.json(RELEASE_RECAP);
+    if (u.pathname.endsWith("/financials")) return Response.json({ as_of: "", currency: "TWD", rows: u.searchParams.get("view") === "ttm" ? [ttm] : quarters });
+    return respond(url);
+  }));
+  await render("overview", TSMC);
+  const folio = (name: string) => [...container.querySelectorAll(".folio")].find((f) => f.querySelector(".rubric")?.textContent?.startsWith(name))!;
+  // the latest quarter: the 6-K's, its release figures in New Taiwan dollars, the foot saying why there is no tick
+  const latest = folio("Latest quarter");
+  expect(latest.textContent).toContain("6-K filed Oct 15, 2026");
+  expect(latest.textContent).not.toContain("no quarterly recap here");
+  expect(latest.querySelector("th .src")?.textContent).toBe("6-K Oct 15, 2026");
+  expect(latest.querySelector("tbody tr")?.textContent).toBe("RevenueTWD 1.49TTWD 1.27T+17.6%TWD 759.7B+96.7%");
+  expect(latest.querySelector(".foot")?.textContent).toContain("A 6-K's figures are read from its results release's own tables");
+  const card = (await cardOf(latest.querySelector("td[data-cell]")))!;
+  expect(card.querySelector(".mk-ok")).toBeNull();
+  expect(card.querySelector(".sc-agree")?.textContent).toBe("from the press release");
+  expect(card.textContent).toContain("TWD 1,494,243 million");
+  expect(card.textContent).toContain("EX-99.1, table 1, row 2");
+  expect(card.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${TSMC}/${SIX_K}/EX-99.1`);
+  await click(latest.querySelector("td[data-cell]"));
+  // the year-ago quarter is a 6-K's own XBRL: it keeps the tick
+  const ago = (await cardOf(latest.querySelectorAll("td[data-cell]")[2]))!;
+  expect(ago.querySelector(".mk-ok")).not.toBeNull();
+  await click(latest.querySelectorAll("td[data-cell]")[2]);
+  // the footing: release quarters unmarked, the fiscal Q4 derived from the 20-F, both said on the legend's line
+  const terms = [...container.querySelectorAll(".footing .term:not(.tot)")];
+  expect(terms.map((t) => [t.querySelector(".v")?.textContent, !!t.querySelector(".mk")])).toEqual([
+    ["0.87", true], ["1.13", false], ["1.27", false], ["1.49", false]]);
+  expect(terms[0]!.querySelector(".mk-d")).not.toBeNull();
+  const legend = $(".ov-hero .mk-legend")!.textContent!;
+  expect(legend).toContain("derived: the 20-F's year less its first three quarters");
+  expect(legend).toContain("no mark: read from the press release's table");
+  expect($(".qbars-key")?.textContent).toContain("Fiscal Q4, derived from the 20-F");
 });
 
 it("overview: a once-a-year filer's revenue chart says why it has no quarters (Riley, test 10, finding 28)", async () => {
