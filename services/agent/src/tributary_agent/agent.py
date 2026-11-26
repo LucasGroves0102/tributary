@@ -340,6 +340,9 @@ def _collect_citations(content: str, into: dict[str, dict]) -> None:
                 prev = into.get(acc, {})
                 sections = list(prev.get("sections", []))
                 key = node.get("section_key")
+                if key is None and isinstance(node.get("release"), dict):
+                    # a figure read from a 6-K results release's table (165): that section
+                    key = node["release"].get("section")
                 if isinstance(key, str) and SECTION_KEY.fullmatch(key) and key not in sections:
                     sections.append(key)
                 into[acc] = {"accession_no": acc, "form": node["form"],

@@ -41,7 +41,11 @@ Statements; batches 2 and 3 (`ui-overhaul-2`) the rest, page by page.
   `value_source`, a statement cell's from `Tables.tsx` `cellMark` (a `derived:` tag or a split-adjusted
   per-share figure reads as derived). `components/Seal.tsx` draws the logo disk and the tick once
   (`SealSprite`); `SealLink` (screens not yet on source cards) is a tick that opens the filing. Tables put no
-  marks in cells: each column names its filing in its header.
+  marks in cells: each column names its filing in its header. A foreign filer's quarter read from its 6-K
+  results release's table (Query API migration 165: the citation's `release`) has no mark, since the API
+  says of no such figure that it agrees to the filing: its card says "from the press release" in the
+  mark's place, names the table and row, and opens the 6-K at the release (`company/sources.ts`
+  `releaseCard`; the statements', recap's, footing's and bars' cards alike).
 - **Source card** (`components/SourceCard.tsx`): a figure is a button (or a ledger cell) that opens a non-modal
   `role=dialog` card, 368px: what and which period, the figure as Tributary holds it (`format.ts` `exactAmount`:
   "$96,221 million", never rounded), its mark in words, how it is made, its filing and where in it, and the
@@ -472,7 +476,8 @@ The Overview (`company/Overview.tsx`, spec §6), lead column then side column, s
   its mark (Σ for four quarters from a 10-Q, ✓ for the 10-K's year) and its change on the twelve months
   before, green or rust. Under it **the footing** (spec §5.3): the twelve months' quarters exactly as the API
   lists them (`/financials?view=ttm` `inputs.quarters`), each a 44px figure button with its own mark from the
-  quarter's `/financials` row (✓ reported at that value, *d* derived) and its quarter under it, then "=" and
+  quarter's `/financials` row (✓ reported at that value, *d* derived, none for a quarter read from a 6-K
+  results release, said once on the legend's line) and its quarter under it, then "=" and
   the API's twelve-month total with Σ and the unit (`format.ts` `ledgerUnit`, "USD billions"); a term outlines
   its bar. The terms are rounded to two decimals, so they can differ from the total by a cent of a billion:
   the total is never re-added here. Then the legend of the marks used, and the year as a sentence
@@ -484,7 +489,10 @@ The Overview (`company/Overview.tsx`, spec §6), lead column then side column, s
   on the legend line; a balance a later 8-K may have changed keeps its figure with "*" and a line under it.
 - **Latest quarter**: the recap as a ledger (`company/RecapTable.tsx`): each column its quarter, period end
   and filing; each figure opens its card; QoQ and YoY green or rust by direction, a balance's uncoloured; a
-  change from a zero or negative base reads n/m with the API's reason.
+  change from a zero or negative base reads n/m with the API's reason. Amounts are in the metric's own
+  currency. When the latest quarter is a foreign filer's 6-K (165: read from its results release, or its
+  own XBRL), it is that 6-K's recap, and the foot says once why a release figure has no tick; a 6-K with
+  no quarter to show (or an older API's 422) keeps the foreign-issuer note.
 - **Revenue by quarter** (side): eight bars at their value, the latest in ink, history a light fill with a
   3:1 edge, a derived fiscal Q4 hatched, gridlines at round values, the first and last labelled; "View as
   table" lists the same figures with their cards. It is today's, as the other sections past the key figures.
@@ -493,7 +501,9 @@ The Overview (`company/Overview.tsx`, spec §6), lead column then side column, s
 - Then the business (10-K Item 1's opening, in the serif), backlog and orders, and the user's own data.
 
 A foreign private issuer (`foreignReport`) files no 10-Q, 10-K or 8-K: those sections say so (it files 6-Ks,
-annual reports on 20-F or 40-F) and ask for nothing. When the earnings answer's newest quarter has a release
+annual reports on 20-F or 40-F) and ask for nothing, except its latest quarter when a 6-K gives one. Its
+twelve months foot like a US filer's when they are four quarters (the releases' and a fiscal Q4 the 20-F's
+year less its first three quarters, so worded on the legend and the bars' key). When the earnings answer's newest quarter has a release
 and no report (`events.ts` `resultsPending`), one line under the ledger (and above the statement) says when
 its results were announced and that the figures arrive with the 10-Q or 10-K. Not built from the spec yet:
 the release's outlook quoted in the side column and peers as a dot plot (batch 2).
@@ -507,7 +517,8 @@ the range for Quarterly and TTM, off for Annual's ten years; Fiscal or Calendar;
 as filed), Export CSV at the right. The table is a ledger (`MetricTableView`): the first header cell names
 the statement and its currency, each column its period, end and filing ("10-Q Aug 26, 2026"; "10-K d" for a
 derived fiscal Q4, italic); each row keeps one unit (`moneyRow`); every figure opens its card (the exact
-figure, ✓ or d, the filing and where in it, the reader and EDGAR, a callout's sentence or a restatement); one
+figure, ✓ or d, or "from the press release" with the release's table and row, the filing and where in it,
+the reader and EDGAR, a callout's sentence or a restatement); one
 tab stop, arrows inside, Enter opens a card. Segments' tables share the cell. Filings opens on Reports (10-K,
 10-Q, 8-K), headed by fiscal year with gold's rule (`data.ts` `fiscalYear`, `filingHeadings`).
 
@@ -609,7 +620,10 @@ docstring; the Query API's `/earnings` and `/events`, rules in its README, "Earn
   items, Read the release in the reader, EDGAR), beside the quarter's **reported figures** from its
   10-Q/10-K (the recap route: revenue, operating and net income, EPS, free cash flow, the three
   margins, against the same quarter a year ago, n/m readings from the API; "not filed yet" or "not
-  in the figures yet" when that's the case); the **outlook stated in the release** (the blocks under
+  in the figures yet" when that's the case; a foreign filer's quarter with no 20-F behind it, the
+  figures gold read from its 6-K results release, asked with the quarter's end since its first 6-K
+  may not be the one they cite, said to carry no tick, else "its figures are by fiscal year" as
+  before); the **outlook stated in the release** (the blocks under
   its own Outlook or Guidance headings, lines as written, each with Read it in the release at its
   offset); **management's adjustments** (its reconciliation tables, folded, and its notes that state
   a dollar amount). A block that quotes one of the release's own tables shows it as a table
@@ -1743,3 +1757,5 @@ screens: `/v1/watches` and `/v1/alerts/screens` answering 404 (or a 503 without 
 show no watch and no screen alerts (`orNullOn404`); nothing else is asked differently. Connected
 apps: `/v1/oauth/connections` answering 404 hides Settings' section (`orNullOn404`); the consent
 screen is reached only from the newer API's `/oauth/authorize`, so it never meets an older one.
+Release quarters (165): an older API refuses a 6-K's recap (422), which `api.ts` `releaseRecap` reads
+as none: the Overview's Latest quarter and the Earnings figures say what they said before.

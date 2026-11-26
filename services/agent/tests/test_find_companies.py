@@ -227,6 +227,46 @@ def test_a_metric_without_figures_is_said_plainly_when_the_company_has_others():
     assert "value" not in json.dumps(body["no_figures"])  # names, never another figure
 
 
+def test_a_row_read_from_a_results_release_is_said_to_be_the_press_release():
+    """165: a foreign filer's quarter read from its 6-K release's table cites `release`; the
+    answer says what that is (never XBRL), and an answer without one stays as it was."""
+    release = {"section": "EX-99.1", "table": 0, "row": 1, "column": 1}
+
+    def respond(request):
+        return httpx.Response(200, json={"company_id": "0001046179", "view": "quarter", "rows": [
+            {"metric": "revenue", "period_end": "2026-09-30", "value": "1494243000000",
+             "unit": "TWD", "citation": {"accession_no": "0001046179-26-000726", "form": "6-K",
+                                         "filed": "2026-10-15",
+                                         "xbrl_tag": "release:EX-99.1/0/1/1",
+                                         "release": release}}]})
+    handler, _ = handler_for(financials=respond)
+    content, is_error = query_api(handler).run("get_financials", {"company_id": "0001046179",
+                                                                  "metrics": ["revenue"]})
+    body = json.loads(content)
+    assert not is_error and body["rows"][0]["citation"]["release"] == release
+    assert body["from_press_release"]["note"].startswith(
+        "Rows whose citation has `release` were read from the company's 6-K results release")
+    handler, _ = handler_for(financials=financials_answer(lambda asked: asked))
+    content, _ = query_api(handler).run("get_financials", {"company_id": "0002070000",
+                                                          "metrics": ["revenue"]})
+    assert "from_press_release" not in json.loads(content)
+
+
+def test_a_release_figures_citation_names_its_section():
+    """The assistant's sources list opens a release figure's 6-K at its press release."""
+    from tributary_agent.agent import _collect_citations
+    found: dict[str, dict] = {}
+    _collect_citations(json.dumps({"company_id": "0001046179", "rows": [
+        {"metric": "revenue", "citation": {"accession_no": "0001046179-26-000726", "form": "6-K",
+                                           "filed": "2026-10-15", "release": {
+                                               "section": "EX-99.1", "table": 0, "row": 1,
+                                               "column": 1}}},
+        {"metric": "revenue", "citation": {"accession_no": "0001046179-26-000210",
+                                           "form": "20-F", "filed": "2026-04-16"}}]}), found)
+    assert found["0001046179-26-000726"]["sections"] == ["EX-99.1"]
+    assert found["0001046179-26-000210"]["sections"] == []
+
+
 def test_figures_for_everything_asked_or_nothing_at_all_change_nothing():
     handler, seen = handler_for(financials=financials_answer(lambda asked: asked))
     content, _ = query_api(handler).run("get_financials", {"company_id": "0002070000",

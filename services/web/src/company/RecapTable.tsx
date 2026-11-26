@@ -3,8 +3,9 @@ import { useSourceCard, type SourceInfo } from "../components/SourceCard";
 import { TableScroll } from "../components/TableScroll";
 import { day, exactAmount, paren } from "../format";
 import type { Recap, RecapValue } from "../types";
+import { releaseOf } from "./components";
 import { recapRows, statementPlace, type RecapDelta, type RecapHead, type RecapRow } from "./data";
-import { readerAt } from "./sources";
+import { readerAt, releaseCard } from "./sources";
 
 /** A 10-Q/10-K's quarter against the prior and the year-ago quarter (the recap route), as a ledger
  * (.interface-design/system.md §4): each column names its quarter, its end and the filing it is printed
@@ -12,6 +13,8 @@ import { readerAt } from "./sources";
  * come from the API (migration 035, `recapRows`), and so does a change's n/m from a zero or negative base
  * (query_api shapes.percent_change). A change keeps its sign, in green or rust for its direction, except
  * a balance's (up is not good or bad by itself: Riley, test 10, finding 20, debt +333% read green).
+ * A foreign filer's quarter read from its 6-K results release's table (165) carries no tick: its card
+ * says "from the press release" with the table and row, and opens the release (sources.ts releaseCard).
  * `yearAgo`: the quarter and the same quarter a year earlier only (the Earnings view, beside the release). */
 export function RecapTable({ data, only, label, yearAgo = false, companyId = "" }: {
   data: Recap; only?: readonly string[]; label: string; yearAgo?: boolean; companyId?: string;
@@ -71,15 +74,22 @@ function Change({ d, colour }: { d: RecapDelta | null; colour: boolean }) {
 function recapCard(v: RecapValue, label: string, unit: string, period: string, companyId: string): SourceInfo {
   const n = Number(v.value);
   const derived = v.value_source === "derived";
+  const title = `${label} · ${period}, the quarter to ${day(v.period_end, true)}`;
+  const value = Number.isFinite(n) ? exactAmount(n, unit) : String(v.value);
+  const note = v.not_meaningful ? { note: `Not meaningful: ${v.not_meaningful}.` } : {};
+  const edgar = v.citation.filing_url?.startsWith("https://www.sec.gov/") ? v.citation.filing_url : null;
+  // a figure read from a 6-K results release's table (165): its own words, never the tick
+  const release = releaseOf(v);
+  if (release) return { title, value, ...releaseCard(release, v.citation, companyId), ...note, edgar };
   return {
-    title: `${label} · ${period}, the quarter to ${day(v.period_end, true)}`,
-    value: Number.isFinite(n) ? exactAmount(n, unit) : String(v.value),
+    title,
+    value,
     mark: v.not_meaningful ? null : derived ? "d" : "ok",
     ...(derived ? { how: "Derived: worked out from the filings, not printed in one. Shown in italic." } : {}),
-    ...(v.not_meaningful ? { note: `Not meaningful: ${v.not_meaningful}.` } : {}),
+    ...note,
     where: [`${v.citation.form} filed ${day(v.citation.filed, true)}`, statementPlace(v.citation.form)],
     reader: companyId ? readerAt(companyId, v.citation) : null,
-    edgar: v.citation.filing_url?.startsWith("https://www.sec.gov/") ? v.citation.filing_url : null,
+    edgar,
   };
 }
 

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 
-import { companyEvents, financialsView, historyKept, latestSection, perShare, recap as fetchRecap } from "../api";
+import { companyEvents, financialsView, historyKept, latestSection, perShare, recap as fetchRecap, releaseRecap } from "../api";
 import { excerptBlocks } from "../reader/text";
 import { Folio, TodaysView } from "../components/Folio";
 import { Mark, MarkLegend, type MarkKind } from "../components/Mark";
@@ -10,10 +10,11 @@ import { ErrorPanel, sentence, TextShape } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { currencyOf, day, exactAmount, ledgerUnit, paren } from "../format";
 import { href } from "../route";
-import type { EventsResponse, FinancialRow, ScreenerRow, Tier, ValueSource } from "../types";
+import type { EventsResponse, FinancialRow, Recap as RecapAnswer, ScreenerRow, Tier, ValueSource } from "../types";
+import { releaseOf } from "./components";
 import {
-  BANK_NOT_SHOWN, epsStat, financeArmNote, foreignReport, header, isBankRow, keyStats, longDay, recapAccession, shortQuarter, statementSection,
-  statMark, yearStory,
+  BANK_NOT_SHOWN, epsStat, financeArmNote, foreignReport, header, isBankRow, keyStats, longDay, RECAP_COLUMN, recapAccession, recapFromRelease, recapRows,
+  shortQuarter, statementSection, statMark, yearStory,
   type KeyStat, type YearStory,
 } from "./data";
 import { EventsCard } from "./Events";
@@ -97,7 +98,8 @@ export function Overview({
     () => financialsView(token, companyId, BARS, ["revenue"], "quarter").then((f) => f.rows));
   const then = useLoad(canFin && asOf && !notKept ? `${companyId}|quarters|${asOf}` : null,
     () => financialsView(token, companyId, BARS, ["revenue"], "quarter", "fiscal", false, false, asOf).then((f) => f.rows));
-  const ttm = useLoad(canFin && !foreign && !notKept ? `${companyId}|ttm|${asOf ?? ""}` : null,
+  // a foreign filer's twelve months too: four quarters from its 6-K results releases (165) are a sum to foot
+  const ttm = useLoad(canFin && !notKept ? `${companyId}|ttm|${asOf ?? ""}` : null,
     () => financialsView(token, companyId, 1, ["revenue"], "ttm", "fiscal", false, false, asOf).then((f) => f.rows.find((r) => r.metric === "revenue") ?? null));
   // no 8-K since the last report says results are out (or none read yet): the earnings answer may
   // still have a release with no 10-Q or 10-K, said under the figures (once the 8-Ks are settled)
@@ -118,7 +120,7 @@ export function Overview({
         <Figures companyId={companyId} name={name} row={row} canFin={canFin} stats={stats} asOf={asOf} notKept={notKept} pending={pending} />
         <TodaysView.Provider value={asOf ?? null}>
           <Recap token={token} companyId={companyId} name={name} accession={canFin ? recapAccession(row) : null} canFin={canFin} foreign={foreign}
-            asOf={notKept ? asOf : undefined} />
+            sixK={/^6-K/.test(row.sources[RECAP_COLUMN]?.form ?? "")} asOf={notKept ? asOf : undefined} />
         </TodaysView.Provider>
       </div>
       <div className="ov-side">
@@ -171,7 +173,12 @@ function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
   const twelve = ttm?.state === "ok" ? ttm.data : null;
   const footing = mark === "sum" && twelve && Array.isArray(twelve.inputs?.quarters) && (twelve.inputs!.quarters as unknown[]).length > 1 ? twelve : null;
   const loadingFooting = mark === "sum" && (!ttm || ttm.state === "loading" || !quarters);
-  const termMarks = footing && quarters ? footingTerms(footing, quarters).map((t) => t.mark).filter((m): m is MarkKind => !!m) : [];
+  const terms = footing && quarters ? footingTerms(footing, quarters) : [];
+  const termMarks = terms.map((t) => t.mark).filter((m): m is MarkKind => !!m);
+  // a foreign filer's (165): its fiscal Q4 is the 20-F's year less three quarters its 6-K releases gave,
+  // each read from the release's table with no tick, said on the legend's line
+  const yearForm = terms.find((t) => t.mark === "d" && /^(20-F|40-F)/.test(t.form))?.form.slice(0, 4);
+  const released = terms.some((t) => t.release);
   const g = growth && growth.value !== null && (!growth.status || growth.status === "other_currency") ? growth : null;
   return (
     <section className="ov-hero" aria-label={`${rev.label}, ${annual ? "the year" : "twelve months"}`}>
@@ -196,7 +203,9 @@ function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
           ))}
         </div>
       ) : null}
-      <MarkLegend kinds={[...(mark ? [mark] : []), ...termMarks]} />
+      <MarkLegend kinds={[...(mark ? [mark] : []), ...termMarks]}
+        {...(yearForm ? { derivedWords: `derived: the ${yearForm}'s year less its first three quarters` } : {})}
+        {...(released ? { extra: ["no mark: read from the press release's table"] } : {})} />
       {story && <YearSentence story={story} name={name} />}
     </section>
   );
@@ -211,11 +220,16 @@ interface Term {
   text: string;
   label: string;
   mark: MarkKind | null;
+  /** the quarter's filing's form ("" when /financials has no row for it) */
+  form: string;
+  /** read from a 6-K results release's table (165): no mark, its card says so */
+  release: boolean;
   info: () => SourceInfo;
 }
 
 /** The twelve months' quarters as the API gives them (the TTM row's `inputs.quarters`), each with its
- * own filing from /financials: ✓ when that quarter is reported at the same value, d when derived. */
+ * own filing from /financials: ✓ when that quarter is reported at the same value, d when derived, none
+ * when read from a results release's table (165). */
 function footingTerms(ttm: FinancialRow, quarters: FinancialRow[]): Term[] {
   const qs = (ttm.inputs?.quarters ?? []) as { period_end?: string; value?: number | string; accession_no?: string }[];
   const byEnd = new Map(quarters.map((r) => [r.period_end, r]));
@@ -231,6 +245,8 @@ function footingTerms(ttm: FinancialRow, quarters: FinancialRow[]): Term[] {
       text: unit.text(value),
       label: shortQuarter(r?.fiscal_period) ?? day(q.period_end),
       mark: same ? rowMark(r!) : null,
+      form: r?.citation.form ?? "",
+      release: !!same && !!releaseOf(r!),
       info: () => (same ? rowCard(r!, "Revenue", "") : {
         title: `Revenue · three months to ${day(q.period_end!, true)}`,
         value: exactAmount(value, ttm.unit),
@@ -454,18 +470,25 @@ function LedgerRow({ s, common, companyId, armNote, bank }: { s: Stat; common: s
   );
 }
 
-function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
+function Recap({ token, companyId, name, accession, sixK, canFin, foreign, asOf }: {
   token: string; companyId: string; name: string; accession: string | null; canFin: boolean;
+  /** the accession is a foreign filer's 6-K (165): the quarter its results release reports */
+  sixK: boolean;
   /** foreignReport: a 20-F/40-F filer, which files no 10-Q or 10-K */
   foreign: string | null;
   /** as of this past day with no history kept yet: which report was the latest then isn't known here */
   asOf?: string;
 }) {
-  const load = useLoad(accession, () => fetchRecap(token, accession!));
+  const load = useLoad(accession, (): Promise<RecapAnswer | null> => (sixK ? releaseRecap(token, accession!) : fetchRecap(token, accession!)));
   const data = load?.state === "ok" ? load.data : null;
+  // a 6-K with no quarter to show (an older API recaps none, or no figure cites it): said as before
+  const quarterless = sixK && load?.state === "ok" && (!data || !recapRows(data).rows.length);
+  const shown = data && !quarterless ? data : null;
+  // figures read from a results release's tables carry no tick (system.md §5.1): the foot says why once
+  const fromRelease = !!shown && recapFromRelease(shown);
   return (
-    <Folio name="Latest quarter" line={data ? `${data.form} filed ${day(data.filed, true)}` : foreign ? `Annual reports on Form ${foreign}` : "The latest 10-Q or 10-K"}
-      aside={foreign ? undefined : <a href={href({ view: "company", companyId, tab: "statements" })}>Statements →</a>}>
+    <Folio name="Latest quarter" line={shown ? `${shown.form} filed ${day(shown.filed, true)}` : foreign ? `Annual reports on Form ${foreign}` : "The latest 10-Q or 10-K"}
+      aside={foreign && !shown ? undefined : <a href={href({ view: "company", companyId, tab: "statements" })}>Statements →</a>}>
       {!canFin ? (
         <p className="empty locked">The recap needs financials for {name}.</p>
       ) : !accession && asOf ? (
@@ -473,13 +496,13 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
           Which 10-Q or 10-K was {name}'s latest on {day(asOf, true)} is read from its history of figures, which isn't built yet.
           Its Filings tab lists every report with its date.
         </p>
-      ) : !accession && foreign ? (
+      ) : (!accession || quarterless) && foreign ? (
         <p className="empty foreign-note">
           {name} files as a foreign private issuer: annual reports on Form {foreign} and interim reports on Form 6-K, not 10-Qs or
           10-Ks, so there is no quarterly recap here. The figures above come from those reports, in their own currency; the Filings
           tab lists them.
         </p>
-      ) : !accession ? (
+      ) : !accession || quarterless ? (
         <p className="empty">No 10-Q or 10-K values for {name} yet. Its Filings tab lists what it has filed.</p>
       ) : (
         <Gate load={load} name={name} what="Financials" shape={<RecapShape />}>
@@ -505,6 +528,7 @@ function Recap({ token, companyId, name, accession, canFin, foreign, asOf }: {
                 {data!.flags_unavailable ? `${sentence(data!.flags_unavailable)} ` : ""}
                 Each column is the figures as its own filing printed them; a restated value cites the restating filing. Margins
                 change in basis points; a change in a balance is uncoloured.
+                {fromRelease && " A 6-K's figures are read from its results release's own tables (no XBRL covers those quarters), so they carry no tick; each card names the table and row."}
               </p>
             </>
           )}
@@ -599,6 +623,8 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
   const ceiling = step ? Math.ceil(top / step) * step : 1;
   const lines = step ? Array.from({ length: Math.round(ceiling / step) }, (_, i) => (i + 1) * step) : [];
   const toStatements = href({ view: "company", companyId, tab: "statements", ...(asOf ? { asOf } : {}) });
+  const derivedForm = bars.find((r) => r.value_source === "derived")?.citation.form;
+  const derivedFrom = derivedForm === undefined ? null : /^(20-F|40-F)/.test(derivedForm) ? derivedForm.slice(0, 4) : "10-K";
   return (
     <Folio name="Revenue by quarter" className="ov-bars"
       line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
@@ -653,7 +679,8 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
           <p className="qbars-key" aria-hidden="true">
             <span><i className="sw l" />Latest {bars.at(-1)?.citation.form}</span>
             <span><i className="sw" />As filed</span>
-            {bars.some((r) => r.value_source === "derived") && <span><i className="sw dv" />Fiscal Q4, derived from the 10-K</span>}
+            {/* a foreign filer's fiscal Q4 is its 20-F's or 40-F's year less its quarters (165) */}
+            {derivedFrom && <span><i className="sw dv" />Fiscal Q4, derived from the {derivedFrom}</span>}
           </p>
         </div>
       )}

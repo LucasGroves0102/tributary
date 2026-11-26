@@ -102,6 +102,14 @@ def test_citations_are_found_where_the_query_api_puts_them():
     assert total == 1
     assert cites == [{"accession_no": ACC, "form": "10-Q", "filed": "2026-08-27",
                       "period": "2026-07-27", "company_id": NVDA}]
+    # 165: a figure read from a 6-K results release's table is cited at the release's section
+    release, _ = citations_of({"company_id": NVDA, "rows": [
+        {"period_end": "2026-09-30", "citation": {
+            "accession_no": ACC, "form": "6-K", "filed": "2026-10-15",
+            "xbrl_tag": "release:EX-99.1/0/1/1",
+            "release": {"section": "EX-99.1", "table": 0, "row": 1, "column": 1}}}]})
+    assert release == [{"accession_no": ACC, "form": "6-K", "filed": "2026-10-15",
+                        "section_key": "EX-99.1", "period": "2026-09-30", "company_id": NVDA}]
     many = {"rows": [{"citation": {"accession_no": f"0000000001-26-{i:06d}", "form": "8-K"}}
                      for i in range(150)]}
     out = json.loads(result(many).content[0].text)  # type: ignore[union-attr]

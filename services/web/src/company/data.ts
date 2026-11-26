@@ -10,8 +10,8 @@ import { change, currencyOf, day, inWords, money, moneyRow, pct } from "../forma
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { memberTree, treeOrder } from "../chart/segments";
-import { RELEASE_TAG, releaseText } from "./components";
-import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
+import { RELEASE_TAG, releaseOf, releaseText } from "./components";
+import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ReleaseCell, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
 
@@ -414,10 +414,11 @@ export function foreignReport(row: ScreenerRow): string | null {
   return forms.includes("6-K") ? "20-F or 40-F" : null;
 }
 
-/** The 10-Q/10-K the latest quarter's values come from (recaps cover only those forms). */
+/** The filing the latest quarter's values come from, to recap: a 10-Q or 10-K, or a foreign filer's 6-K
+ * (165: a quarter read from its results release, or its own XBRL). A 20-F's or 40-F's year has none. */
 export function recapAccession(row: ScreenerRow): string | null {
   const src = row.sources[RECAP_COLUMN];
-  return src && /^10-[KQ]/.test(src.form) ? src.accession_no : null;
+  return src && /^(10-[KQ]|6-K)/.test(src.form) ? src.accession_no : null;
 }
 
 // --- statements and ratios -------------------------------------------------------------------
@@ -629,7 +630,7 @@ export interface TableCell {
   url: string | null;
   /** the filing the value comes from, opened in the reader (the value's own link); its filing date and XBRL
    * tag (a `derived:` tag reads as derived) */
-  source?: { accessionNo: string; form: string; filed?: string; tag?: string | null };
+  source?: { accessionNo: string; form: string; filed?: string; tag?: string | null; release?: ReleaseCell };
   /** per-share: the figure isn't the filing's own (split-adjusted from `as_filed`), so it is derived */
   adjusted?: boolean;
 }
@@ -905,7 +906,9 @@ export function metricTable(
               raw: sign < 0 ? negated(String(r.value)) : String(r.value),
               derived: r.value_source === "derived",
               url: r.citation.filing_url,
-              source: { accessionNo: r.citation.accession_no, form: r.citation.form, filed: r.citation.filed, tag: r.citation.xbrl_tag },
+              source: { accessionNo: r.citation.accession_no, form: r.citation.form, filed: r.citation.filed, tag: r.citation.xbrl_tag,
+                // 165: read from a 6-K results release's table (its card says so, no tick)
+                ...(releaseOf(r) ? { release: releaseOf(r)! } : {}) },
               ...(r.as_filed != null && Number(r.as_filed) !== Number(r.value) ? { adjusted: true } : {}),
               ...(opensIntoParts(r) ? { opens: true } : {}),
               ...(r.inputs && !("quarters" in r.inputs) ? { inputs: numericInputs(r.inputs) } : {}),
@@ -1163,6 +1166,12 @@ function src(v: RecapValue | null): string {
   return v ? `${v.fiscal_period ?? day(v.period_end, true)}: ${v.citation.form} filed ${day(v.citation.filed, true)}, ${v.citation.accession_no}` : "";
 }
 
+/** Whether a recap shows a figure read from a 6-K results release's table (165): those carry no tick,
+ * which the table's foot says once. */
+export function recapFromRelease(recap: Recap): boolean {
+  return recap.metrics.some((m) => [m.current, m.prior_quarter, m.year_ago].some((v) => !!v && !!releaseOf(v)));
+}
+
 /** Quarter values (TTM ones are for ratios the quarter lacks) vs the prior and year-ago
  * quarter; column labels from the values' fiscal periods. `only`: these metrics, in RECAP_LABELS
  * order (the Earnings view's income-statement lines). */
@@ -1189,9 +1198,11 @@ export function recapRows(recap: Recap, only?: readonly string[]): { labels: [st
     .sort((a, b) => order.indexOf(a.metric) - order.indexOf(b.metric))
     .map((m) => {
       const [label, kind] = RECAP_LABELS[m.metric]!;
+      // the metric's own currency (a 6-K's quarter is a foreign filer's, 165: never "$" for NT$)
+      const currency = currencyOf(m.unit);
       const show = (v: RecapValue | null) => {
         const n = v ? num(v.value) : null;
-        return n === null ? NO_DATA : v?.not_meaningful ? NOT_MEANINGFUL : fmt(kind, n);
+        return n === null ? NO_DATA : v?.not_meaningful ? NOT_MEANINGFUL : fmt(kind, n, currency);
       };
       const unusable = m.current?.not_meaningful;
       return {
@@ -1205,7 +1216,7 @@ export function recapRows(recap: Recap, only?: readonly string[]): { labels: [st
         qoq: unusable || m.prior_quarter?.not_meaningful ? null : delta(m.prior_quarter, m.unit),
         yearAgo: show(m.year_ago),
         yoy: unusable || m.year_ago?.not_meaningful ? null : delta(m.year_ago, m.unit),
-        title: [unusable ? `${label}: not meaningful, because ${unusable}. The figure on file: ${fmt(kind, num(m.current!.value)!)}.` : "",
+        title: [unusable ? `${label}: not meaningful, because ${unusable}. The figure on file: ${fmt(kind, num(m.current!.value)!, currency)}.` : "",
           src(m.current), src(m.prior_quarter), src(m.year_ago)].filter(Boolean).join("\n"),
       };
     });

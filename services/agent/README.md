@@ -37,7 +37,11 @@ industry names of `find_companies` from `GET /v1/sectors` (`SectorCatalog`, read
 an unknown name is a tool error naming the closest). For a company reporting in another currency
 it says so per row (`unit`) and on the answer (`currency`). When an asked-for metric has no
 figures but the company has others (a company before revenue), the answer says so in
-`no_figures` (the metrics, and a sentence naming the metrics it does have).
+`no_figures` (the metrics, and a sentence naming the metrics it does have). A foreign filer's
+quarter read from its 6-K results release's table (Query API migration 165: the row's
+`citation.release`) comes with `from_press_release`, a sentence saying it is the press release's,
+not XBRL; the answer's sources open that 6-K at the release's section. Neither appears in an
+answer without such a row, so the recorded suites replay unchanged.
 
 At the round limit (6 rounds of tool calls in chat, 12 in a report, 16 in a thesis check) one
 more call without tools answers from what was found and says first what it couldn't finish; the

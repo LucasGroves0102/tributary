@@ -1,13 +1,13 @@
 import { useId, useState } from "react";
 
-import { earnings, recap } from "../api";
+import { earnings, recap, releaseRecap } from "../api";
 import { PinButton } from "../analysis/Pin";
 import { quoteLines, quoteTable, type Passage } from "../analysis/project";
 import { NO_DATA } from "../blanks";
 import { day, sentenceCase } from "../format";
 import { href } from "../route";
 import type { EarningsQuarter, EarningsRelease, ReleasePassage } from "../types";
-import { recapRows } from "./data";
+import { recapFromRelease, recapRows } from "./data";
 import { firstQuarter, foreignForm, itemLabel, passageLines, quarterName } from "./events";
 import { RecapTable } from "./RecapTable";
 import { ReleaseParts } from "./ReleaseTable";
@@ -153,7 +153,7 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
             </div>
           )}
         </section>
-        <Figures token={token} name={name} q={q} canReadFinancials={canReadFinancials} />
+        <Figures token={token} companyId={companyId} name={name} q={q} canReadFinancials={canReadFinancials} />
       </div>
 
       <section className="card" aria-labelledby={`${id}-out`}>
@@ -241,27 +241,55 @@ function Block({ p, at, make, what }: { p: ReleasePassage; at: string | null; ma
   );
 }
 
-/** The quarter's reported figures from its 10-Q/10-K (gold, through the recap route), or why not. */
-function Figures({ token, name, q, canReadFinancials }: { token: string; name: string; q: EarningsQuarter; canReadFinancials: boolean }) {
+/** The quarter's reported figures from its 10-Q/10-K (gold, through the recap route), or why not. A
+ * foreign filer's quarter with no annual report behind it (165): the figures gold read from its 6-K
+ * results release's tables, through the same route (the quarter named, since the quarter's first 6-K
+ * may not be the one its figures cite); none there, or an older API, and it says so as before. */
+function Figures({ token, companyId, name, q, canReadFinancials }: {
+  token: string; companyId: string; name: string; q: EarningsQuarter; canReadFinancials: boolean;
+}) {
   const foreign = foreignForm(q.report?.form) || (!q.report && foreignForm(q.release?.form));
   const acc = q.report && canReadFinancials && !foreign ? q.report.accession_no : null;
   const load = useLoad(acc, () => recap(token, acc!));
   const data = load?.state === "ok" ? load.data : null;
   const empty = data ? recapRows(data, RELEASE_FIGURES).rows.every((r) => r.current === NO_DATA) : false;
+  const sixK = !q.report && q.release?.form === "6-K" && canReadFinancials ? q.release : null;
+  const rel = useLoad(sixK ? `${sixK.accession_no}|${q.period_end}` : null, () => releaseRecap(token, sixK!.accession_no, q.period_end));
+  const relData = rel?.state === "ok" && rel.data && recapRows(rel.data, RELEASE_FIGURES).rows.some((r) => r.current !== NO_DATA) ? rel.data : null;
+  const byYear = (
+    <p className="empty">
+      {name} files its annual report on {q.report?.form ?? "Form 20-F or 40-F"} and its results on 6-K, so its figures are by fiscal
+      year, in its own currency, on the Financials tab. For {q.report ? "the year" : "this period"}, the release's own tables are in
+      the reader.
+    </p>
+  );
   return (
     <section className="card">
       <div className="card-h">
         <h3>Reported figures</h3>
-        <span className="sub">{q.report ? `${q.report.form} filed ${day(q.report.filed, true)} · vs the same quarter a year ago` : "from the quarter's 10-Q or 10-K"}</span>
+        <span className="sub">
+          {q.report ? `${q.report.form} filed ${day(q.report.filed, true)} · vs the same quarter a year ago`
+            : relData ? `${relData.form} filed ${day(relData.filed, true)}, against the same quarter a year ago` : "from the quarter's 10-Q or 10-K"}
+        </span>
       </div>
       {!canReadFinancials ? (
         <p className="empty locked">The figures need financials for {name}, which your access doesn't include.</p>
+      ) : sixK ? (
+        <Gate load={rel} name={name} what="Financials">
+          {() => relData ? (
+            <>
+              <RecapTable data={relData} only={RELEASE_FIGURES} label="Reported figures" yearAgo companyId={companyId} />
+              <div className="foot">
+                {recapFromRelease(relData)
+                  ? "From the 6-K results release, read from its own tables where no XBRL covers the quarter, so those figures carry no " +
+                    "tick; each card names the table and row. As currently reported (hover a row for its filings)."
+                  : "From the 6-K, as currently reported (hover a row for its filings)."}
+              </div>
+            </>
+          ) : byYear}
+        </Gate>
       ) : foreign ? (
-        <p className="empty">
-          {name} files its annual report on {q.report?.form ?? "Form 20-F or 40-F"} and its results on 6-K, so its figures are by fiscal
-          year, in its own currency, on the Financials tab. For {q.report ? "the year" : "this period"}, the release's own tables are in
-          the reader.
-        </p>
+        byYear
       ) : !q.report ? (
         <p className="empty">
           The {q.estimated ? "10-Q or 10-K for this quarter isn't filed yet" : "quarter's 10-Q or 10-K isn't in the filing index"}, and the figures come

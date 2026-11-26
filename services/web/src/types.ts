@@ -1297,6 +1297,8 @@ export interface RecapValue {
     xbrl_tag: string | null;
     source_accessions: string[] | null;
     filing_url: string | null;
+    /** 165: read from a 6-K results release's table, not XBRL (gold's `release:` tag) */
+    release?: ReleaseCell;
   };
   freshness: { filed: string; ingested_at: string };
   /** prior_quarter / year_ago only: current minus this (exact), and that over this */
@@ -1306,7 +1308,8 @@ export interface RecapValue {
   pct_not_meaningful?: string;
 }
 
-/** /v1/filings/{accession}/recap: a 10-Q/10-K vs the prior quarter and the year-ago quarter. */
+/** /v1/filings/{accession}/recap: a 10-Q/10-K vs the prior quarter and the year-ago quarter; a foreign
+ * filer's 6-K (165) the quarter its results release reports (`period_end`: that quarter's end). */
 export interface Recap {
   accession_no: string;
   company_id: string;

@@ -5,7 +5,7 @@
 
 import { metricLabel } from "../chart/metrics";
 import { day, money, pct } from "../format";
-import type { ComponentFact, Components, ComponentsHow } from "../types";
+import type { ComponentFact, Components, ComponentsHow, ReleaseCell } from "../types";
 
 /** The statements' own names for the metrics a figure is made of, where they differ from metricLabel. */
 const NAMES: Record<string, string> = {
@@ -90,6 +90,21 @@ export function factSource(f: ComponentFact): string {
 
 /** 165: gold's source tag of a figure read from a 6-K results release's table. */
 export const RELEASE_TAG = "release:";
+
+/** The words a figure read from a results release carries where a tick would be (system.md §5.1: the
+ * tick only where the API says a figure agrees to the filing; it says that of no release figure). */
+export const RELEASE_WORDS = "from the press release";
+
+/** The release's cell a figure is read from (165: the API's `citation.release`), or null. A derived
+ * figure stays derived, whatever it was worked out from. */
+export function releaseOf(r: { value_source: string; citation: { release?: ReleaseCell } }): ReleaseCell | null {
+  return r.value_source !== "derived" && r.citation.release ? r.citation.release : null;
+}
+
+/** "EX-99.1, table 1, row 2": where in the release (the API counts from 0, people from 1). */
+export function releasePlace(c: ReleaseCell): string {
+  return `${c.section}, table ${c.table + 1}, row ${c.row + 1}`;
+}
 
 /** "from the press release: EX-99.1, table 1, row 2" for "release:EX-99.1/0/1/1" (counted from 0
  * in the tag, from 1 here). */

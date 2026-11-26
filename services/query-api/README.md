@@ -96,7 +96,7 @@ request parameters. Dev tokens: `make token USER=alice`.
 | `PUT` / `DELETE /v1/watchlist/{id}` | token, app DB | add / remove a company (grants nothing) |
 | `GET /v1/calendar/expected-filings?days=&scope=&format=` | token | expected 10-Q/10-K filings in the next N days (watchlist or readable companies) |
 | `GET /v1/companies/{id}/expected-filings?periods=` | token | estimated next 10-Q/10-K dates with their basis |
-| `GET /v1/filings/{accession}/recap?metrics=` | financials (flags: filings) | metrics against the prior quarter and a year ago, cited; one-time-item flags ([Filing recap](#filing-recap)) |
+| `GET /v1/filings/{accession}/recap?metrics=&period_end=` | financials (flags: filings) | a 10-Q's, 10-K's or 6-K's metrics against the prior quarter and a year ago, cited; one-time-item flags ([Filing recap](#filing-recap)) |
 | `GET /v1/companies/{id}/peers?limit=&columns=&access=` | financials | suggested peers by business, else SIC and size, each with why ([Peers](#peers)) |
 | `GET /v1/companies/{id}/peers/check/{candidate}` | financials on `{id}` | can `candidate` join these comps, and if not why |
 | `GET /v1/sectors` | token | the open sector and industry grouping over SIC codes (migration 046) |
@@ -318,7 +318,9 @@ a year ago, cited, with `change` and `pct_change`. An unknown accession is the s
 company you can't read. `shapes.percent_change` is the one rule for a percentage change (recap and
 alerts); the recap says why there is none in `pct_not_meaningful`. With `filings` access, `flags`
 lists one-time-item wording in MD&A and EX-99 sections; flags are optional and never fail the
-recap. Details: [DESIGN.md](DESIGN.md#filing-recap).
+recap. A foreign filer's 6-K recaps the quarter its results release reports: `period_end` (only
+for a 6-K) names it, else the latest quarter the figures cite the 6-K for; a figure read from the
+release's table has `citation.release`. Details: [DESIGN.md](DESIGN.md#filing-recap).
 
 ## Peers
 

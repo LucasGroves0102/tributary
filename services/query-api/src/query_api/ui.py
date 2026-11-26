@@ -73,6 +73,10 @@ RECAP_METRICS: tuple[str, ...] = (
     "operating_cash_flow", "free_cash_flow", "gross_margin", "operating_margin", "net_margin",
     "cash", "total_assets", "long_term_debt", "stockholders_equity")
 RECAP_FORMS = ("10-K", "10-Q", "10-K/A", "10-Q/A")
+# A foreign filer's 6-K (165: its quarter read from the results release's tables, or the 6-K's
+# own XBRL). Its period of report is often just its filing day, so its quarter is the one asked
+# for (`period_end`: the earnings answer's) or the latest one gold cites the 6-K for.
+RELEASE_FORMS = ("6-K", "6-K/A")
 Band = Literal["lt100m", "100m-1b", "1b-10b", "10b-100b", "gte100b"]
 Format = Annotated[Literal["json", "csv"], Query(alias="format")]
 MAX_JSON_ROWS = 500
@@ -440,9 +444,15 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
         user_id: Annotated[str, Depends(current_user)], accession_no: Accession,
         metrics: Annotated[list[str] | None, Query(description="default: main metrics")]
             = None,
+        period_end: Annotated[date | None, Query(
+            description="a 6-K's quarter end (its results release's period); default: the "
+                        "latest quarter the figures cite the 6-K for. A 10-Q or 10-K recaps its "
+                        "own period")] = None,
     ) -> dict:
         """A 10-Q/10-K's metrics vs the prior quarter and the year-ago quarter, each value cited;
-        plus one-time-item flags from its MD&A when the caller can read filings."""
+        plus one-time-item flags from its MD&A when the caller can read filings. A foreign
+        filer's 6-K (165) recaps the quarter its results release reports: a figure read from the
+        release's table cites it with `release`, like /financials."""
         unknown = set(metrics or []) - set(m for m, _, _ in COLUMNS.values())
         if unknown:
             raise HTTPException(422, f"unknown metrics: {sorted(unknown)}")
@@ -452,10 +462,16 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
             raise HTTPException(403, "not permitted to read financials for this company")
         company_id = filing["company_id"]
         require(user_id, "financials", company_id)
-        if filing["form"] not in RECAP_FORMS:
-            raise HTTPException(422, "recaps are for 10-K and 10-Q filings")
-        rows = store.recap(user_id, company_id, accession_no, filing["period_end"],
+        release = filing["form"] in RELEASE_FORMS
+        if filing["form"] not in RECAP_FORMS and not release:
+            raise HTTPException(422, "recaps are for 10-K, 10-Q and 6-K filings")
+        if period_end is not None and not release:
+            raise HTTPException(422, "period_end is for a 6-K: a 10-Q or 10-K recaps its own "
+                                     "period")
+        rows = store.recap(user_id, company_id, accession_no,
+                           period_end if release else filing["period_end"],
                            list(metrics or RECAP_METRICS))
+        shown = _recap_metrics(rows, filing.get("cik"))
         flags = None
         flags_note = "one-time-item flags need filings access"
         if allowed(user_id, "filings", company_id):
@@ -465,14 +481,17 @@ def add_ui_routes(app: FastAPI, *, store: Store, current_user: Callable[..., str
                 log.warning("recap flags unavailable: %s", type(e).__name__,
                             extra={"accession_no": accession_no})
                 flags_note = "one-time-item flags couldn't be read just now"
+        # a 6-K's period is the quarter it recaps, not its period of report (often its filing day)
+        quarter_end = filing["period_end"] if not release else period_end or max(
+            (e["current"]["period_end"] for e in shown), default=None)
         return {"accession_no": accession_no, "company_id": company_id, "form": filing["form"],
-                "filed": filing["filing_date"], "period_end": filing["period_end"],
+                "filed": filing["filing_date"], "period_end": quarter_end,
                 "as_of": _now(),
                 "note": "Values as currently reported: a restated value cites the restating "
                         "filing. pct_change is null for ratios (change is in ratio points), and "
                         "with pct_not_meaningful's reason when the earlier value is zero or "
                         "negative or the value turned negative.",
-                "metrics": _recap_metrics(rows, filing.get("cik")),
+                "metrics": shown,
                 "flags": flags,
                 **({} if flags is not None else {"flags_unavailable": flags_note})}
 
