@@ -49,7 +49,9 @@ from .test_sandbox import FakeStore
 # Obviously fake test passwords (12+ characters).
 GOOD = "correct-horse-test-only"
 WRONG = "wrong-horse-test-only"
-NOW = datetime.now(UTC).replace(microsecond=0)  # tokens are checked against the real clock
+# tokens are checked against the real clock; NOW is 30 s behind it, so a test's "5 s later"
+# still isn't in the future (PyJWT 2.10+ refuses an iat ahead of now)
+NOW = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=30)
 USER = "pw-tester"
 # hashed once (each scrypt is ~32 MiB and tens of ms)
 GOOD_HASH = hash_password(GOOD)
