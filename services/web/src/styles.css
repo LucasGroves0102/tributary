@@ -121,7 +121,7 @@ p {
 }
 
 code {
-  font-family: var(--mono);
+  font-family: var(--code);
   font-size: 13px;
 }
 

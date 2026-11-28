@@ -7,6 +7,7 @@ import { metricLabel } from "./chart/metrics";
 import { chartTitle, companiesChart, companyChart, emptyChart, MAX_COMPANY_LINES, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
 import { localToday } from "./format";
+import { rememberScroll, restoreScroll, savedScroll } from "./scrollMemory";
 import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
@@ -160,14 +161,18 @@ export function App(props: Props = {}) {
   useEffect(() => setNavOpen(false), [route]);
   // a new page starts at its top (route.ts pageOf); a layout effect, so a page's own scroll to a passage
   // (the reader's ?at=, its passive effect) still wins
+  // Back or Forward to a page goes back to where it was left (scrollMemory.ts)
   const page = pageOf(route);
   const firstPage = useRef(true);
+  useEffect(() => rememberScroll(), []);
   useLayoutEffect(() => {
     if (firstPage.current) {
       firstPage.current = false;
       return;
     }
-    window.scrollTo(0, 0);
+    const back = savedScroll();
+    if (back !== null) restoreScroll(back);
+    else window.scrollTo(0, 0);
   }, [page]);
   // the other screens' code, once signed in and idle (pages/lazy.ts)
   const signedIn = token !== null;
