@@ -222,9 +222,9 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
           <div className="row wrap">
             <span className="faint">Target</span>
             {compare.target ? (
-              <span className="tag">
-                {names.get(compare.target) ?? UNNAMED}{" "}
-                {!embedded && <button className="link" aria-label="Change target" onClick={() => set({ target: undefined })}>✕</button>}
+              <span className="chip held">
+                {names.get(compare.target) ?? UNNAMED}
+                {!embedded && <button type="button" className="chip-x" aria-label="Change target" onClick={() => set({ target: undefined })}>✕</button>}
               </span>
             ) : (
               <CompanySearch token={token} label="Target company" placeholder="Company to compare, e.g. PEP"
@@ -234,9 +234,9 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
           <div className="row wrap">
             <span className="faint">Peers ({peerIds.length}/{MAX_PEERS})</span>
             {peerIds.map((p) => (
-              <span key={p} className="tag">
-                {names.get(p) ?? UNNAMED}{" "}
-                <button className="link" aria-label={`Remove ${names.get(p) ?? "this company"}`} onClick={() => removePeer(p)}>✕</button>
+              <span key={p} className="chip held">
+                {names.get(p) ?? UNNAMED}
+                <button type="button" className="chip-x" aria-label={`Remove ${names.get(p) ?? "this company"}`} onClick={() => removePeer(p)}>✕</button>
               </span>
             ))}
             {peerIds.length < MAX_PEERS && (
@@ -281,7 +281,8 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
               {leftOut === 1 ? "isn't" : "aren't"} in this demo, so {leftOut === 1 ? "it's" : "they're"} left out.
             </p>
           )}
-          <div className="row wrap">
+          {/* each box nearer its own label than the next one's (Marek 45) */}
+          <div className="row wrap col-checks">
             <span className="faint">Columns</span>
             {offered.map((c) => (
               <label key={c.key} className="chk">

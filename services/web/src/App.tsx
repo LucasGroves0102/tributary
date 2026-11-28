@@ -111,6 +111,16 @@ interface Props {
   picker?: boolean;
 }
 
+/** Skip to content: the focus on the page's h1 (no ring: a heading given the focus shows none), else on
+ * the page itself, so the next Tab is the page's first control. */
+function skipToContent(): void {
+  const main = document.querySelector<HTMLElement>("main.content");
+  const to = main?.querySelector<HTMLElement>("h1") ?? main;
+  if (!to) return;
+  if (!to.hasAttribute("tabindex")) to.setAttribute("tabindex", "-1");
+  to.focus();
+}
+
 export function App(props: Props = {}) {
   const [picker] = useState(() => props.picker ?? pickerEnabled());
   const [users, setUsers] = useState<string[]>([]);
@@ -777,6 +787,9 @@ export function App(props: Props = {}) {
       <DirectoryContext.Provider value={directory}>
       <AllowanceContext.Provider value={allowanceState}>
       <div className={showDrawer ? "app with-ai" : "app"}>
+        {/* the first Tab stop: past the top bar and the rail to the page's heading (Marek 13: a company page's
+            content was the 38th stop). A button: an in-page link would change the hash route. */}
+        <button type="button" className="skip-link" onClick={skipToContent}>Skip to content</button>
         <TopBar
           menuOpen={navOpen}
           onMenu={() => setNavOpen((o) => !o)}

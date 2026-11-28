@@ -374,6 +374,51 @@ textarea.field {
 
 /* a chip: 32px, a rule-2 outline; an applied filter (or a chosen option) gets an ink outline */
 button.chip,
+/* a company held in a set (Compare's target and peers): an applied chip, the ink outline, its remove a 28px
+   target inside it (Marek 41: 17px chips with 10x17px "×"s; 44 on touch) */
+.chip.held {
+  gap: 2px;
+  padding: 0 2px 0 12px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chip-x:hover {
+    background: var(--well);
+    color: var(--ink);
+  }
+}
+
+@media (pointer: coarse) {
+  .chip.held {
+    min-height: 44px;
+  }
+
+  .chip-x {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.col-checks {
+  column-gap: 20px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;

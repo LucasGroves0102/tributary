@@ -112,7 +112,8 @@ it("sorts by a column, flipping direction on a second click", async () => {
   const th = [...container.querySelectorAll<HTMLElement>("th.sort")].find((t) =>
     t.textContent?.startsWith("Op mgn"),
   )!;
-  await act(async () => th.click());
+  // the header's button sorts (a keyboard reaches it: Marek 14)
+  await act(async () => th.querySelector("button")!.click());
   expect(window.location.hash).toBe("#/companies?sort=-operating_margin_ttm");
   act(() => root.unmount());
   await render({ sort: "-operating_margin_ttm" });
@@ -120,7 +121,7 @@ it("sorts by a column, flipping direction on a second click", async () => {
     t.textContent?.startsWith("Op mgn"),
   )!;
   expect(again.getAttribute("aria-sort")).toBe("descending");
-  await act(async () => again.click());
+  await act(async () => again.querySelector("button")!.click());
   expect(window.location.hash).toBe("#/companies?sort=operating_margin_ttm");
 });
 

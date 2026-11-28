@@ -353,6 +353,15 @@ it("names Settings in the tab's title and the page's heading", async () => {
   expect($("h1")?.textContent).toBe("Settings");
 });
 
+it("Skip to content is the first stop and takes the focus to the page's heading (Marek 13)", async () => {
+  await render("#/settings");
+  const skip = container.querySelector<HTMLButtonElement>("button.skip-link")!;
+  const first = container.querySelector("button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+  expect(first).toBe(skip);
+  await act(async () => skip.click());
+  expect(document.activeElement).toBe($("main h1"));
+});
+
 it("#60: links Settings from the sidebar even with no data connections offered", async () => {
   await render("#/");
   const link = [...document.querySelectorAll<HTMLAnchorElement>(".side-links a")].find((a) => a.textContent === "Settings");

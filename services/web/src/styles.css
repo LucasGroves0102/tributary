@@ -1117,13 +1117,32 @@ progress {
   accent-color: var(--action);
 }
 
+/* a box 16px, not the browser's 13; its label is the target (Marek 41: 13px boxes) */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}
+
 .chk {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  min-height: 24px;
   font-family: var(--sans);
   font-size: var(--fs-base);
   color: var(--ink);
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .chk,
+  .cell-check {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 .chip.removable {
@@ -2313,9 +2332,12 @@ button.chip:disabled {
   color: var(--neg);
 }
 
+/* a sortable header's button: a 24px target that lays out as its 16px line (Marek, controls: 16px) */
 .th-sort {
+  display: inline-block;
   border: 0;
-  padding: 0;
+  padding: 4px 0;
+  margin: -4px 0;
   background: none;
   color: inherit;
   font: inherit;
@@ -6692,8 +6714,20 @@ table.t.release-grid {
   user-select: all;
 }
 
+/* each form's header over its boxes, both centred (Marek 27: headers right, boxes left, 20-64px apart);
+   the whole cell is the box's target */
+.t.alert-forms th.n,
 .t.alert-forms td.n {
   text-align: center;
+}
+
+.cell-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  cursor: pointer;
 }
 
 /* Home's first step (F6, #127) */

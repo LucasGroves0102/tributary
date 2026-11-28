@@ -630,3 +630,30 @@ html[data-motion="reduced"] .ai-drawer.closing {
     width: 40px;
   }
 }
+
+/* Skip to content (App): off screen until it has the keyboard's focus, then over the top bar's left end */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* the page given the focus by Skip to content shows no ring, as a heading doesn't */
+main.content[tabindex="-1"]:focus {
+  outline: none;
+}

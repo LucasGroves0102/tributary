@@ -253,6 +253,16 @@ only; a button presses to 0.97. `?` opens the shortcut sheet (`components/Shortc
 rail's foot). The screener, watchlist and comps rows are a roving tab stop (`components/tableNav.ts`); the
 company page's ledgers are one tab stop each (`components/ledgerGrid.ts`).
 
+Keyboard and targets (Marek 13, 14, 27, 41, 45): "Skip to content" is the first Tab stop on every page in the
+shell (a button: an in-page link would change the hash route); it gives the focus to the page's h1, so the
+next Tab is the page's first control (a company page's content was the 38th stop). Every sortable header is a
+`th` with `aria-sort` holding a `.th-sort` button (the screener's were bare headers sorted by mouse only),
+a 24px target that lays out as its line. Checkboxes are 16px and their label is the target (24px, 44 on a
+coarse pointer); the alert matrix centres each form's header over its boxes and makes the cell the target.
+Compare's target and peers are applied chips (ink outline) with a 28px remove (40 on touch). Every hand-made
+popover closes on Escape with the focus back on its opener; the palette, closed without going anywhere,
+gives the focus back too.
+
 ## Screens (hash routes)
 
 Views (hash routes): `#/` Home (Start an analysis first, then the watchlist table, new filings since the
