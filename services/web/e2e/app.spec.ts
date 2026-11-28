@@ -36,7 +36,8 @@ test("screener: filter, sort and watch", async ({ page }) => {
   // (a company_id list is the name directory asking for identity, not this screen)
   expect(fake.calls.find((c) => c.includes("/v1/screener?") && !c.includes("company_id="))).toContain("access=financials");
 
-  await page.getByRole("columnheader", { name: /Op mgn/ }).click();
+  // the header's button sorts (Marek 14: a keyboard reaches it)
+  await page.getByRole("columnheader", { name: /Op mgn/ }).getByRole("button").click();
   await expect(page).toHaveURL(/sort=-operating_margin_ttm/);
   await expect(rows.first()).toContainText("Nvidia");
 
