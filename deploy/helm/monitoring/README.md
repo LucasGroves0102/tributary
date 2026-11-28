@@ -20,8 +20,9 @@ rules are off.
 ## Tributary additions
 
 - `templates/rules.yaml`: `KafkaConsumerLagGrowing`, `FilingsNotArriving` (no new
-  `filings.raw` message in 2 hours, weekdays 14:00-21:00 UTC), `CompanyFactsBehindEdgar` (needs
-  `opsDatabase.enabled`), `PostgresDown`,
+  `filings.raw` message in 2 hours, weekdays 14:00-21:00 UTC), the freshness alerts
+  (`FeedCatchRateLow`, `FeedLatencyHigh`, `FilingRecheckFindingMany`, `FilingRecheckNotSucceeding`:
+  [below](#freshness)), `CompanyFactsBehindEdgar` (needs `opsDatabase.enabled`), `PostgresDown`,
   `ReplicationSlotRetainingWal` (a slot holding over 10 GB of WAL), `PostgresConnectionsHigh`,
   `DiskUsageHigh`, `DiskSpaceUnder100GB` (a warning: runbook below), `DiskSpaceLow` (under 50
   GB free), and for the document crawl
@@ -42,6 +43,23 @@ rules are off.
   `CompanyFactsBehindEdgar` has no data. The public Data status page (Query API
   `GET /v1/status/data`) reports freshness, coverage and data quality from the `ops` schema
   instead.
+
+## Freshness
+
+How fast and how completely new filings arrive. Inputs: bronze-loader's
+`tributary_bronze_filings_total{result, source}` and `tributary_bronze_filing_latency_seconds{source}`
+(its PodMonitor), and kube-state-metrics' `kube_cronjob_*` for the `filings-recheck` CronJob.
+All four are weekday-only, at hours when EDGAR lists filings as it accepts them (it lists nothing
+10 pm-6 am ET and, at 6 am, the evening's late filings, hours old by design). Each rule's comment
+has the history its threshold came from (hermes, 2026-10-20 to 2026-11-27: under it only on the
+13F/10-Q deadline of 2026-11-16 and the stall of 2026-11-19).
+
+| Alert | Fires when | Look at |
+|---|---|---|
+| `FeedCatchRateLow` | under 90% of 3 hours' filer rows came from the live poller (the hourly recheck found the rest), 300+ rows | poller logs (`stopped after N feed pages`: raise `POLL_MAX_PAGES`; HTTP errors), `tributary_poller_unsettled_polls_total`, `tributary_sec_requests_total{status}` (429/403: throttled) |
+| `FeedLatencyHigh` | the live filings' 95th percentile from EDGAR to Postgres over 10 minutes in an hour | `KafkaConsumerLagGrowing` (bronze-loader behind), poller `tributary_poller_last_success_timestamp_seconds`, the SEC limiter's waits (`tributary_sec_limiter_wait_seconds_total{caller_class="live"}`) |
+| `FilingRecheckFindingMany` | the recheck republished 150+ rows in an hour | as `FeedCatchRateLow`; `SELECT * FROM ops.filing_recheck_status ORDER BY checked_at DESC LIMIT 5` |
+| `FilingRecheckNotSucceeding` | no finished `filings-recheck` run in 3 hours (not while suspended) | `kubectl -n tributary get jobs` and the last job's logs; a run that can't reach the feed's window start says `INCOMPLETE` (still a success) |
 
 ## Disk space
 

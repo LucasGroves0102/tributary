@@ -1,15 +1,22 @@
 # bronze-loader
 
-FR4, week 1. Consumes `filings.raw` (from [poller](../poller), `poller-backfill` and
-`doc-fetcher-seed`) and writes each event to `bronze.filings`, the raw sink of live filings.
+FR4, week 1. Consumes `filings.raw` (from [poller](../poller), `poller-recheck`,
+`poller-backfill` and `doc-fetcher-seed`) and writes each event to `bronze.filings`, the raw sink
+of live filings.
 `silver.filings` and the `ops` freshness views read that table; they tell the producers apart
-by the event's `source` (`feed`, `daily-index`, `seed`; see `streaming/topics.md`).
+by the event's `source` (`feed`, `recheck`, `daily-index`, `seed`; see `streaming/topics.md`).
 
 | | |
 |---|---|
 | Input | `filings.raw` (consumer group `bronze-loader`) |
 | Output | `bronze.filings`: one row per `(accession_no, cik)`, full event in `payload`, plus Kafka partition and offset |
-| Metrics | `tributary_bronze_filings_total{result="inserted\|duplicate"}`, shared consumer counters from [libs/telemetry](../../libs/telemetry) |
+| Metrics | `tributary_bronze_filings_total{result="inserted\|duplicate", source}`, `tributary_bronze_filing_latency_seconds{source="feed\|recheck"}` (histogram), shared consumer counters from [libs/telemetry](../../libs/telemetry) |
+
+The two bronze metrics are the freshness alerts' input (`deploy/helm/monitoring`, README
+"Freshness"): rows by the event's `source` (`feed`, `recheck`, `daily-index`, `seed`, `other`;
+no source counts as `feed`, every series exists from the start), and for new `feed` and
+`recheck` rows EDGAR acceptance to `ingested_at`, once per filing per batch. `daily-index` rows
+aren't timed: their `filed_at` is midnight ET.
 
 Inserts are idempotent on `(accession_no, cik)`, and Kafka offsets are committed only after
 the Postgres transaction commits, so a crash replays at most one batch without duplicating rows.

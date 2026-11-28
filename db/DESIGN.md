@@ -1228,3 +1228,25 @@ the spec, `READER`) into `silver.release_figures`, and gold reads those.
   apart in SQL needs revenue evidence tags in silver (silver's own evidence, no cost of revenue and no
   operating profit, is 92% right: it would hide real gaps), i.e. re-projecting the ~3,100 CIKs that
   carry such tags. Left for the owner. Backout: `release_figures_165.sql`.
+
+### 169_filing_recheck.sql
+
+Freshness (Avery's systems review, batch 3). From 2026-10-20 to 2026-11-27 the live feed caught
+95,639 of 102,398 filings (93.4%); the rest waited up to a day for the nightly daily-index check.
+The misses were timing, not form types: bursts deeper than one feed page between polls (2,797 of
+7,869 filings on 2026-11-16, the 13F and 10-Q deadline), a stall (2026-11-19), and filings accepted
+5-10 pm ET that EDGAR lists only at 6 am the next day, below entries already seen. The poller now
+pages back to its last poll (services/poller README, "Paging"); `poller-recheck` walks the same
+feed hourly back to the previous filing day and republishes what bronze lacks as `source: recheck`.
+
+- `ops.filing_rechecks`: one row per run (counts only; `ops.filing_recheck_status` for
+  `ops_reader`), with how far back the feed listed (`complete` false when it ended before the
+  window's start: the feed's depth is EDGAR's, measured here).
+- `ops.public_catch()`: per accession of `public_ingest`'s 7 days, caught live (a feed row), found
+  by the recheck, or only by the nightly check; the recheck's lag is exact. Aggregate-only like the
+  other `ops.public_*`; the status route adds it to `ingest`.
+- `bronze.filings_daily_coverage` / `ops.filings_daily_coverage` gain `via_recheck` (last), and
+  `silver.filings` trusts a recheck row's `filed_at` as acceptance time, as feed and seed rows'.
+- Only `feed` rows count in `ops.filing_latency` and `public_ingest` (unchanged). No stored row is
+  re-processed and no version bumped; the views are replaced under `lock_timeout` (a brief ACCESS
+  EXCLUSIVE each, no rewrite).

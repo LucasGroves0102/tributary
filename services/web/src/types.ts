@@ -1575,6 +1575,15 @@ export interface DataStatus {
     /** EDGAR acceptance → Postgres (bronze), live-feed filings only */
     p50_seconds: number | null;
     p95_seconds: number | null;
+    /** of the rest (migration 169): found by the hourly recheck, later the same hour or day, and
+     * found only by the nightly daily-index check, the next day; null before 169, absent from an
+     * older API */
+    via_recheck?: number | null;
+    via_index?: number | null;
+    /** EDGAR acceptance → Postgres for the hourly recheck's filings (exact: the feed's time) */
+    recheck_p50_seconds?: number | null;
+    recheck_p95_seconds?: number | null;
+    last_recheck_at?: string | null;
   };
   completeness: {
     window_days: number;

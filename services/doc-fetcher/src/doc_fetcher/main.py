@@ -128,12 +128,14 @@ class Coverage:
 
     def scope(self, event: dict) -> str | None:
         """'all': a tracked company's filing; 'live': another operating company's filing from
-        the live feed (8-Ks filtered by item); None: not ours (the crawl's, or nobody's)."""
+        the live feed or the hourly recheck of it (8-Ks filtered by item); None: not ours (the
+        crawl's, or nobody's)."""
         if event["form_type"] not in FORMS:
             return None
         if event["cik"] in self.tracked:
             return "all"
-        if event["cik"] in self.operating and event.get("source", "feed") == "feed":
+        live = event.get("source", "feed") in ownership.LIVE_SOURCES
+        if event["cik"] in self.operating and live:
             return "live"
         return None
 

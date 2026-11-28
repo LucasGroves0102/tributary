@@ -43,6 +43,8 @@ def test_scope_operating_takes_the_live_feed_only():
     cov = Coverage(tracked=frozenset(), operating=frozenset({OTHER}))
     assert cov.scope(event(cik=OTHER, form="10-Q")) == "live"           # no source: the feed
     assert cov.scope(event(cik=OTHER, form="10-K", source="feed")) == "live"
+    # the hourly recheck's: a feed entry the poller missed, found within the hour
+    assert cov.scope(event(cik=OTHER, form="10-Q", source="recheck")) == "live"
     assert cov.scope(event(cik=OTHER, form="10-Q", source="daily-index")) is None  # the crawl's
     assert cov.scope(event(cik=OTHER, form="10-K/A")) is None
     assert cov.scope(event(cik="0000000001", form="10-Q")) is None      # not an operating company

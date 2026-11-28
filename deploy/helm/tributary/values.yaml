@@ -128,10 +128,13 @@ resources:
 # from: components allowed to connect on `port`; fromNamespaces: any pod in these namespaces.
 # replicas: default 1; 0 ships a service stopped.
 services:
+  # Each poll walks the feed's pages back to what the last one saw (services/poller README,
+  # "Paging"): one page when EDGAR is quiet, up to POLL_MAX_PAGES in a burst or after an outage.
   poller:
     uses: [kafka, sec]
     env:
       POLL_INTERVAL_SECONDS: "30"
+      POLL_MAX_PAGES: "20"
   bronze-loader:
     uses: [kafka, postgres]
   # Live documents: every 10-K/10-Q/8-K of tracked companies, and every operating company's new
@@ -299,6 +302,22 @@ jobs:
     image: poller
     command: [poller-backfill, --days, "30"]
     schedule: "0 2 * * *"
+    uses: [kafka, sec, postgres]
+    kafkaUser: poller-backfill
+  # Hourly recheck (poller-recheck, migration 169): walks EDGAR's latest-filings feed back to
+  # midnight ET of the previous filing day, looks each (accession, filer) row up in bronze as the
+  # nightly check does, republishes only the missing ones (source recheck: the feed's exact time
+  # and role, never counted as caught live) and records the run in ops.filing_rechecks. Weekdays
+  # 06:05-23:05: EDGAR lists nothing between 10 pm and 6 am, and at 6 am it lists the evening's
+  # late filings, so 06:05 takes those and 23:05 the day's last. One SEC request a feed page:
+  # ~55-110 pages a run on a median day (5,200 filer rows a day), ~1,500 requests a day, batch
+  # class. The nightly backfill stays the final word. Kafka: the backfill job's principal (the
+  # same image writing the same topic), so no new SCRAM user or ACL.
+  filings-recheck:
+    image: poller
+    command: [poller-recheck]
+    schedule: "5 6-23 * * 1-5"
+    timeoutSeconds: 1200
     uses: [kafka, sec, postgres]
     kafkaUser: poller-backfill
   companies:

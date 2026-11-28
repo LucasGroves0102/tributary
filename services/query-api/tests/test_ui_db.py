@@ -692,6 +692,48 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
                 as_query_api(conn, f"SELECT 1 FROM {table} LIMIT 1")
 
 
+def test_status_catch_splits_live_hourly_and_nightly(conn):
+    """169: each filing of the last 7 days was caught live (any feed row), found by the hourly
+    recheck (its lag exact: the feed's acceptance time) or only by the nightly daily-index
+    check; seed rows are none of these. Counts only, as query_api, which can't read the rows."""
+    conn.execute("DELETE FROM bronze.filings")
+    conn.execute("DELETE FROM ops.filing_rechecks")
+    feed, recheck = '{"source": "feed"}', '{"source": "recheck"}'
+    conn.execute(
+        "INSERT INTO bronze.filings (accession_no, cik, form_type, filed_at, payload,"
+        " kafka_partition, kafka_offset, ingested_at) VALUES"
+        # live; the recheck found its issuer's line later, and it still counts live
+        " ('9100000001-26-000001', %(c)s, '4', now() - interval '1 hour', %(f)s, 0, 0,"
+        "  now() - interval '1 hour' + interval '30 seconds'),"
+        " ('9100000001-26-000001', %(w)s, '4', now() - interval '1 hour', %(r)s, 0, 1,"
+        "  now() - interval '20 minutes'),"
+        # found only by the recheck, 20 and 50 minutes after EDGAR accepted them
+        " ('9100000002-26-000001', %(c)s, '8-K', now() - interval '3 hours', %(r)s, 0, 2,"
+        "  now() - interval '3 hours' + interval '20 minutes'),"
+        " ('9100000003-26-000001', %(c)s, '8-K', now() - interval '5 hours', %(r)s, 0, 3,"
+        "  now() - interval '5 hours' + interval '50 minutes'),"
+        # only the nightly check had it; a history load's row is none of the three
+        " ('9100000004-26-000001', %(w)s, '10-Q', now() - interval '2 days',"
+        "  '{\"source\": \"daily-index\"}', 0, 4, now()),"
+        " ('9100000005-26-000001', %(s)s, '10-K', now() - interval '3 days',"
+        "  '{\"source\": \"seed\"}', 0, 5, now())",
+        {"c": C, "w": W, "s": S, "f": feed, "r": recheck})
+    conn.execute("INSERT INTO ops.filing_rechecks (checked_at, window_start, reached_back_to,"
+                 " complete, pages, listed, missing, republished) VALUES (now(),"
+                 " now() - interval '1 day', now() - interval '1 day', true, 80, 7000, 2, 3)")
+    assert as_query_api(conn, "SELECT filings, via_feed, via_recheck, via_index,"
+                              " recheck_p50_seconds, recheck_p95_seconds,"
+                              " last_recheck_at IS NOT NULL FROM ops.public_catch()") == \
+        [(5, 1, 2, 1, 2100.0, 2910.0, True)]
+    ingest = client(conn).get("/v1/status/data").json()["ingest"]
+    assert (ingest["via_feed"], ingest["via_recheck"], ingest["via_index"]) == (1, 2, 1)
+    assert ingest["recheck_p50_seconds"] == 2100.0
+    for table in ("bronze.filings", "ops.filing_rechecks"):
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            with conn.transaction():
+                as_query_api(conn, f"SELECT 1 FROM {table} LIMIT 1")
+
+
 def test_a_filing_index_period_on_the_filing_date_reads_as_unknown(conn):
     """NVIDIA's 2008 10-K: the SEC's index gives the filing date as the period. An 8-K's event can
     be the day it's filed, so only periodic reports lose it."""

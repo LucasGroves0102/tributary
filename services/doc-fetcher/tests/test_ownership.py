@@ -65,6 +65,7 @@ def test_the_feed_line_under_the_issuer_is_the_one_taken():
     assert not ownership.wanted({**issuer, "cik": "0000320193"}, ciks)  # not a company here
     assert not ownership.wanted({**issuer, "form_type": "10-Q"}, ciks)
     assert not ownership.wanted({**issuer, "source": "daily-index"}, ciks)  # the backfill's
+    assert ownership.wanted({**issuer, "source": "recheck"}, ciks)  # the feed's, found hourly
     assert ownership.wanted({**issuer, "form_type": "4/A"}, ciks)
     assert Config.from_env({"FETCH_INSIDERS": "false"}).insiders is False
     assert Coverage(frozenset({"a"}), frozenset({"b"})).issuers == {"a", "b"}

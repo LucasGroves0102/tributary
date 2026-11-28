@@ -27,6 +27,71 @@ spec:
           labels: {severity: warning}
           annotations:
             summary: No new filings published to filings.raw in 2 hours
+        # Freshness (README "Freshness"): bronze-loader counts every row it writes by the event's
+        # source and times the live ones; filings-recheck republishes what the poller missed as
+        # source recheck. Measured on hermes 2026-10-20 to 2026-11-27, before the poller paged
+        # (bronze.filings; misses timed by bronze.submission_filings). Weekdays only, at hours
+        # when EDGAR lists filings as it accepts them: nothing 10 pm-6 am ET, and at 6 am it lists
+        # the evening's late ones, hours old by design (the recheck's 6:05 and 7:05 runs find them).
+        - alert: FeedCatchRateLow
+          # The live poller's share of the filer rows written in 3 hours, against those the hourly
+          # recheck had to republish. Weekdays from 16:00 UTC (11 am EST, noon EDT): the window
+          # then starts at 8 am ET or later. Measured, weekday 3-hour windows ending 11 am-6 pm ET (216):
+          # median 100%, 10th percentile 97%; under 90% in 9, all on 2026-11-16 (the 13F and 10-Q
+          # deadline, 40% at worst) and 2026-11-19 (a stall); every window had 427 rows or more.
+          expr: |
+            sum(increase(tributary_bronze_filings_total{result="inserted", source="feed"}[3h]))
+              / sum(increase(tributary_bronze_filings_total{result="inserted", source=~"feed|recheck"}[3h]))
+              < 0.9
+            and on () sum(increase(tributary_bronze_filings_total{result="inserted", source=~"feed|recheck"}[3h])) > 300
+            and on () day_of_week() > 0 < 6
+            and on () hour() >= 16
+          for: 30m
+          labels: {severity: warning}
+          annotations:
+            summary: "The live feed caught only {{`{{ $value | humanizePercentage }}`}} of the last 3 hours' filings; the hourly recheck found the rest"
+        - alert: FeedLatencyHigh
+          # 95th percentile over an hour of EDGAR acceptance to bronze for the live poller's filings
+          # (tributary_bronze_filing_latency_seconds{source="feed"}), 50 or more of them, weekdays
+          # 14:00-22:59 UTC (9 am-6 pm EST, 10 am-7 pm EDT). Measured, weekday hours 8 am-6 pm ET
+          # with 50+ rows (270): median 66 s, 90th percentile 148 s, 95th 249 s; over 10 minutes
+          # in 8, all on 2026-11-16 and 2026-11-19 (up to an hour behind).
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(tributary_bronze_filing_latency_seconds_bucket{source="feed"}[1h]))) > 600
+            and on () sum(increase(tributary_bronze_filing_latency_seconds_count{source="feed"}[1h])) >= 50
+            and on () day_of_week() > 0 < 6
+            and on () hour() >= 14 < 23
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "95% of live filings took up to {{`{{ $value | humanizeDuration }}`}} from EDGAR to Postgres in the last hour"
+        - alert: FilingRecheckFindingMany
+          # Rows the hourly recheck republished in an hour (one run): the poller is missing more
+          # than bursts. Weekdays from 15:00 UTC, so the hour holds no 6 or 7 am ET run. Measured,
+          # rows missed per weekday acceptance hour 9 am-5 pm ET (243): median 0, 95th percentile
+          # 66, normal days' worst 129 (5 pm, the close's burst); over 150 in 3, all on 2026-11-16.
+          expr: |
+            sum(increase(tributary_bronze_filings_total{result="inserted", source="recheck"}[1h])) > 150
+            and on () day_of_week() > 0 < 6
+            and on () hour() >= 15
+          for: 5m
+          labels: {severity: warning}
+          annotations:
+            summary: "The hourly recheck found {{`{{ $value | humanize }}`}} filer rows the live poller missed in the last hour"
+        - alert: FilingRecheckNotSucceeding
+          # kube-state-metrics: the filings-recheck CronJob (weekdays hourly 06:05-23:05 New York)
+          # hasn't finished a run in 3 hours, weekdays from 13:00 UTC (8 am EST, 9 am EDT: after
+          # the day's first two runs). A failed Job also raises the stack's KubeJobFailed; this
+          # says it stopped running at all. Not while the CronJob is suspended.
+          expr: |
+            time() - max(kube_cronjob_status_last_successful_time{namespace="tributary", cronjob="filings-recheck"}) > 3 * 3600
+            and on () max(kube_cronjob_spec_suspend{namespace="tributary", cronjob="filings-recheck"}) == 0
+            and on () day_of_week() > 0 < 6
+            and on () hour() >= 13
+          for: 15m
+          labels: {severity: warning}
+          annotations:
+            summary: "The hourly filings recheck hasn't finished a run in {{`{{ $value | humanizeDuration }}`}}"
         - alert: CompanyFactsBehindEdgar
           # ops-exporter (opsDatabase.enabled); the financials job runs nightly.
           expr: max by (company) (tributary_companyfacts_behind_seconds) > 3 * 86400

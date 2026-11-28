@@ -318,7 +318,9 @@ question that got no answer says it didn't count, after agent-api's `refunded` e
 transcripts; estimated dates; banks; EDGAR timing), linked from the sidebar footer and the
 assistant's empty state; `#/status` the data status page (`pages/Status.tsx`, `GET
 /v1/status/data`), in words an analyst or a reviewer reads, with every time in its zone: feed
-freshness, how long a filing takes from EDGAR to here (typical, and 95% within), live-feed share,
+freshness, how long a filing takes from EDGAR to here (typical, and 95% within), live-feed share
+and how the rest were caught (`caughtNote`: later the same hour or day by the hourly check, with
+its typical lag, or only the next day from the daily index; an older API keeps the old words),
 completeness against EDGAR's daily indexes (business days only, which is why fewer days than the window
 are checked), coverage counts, data-quality check totals (reconciled: every company with XBRL figures is
 checked, and those without a quarterly series are why fewer show as having financials), grouped by what a

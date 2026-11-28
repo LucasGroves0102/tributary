@@ -97,14 +97,32 @@ def test_coverage_counts_feed_and_backfill_but_not_seed(conn):
     assert row == (3, 2, 1, Decimal("66.7"))
 
 
+def test_coverage_counts_the_hourly_recheck_apart(conn):
+    # 169: a row the recheck republished is neither caught live nor the nightly backfill's
+    filing(conn, "test-ops-feed", VISA, "8-K", "2031-07-28T15:00:00Z")
+    filing(conn, "test-ops-recheck", OTHER, "8-K", "2031-07-28T16:00:00Z", source="recheck")
+    filing(conn, "test-ops-backfill", OTHER, "8-K", "2031-07-28T04:00:00Z",
+           source="daily-index")
+    row = conn.execute(
+        "SELECT total, via_feed, via_recheck, via_backfill, live_coverage_pct"
+        " FROM ops.filings_daily_coverage WHERE day = '2031-07-28'").fetchone()
+    assert row == (3, 1, 1, 1, Decimal("33.3"))
+    # and never in the live latency
+    assert conn.execute("SELECT count(*) FROM ops.filing_latency"
+                        " WHERE accession_no = 'test-ops-recheck'").fetchone() == (0,)
+
+
 def test_silver_filings_trusts_feed_and_seed_acceptance_times(conn):
     filing(conn, "test-ops-seed", VISA, "10-K", "2031-07-28T21:00:00Z", source="seed")
     filing(conn, "test-ops-backfill", VISA, "8-K", "2031-07-28T04:00:00Z",
            source="daily-index")
+    # 169: the recheck's rows carry the feed's own acceptance time
+    filing(conn, "test-ops-recheck", VISA, "8-K", "2031-07-28T16:00:00Z", source="recheck")
     rows = conn.execute(
         "SELECT accession_no, source, accepted_at IS NOT NULL FROM silver.filings"
         " WHERE accession_no LIKE 'test-ops-%' ORDER BY 1").fetchall()
     assert rows == [("test-ops-backfill", "daily-index", False),
+                    ("test-ops-recheck", "recheck", True),
                     ("test-ops-seed", "seed", True)]
 
 
@@ -146,9 +164,9 @@ def test_companyfacts_lag_flags_filings_the_api_has_not_reflected(conn):
 def test_ops_reader_sees_views_only(conn):
     conn.execute("SET LOCAL ROLE ops_reader")
     for view in ("filing_latency", "filings_daily", "filings_daily_coverage",
-                 "companyfacts_lag"):
+                 "companyfacts_lag", "filing_recheck_status"):
         conn.execute(f"SELECT * FROM ops.{view} LIMIT 1")
     for table in ("bronze.filings", "bronze.filing_documents", "silver.filing_sections",
-                  "gold.quarterly_financials"):
+                  "gold.quarterly_financials", "ops.filing_rechecks"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
             conn.execute(f"SELECT 1 FROM {table} LIMIT 1")

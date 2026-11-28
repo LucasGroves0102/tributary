@@ -16,6 +16,7 @@ dependencies = [
 [project.scripts]
 poller = "poller.main:main"
 poller-backfill = "poller.backfill:main"
+poller-recheck = "poller.recheck:main"
 
 [build-system]
 requires = ["setuptools>=68"]
