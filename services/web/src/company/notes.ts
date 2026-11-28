@@ -35,7 +35,7 @@ export const NOTE_GROUPS: { key: string; label: string; kinds: (k: string) => bo
   { key: "splits", label: "Stock splits", kinds: (k) => k === "stock_split" },
   { key: "restated", label: "Restated figures", kinds: (k) => k === "restatement" || k === "annual_sum" },
   { key: "periods", label: "Gaps and overlapping periods", kinds: (k) => ["series_gap", "overlapping_quarters", "calendar_collision", "net_debt_gap"].includes(k) },
-  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "tag_disagreement", "statement_mismatch", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
+  { key: "values", label: "Values to double-check", kinds: (k) => ["impossible_value", "tag_disagreement", "statement_mismatch", "printed_mismatch", "sign_flip", "outlier", "mistagged_fact"].includes(k) || k.startsWith("segment_sum_") },
   { key: "derived", label: "Derived quarters", kinds: (k) => k === "derived_quarters" },
 ];
 
@@ -380,6 +380,17 @@ function explainOne(n: DataNote, now: number): Explained {
         text: `${filing} prints ${line} for ${pe} in its own statement as a different figure from the one shown here, which its XBRL states${ratio ? `; the figure shown is${ratio}` : ""}` +
           (str(d.rule) === "scale" ? ": the same figure in two scales. " : str(d.rule) === "sign" ? ": the same figure with the other sign. " : ". ") +
           "Either the XBRL is on the wrong line or Tributary misread the table; check the statement.",
+      };
+    }
+    case "printed_mismatch": {
+      // 167: the filing's inline XBRL prints, at the fact's own line, another number than the fact
+      const factor = num(d.factor);
+      const filing = `The ${str(d.form) ?? "filing"}${d.filed ? ` filed ${date(d.filed)}` : ""}`;
+      const ratio = factor === null ? "" : factor >= 1 ? ` ${times(factor)} times the printed one` : ` 1/${times(1 / factor)} of the printed one`;
+      return {
+        title: `${m}: the filing prints another number`,
+        text: `${filing} prints ${m.toLowerCase()} for ${pe} at its own line as a different number from its XBRL value${ratio ? `; the XBRL value is${ratio}` : ""}. ` +
+          "The line is linked so you can read it; until they agree, the figure isn't marked as stated by the filing.",
       };
     }
     default: {

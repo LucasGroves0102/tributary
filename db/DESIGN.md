@@ -1240,3 +1240,22 @@ the spec, `READER`) into `silver.release_figures`, and gold reads those.
   on hermes. The migration pauses the parser kind: the owner unpauses it once the budget
   (docs/test-people/reports/proof-layer/budget.md) is OK'd. ~2.6 GB; FK to bronze.filing_documents,
   so it is in pg-backup's SLIM_EXCLUDE_DATA. No query_api grant.
+
+### 167_fact_gate.sql
+
+- The gate (part 2 of the proof layer): `silver.gate_facts` joins each silver fact of a filing with
+  166's printed facts by tag (the concept's local name; its taxonomy's prefix first), unit and
+  period, and reads each occurrence's printed number from its attributes (`silver.printed_value`:
+  the formats ixbrl.py reads, plus `ixt-sec:numwordsen` and a leading-dot decimal, which a
+  prototype on 173 hermes documents showed were the only 17 "disagreements" of 13,738). Status per
+  fact: agrees (to the printed precision), disagrees (both values in `silver.fact_disagreements`),
+  not located, not applicable (member sums and picks; unreadable formats). The line: the
+  occurrence in a section, disagreeing first, then the statements' section, the most precise, the
+  first. One `silver.fact_gates` row per filing (counts + per-fact results as jsonb, ~3 KB).
+- A filing is due when it has printed facts and no current gate (`ops.gate_backlog`: another gate
+  version, printed facts rewritten, or the filer's gold rebuilt since: every loader that changes a
+  company's facts rebuilds its gold). The catch-up kind `gate` runs in parser-index, newest filing
+  first. A gate makes the company's financial check due (`ops.company_backlog`); the check finds
+  `printed_mismatch` (warning, detail without values). Check version 167: every company re-checked.
+- Filings tier (067's policy form), granted to query_api (readers' lines, 168). Backout guards for
+  `ops.check_financials` and `ops.company_backlog` updated with this migration's md5(prosrc).

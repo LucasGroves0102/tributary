@@ -266,11 +266,16 @@ diffs (`diff.ALGORITHM`) needs nothing run by hand (migration 071, `filing_parse
 4. reads the release figures (165) of every stored 6-K with tables that the current
    `releases.READER` hasn't read, oldest filing first, 100 a transaction, for up to 5 minutes (kind
    `releases`, `ops.release_backlog`); each read makes its company's gold due;
-5. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
+5. gates every filing with printed facts (rule 14) and no current gate (migration 167:
+   `ops.gate_backlog`, `silver.gate_facts`), newest filing first, 200 a transaction, for up to 5
+   minutes (kind `gate`): each silver fact of the filing against the number the filing prints at
+   its line; a gate makes the company's financial check due (a disagreement is a
+   `printed_mismatch` finding);
+6. rebuilds older passages for the rest of `CATCHUP_SECONDS` (never past 50 minutes into the job, so
    the next hour's run is never skipped), oldest filing first, under the same lock as
    `section-passages` (one waits for the other; both take the same filings, so they can overlap in
    time without harm);
-6. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
+7. measures diffs of an older `ALGORITHM` (the run itself recomputes them).
 
 Re-parsed documents whose sections change are re-indexed by the next runs (after new filings).
 Progress: `SELECT * FROM ops.catchup_status` (`paused`, `behind`, `in_flight`, `done_last_day`,

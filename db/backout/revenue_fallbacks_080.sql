@@ -75,7 +75,7 @@ BEGIN
         ('gold.screen_reading(text,text,text,text,date,boolean,numeric,text,boolean)', 'f110e0894f0dff22b6fb8fe0423313fe'),
         ('gold.usable_facts(text[])', '0b0c7a112a9761106084a4fd15dd2a56'),
         ('gold.usable_facts(text[],date)', NULL),
-        ('ops.check_financials(text[])', 'a8a94bf23f986a93f3f61c8fc5f35461'),
+        ('ops.check_financials(text[])', 'eaa4c2a716277bbc35680d007b987eb5'),
         ('ops.company_backlog(text)', '97bd3cf942ea7f5c87ed866c0ba563d8'),
         ('ops.company_rule_version(text)', '60744ba7ead2e38d3dc3791e5630df38'),
         ('ops.coverage_found()', '096f77959baa05c70f1dfd1e0c31b974'),

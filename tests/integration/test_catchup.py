@@ -40,15 +40,16 @@ def test_versions_live_with_their_rules():
         # net income rules, 080 its revenue industry tags, 155 its debt, citations and gross
         # profit (every company rebuilt), 165 a results release's figures (scoped: the companies
         # whose releases are read); 095 the parser-output checks' keys for 20-F, 40-F and 6-K
-        # (every document re-checked)
+        # (every document re-checked); 167 the printed_mismatch finding (every company re-checked)
         assert c.execute("SELECT gold.rules_version(), ops.check_financials_version(),"
                          " ops.check_segments_version(), ops.check_sections_version()"
-                         ).fetchone() == (165, 74, 72, 95)
+                         ).fetchone() == (165, 167, 72, 95)
         assert c.execute("SELECT kind, baseline FROM ops.catchup WHERE baseline IS NOT NULL"
                          " ORDER BY 1").fetchall() == [
             ("check_financials", 57), ("check_segments", 70), ("gold", 64),
             ("known", 0)]  # 086: no company has a history at the deploy
-        # 071 ships the parser kind paused (the owner's call), every other kind running
+        # 071 ships the parser kind paused (the owner's call), and 166 pauses it again (version
+        # 9's re-parse waits for the owner's OK of its budget); every other kind running
         assert c.execute("SELECT kind FROM ops.catchup WHERE paused").fetchall() == [("parser",)]
         assert c.execute("SELECT ops.parser_version_number('rust-7'),"
                          " ops.parser_version_number('python-12'),"
@@ -126,7 +127,8 @@ def test_the_exporter_query_runs_as_ops_reader(conn):
     conn.execute("SET LOCAL ROLE ops_reader")
     rows = {r[0]: r[1:] for r in conn.execute(query)}
     assert set(rows) == {"parser", "passages", "diffs", "gold", "check_financials",
-                         "check_segments", "check_sections", "statements", "known", "releases"}
+                         "check_segments", "check_sections", "statements", "known", "releases",
+                         "gate"}
     assert rows["gold"][:5] == (3, 0, 0, 1, 0)
     assert rows["parser"][4] == 0  # the fixture unpaused it; paused = 1 keeps the alert quiet
     assert all(v is not None for r in rows.values() for v in r)

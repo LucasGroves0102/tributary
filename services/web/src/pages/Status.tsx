@@ -254,6 +254,7 @@ const MEANING: Record<string, string> = {
   overlapping_quarters: "A quarter that starts before the previous one ends, usually a change of fiscal calendar: comparisons across it may be off",
   "tag_disagreement:warning": "The filing tags one line two ways that can't both be right (one figure in two scales, a total under a fifth of its own part, two names of a line 5× apart); the figure shown is one of them",
   "statement_mismatch:warning": "The filing's own statement table prints another revenue, net income or total assets than the figure shown, which its XBRL states: one of the two is mistagged, or the table was misread",
+  "printed_mismatch:warning": "A figure's XBRL value differs from the number its own filing prints at that line (the filing's inline XBRL, read to the printed precision): the data and the page disagree, so the line is shown, not trusted",
   "outlier:warning": "A quarter 10× or more the quarters around it: a one-off, or a scale slip in the filing",
   "outlier:info": "A 10× swing on a line that swings by nature (cash flow subtotals, the change in cash, buybacks, dividends, income tax)",
   "sign_flip:warning": "A cost or outflow with the opposite sign to the quarters around it, usually a sign slip in the filing",

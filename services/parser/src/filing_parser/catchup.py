@@ -26,9 +26,14 @@ a new filing:
    transaction, for up to RELEASES_SECONDS of the budget. section-index reads what it indexes;
    this covers the rest once per READER. Each read makes its company's gold due
    (ops.company_backlog), so the facts-fetcher catch-up rebuilds it within the hour.
-5. passages: index.refresh_passages for the rest of `seconds` (filings whose passages an older
+5. gate: silver.gate_facts (migration 167) on every filing with printed facts (parser v9, rule
+   14) and no current gate (ops.gate_backlog: none yet, another silver.gate_version(), printed facts
+   rewritten, or the filer's gold rebuilt since), newest filing first, GATE_BATCH a transaction, for
+   up to GATE_SECONDS of the budget. A gate makes the company's financial check due
+   (ops.company_backlog), so a printed mismatch becomes a finding within the hour.
+6. passages: index.refresh_passages for the rest of `seconds` (filings whose passages an older
    SEARCH_RULE built, oldest first), under the lock section-index and section-passages share.
-6. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
+7. diffs: measured only; the run itself recomputes diffs of an older diff.ALGORITHM.
 
 Each kind records a row in ops.catchup_runs (read ops.catchup_status). `UPDATE ops.catchup SET
 paused = true WHERE kind = ...` stops a kind's work and keeps measuring it. Everything is keyed on
@@ -66,6 +71,8 @@ STATEMENTS_SECONDS = 300  # filings' statement lines read per run, in seconds, o
 STATEMENTS_BATCH = 100    # ... a transaction
 RELEASES_SECONDS = 300    # 6-K results releases read per run, in seconds, out of SECONDS (165)
 RELEASES_BATCH = 100      # ... a transaction
+GATE_SECONDS = 300        # filings gated per run, in seconds, out of SECONDS (167)
+GATE_BATCH = 200          # ... a transaction
 JOB_SECONDS = 3000  # ... within 50 minutes of the job's start: the next hourly run is never skipped
 
 
@@ -142,6 +149,16 @@ def measure_releases(conn: psycopg.Connection, r: Result) -> Result:
     r.behind, r.oldest = conn.execute(  # type: ignore[misc]
         "SELECT count(*), min(filed) FROM ops.release_backlog(%s)",
         (releases.READER,)).fetchone()
+    return r
+
+
+def gate_version(conn: psycopg.Connection) -> str:
+    return str(conn.execute("SELECT silver.gate_version()").fetchone()[0])  # type: ignore[index]
+
+
+def measure_gates(conn: psycopg.Connection, r: Result) -> Result:
+    r.behind, r.oldest = conn.execute(  # type: ignore[misc]
+        "SELECT count(*), min(filed) FROM ops.gate_backlog(%s)", (int(r.version),)).fetchone()
     return r
 
 
@@ -275,6 +292,33 @@ def release_figures(conn: psycopg.Connection, seconds: float, *, batch: int = RE
     return r
 
 
+def gates(conn: psycopg.Connection, seconds: float, *, batch: int = GATE_BATCH,
+          clock: Callable[[], float] = time.monotonic) -> Result:
+    """Filings with printed facts and no current gate, gated newest filing first until `seconds`
+    (clock time) run out; each batch commits alone."""
+    started = clock()
+    with conn.transaction():
+        version = gate_version(conn)
+        new = fresh(conn, "gate", version)
+        paused, _ = begin(conn, "gate", version)
+        r = Result("gate", version, paused=paused)
+        if new:
+            record(conn, measure_gates(conn, r), 0.0)
+    while not paused and clock() < started + seconds:
+        with conn.transaction():
+            ids = [x[0] for x in conn.execute(
+                "SELECT accession_no FROM ops.gate_backlog(%s)"
+                " ORDER BY filed DESC, accession_no LIMIT %s", (int(version), batch))]
+            if ids:
+                conn.execute("SELECT silver.gate_facts(%s)", (ids,))
+        if not ids:
+            break
+        r.done += len(ids)
+    with conn.transaction():
+        record(conn, measure_gates(conn, r), clock() - started)
+    return r
+
+
 def diffs(conn: psycopg.Connection, diffed: int) -> Result:
     """The run recomputes diffs of an older ALGORITHM itself: this only measures what is left."""
     with conn.transaction():
@@ -292,11 +336,13 @@ def skipped(conn: psycopg.Connection, note: str = "skipped: lock held") -> list[
     is of another version. A kind that raises is logged; a lost connection stops the job."""
     with conn.transaction():
         sections_version = str(conn.execute("SELECT ops.check_sections_version()").fetchone()[0])  # type: ignore[index]
+        gate = gate_version(conn)
     kinds: list[tuple[str, str, Callable[[psycopg.Connection, Result], Result]]] = [
         ("parser", str(parser_version()), measure_parser),
         ("check_sections", sections_version, measure_sections),
         ("statements", statements.READER, measure_statements),
         ("releases", releases.READER, measure_releases),
+        ("gate", gate, measure_gates),
         ("passages", index.SEARCH_RULE, measure_passages),
         ("diffs", ALGORITHM, measure_diffs),
     ]
@@ -324,10 +370,12 @@ def run(conn: psycopg.Connection, seconds: float = SECONDS, per_run: int = PER_R
         diffed: int = 0, clock: Callable[[], float] = time.monotonic,
         sections_seconds: float = SECTIONS_SECONDS,
         statements_seconds: float = STATEMENTS_SECONDS,
-        releases_seconds: float = RELEASES_SECONDS) -> list[Result]:
+        releases_seconds: float = RELEASES_SECONDS,
+        gate_seconds: float = GATE_SECONDS) -> list[Result]:
     """Every kind, after a parser-index run that finished its own work: the parser checks get up to
     `sections_seconds` of `seconds`, the statement lines up to `statements_seconds`, the release
-    figures up to `releases_seconds`, the passages what is left. A kind that raises is logged and
+    figures up to `releases_seconds`, the gate up to `gate_seconds`, the passages what is left. A
+    kind that raises is logged and
     left for the next run; a lost connection stops the job."""
     deadline = clock() + seconds
     steps: list[Callable[[], Result]] = [
@@ -337,6 +385,7 @@ def run(conn: psycopg.Connection, seconds: float = SECONDS, per_run: int = PER_R
                                 clock=clock),
         lambda: release_figures(conn, min(releases_seconds, max(0.0, deadline - clock())),
                                 clock=clock),
+        lambda: gates(conn, min(gate_seconds, max(0.0, deadline - clock())), clock=clock),
         lambda: passages(conn, max(0.0, deadline - clock()), clock=clock),
         lambda: diffs(conn, diffed),
     ]
