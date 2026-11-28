@@ -788,6 +788,13 @@ Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules i
 to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same item route and
 state cleaner as the chart builder's Save as, without becoming the chart builder's open item)
 makes it a chart item a thesis there can embed, and "Open in Chart builder" opens it there.
+
+Its charts and the analysis's Numbers step draw in the page's chart language, not the chart builder's plot
+panel (Marek 11): `ChartView`/`LayerChart` `onPage` leaves the title and notes out of the drawing (the
+section's heading, or the Numbers chart's own h3, names it; the notes are pencil text under it), the paper
+shows through, and the series take the palette's greys (`--bar-edge`, the ink, then the pencil and ink-2
+dashed) with 11px pencil labels; the drawing exports take keeps its title and notes. A right-axis layer's
+legend says it inside its own brackets ("Revenue growth (YoY, right axis)").
 Values need financials access, like Statements.
 Revenue and Segments each do one job (#115) and say so in a line at the top with a link to the other:
 Revenue is three years of trends (trailing twelve months), what drove growth and revenue quality;

@@ -2668,3 +2668,74 @@ html[data-motion="reduced"] .release-table-box summary::before {
   line-height: 24px;
   font-weight: 600;
 }
+
+/* --- a chart on a page (Revenue, an analysis's Numbers; LayerChart `onPage`): the Overview's chart language
+   (§4 Chart), not a plot panel dropped on the paper (Marek 11): the paper behind it, no title in it (the
+   section's heading names it), the palette's ink and greys (a line in a second grey is dashed, so two never
+   differ by colour alone), 11px labels in pencil, its notes as the page's own text under it ---------- */
+.lchart.on-page .ch-bg {
+  fill: transparent;
+}
+
+/* the history bars' grey (3:1 on the paper as a line too), then the ink; the two after them dashed */
+.lchart.on-page .lchart-svg {
+  --series-0: var(--bar-edge);
+  --series-1: var(--ink);
+  --series-2: var(--pencil);
+  --series-3: var(--ink-2);
+  --series-4: var(--bar-edge);
+  --series-5: var(--ink);
+  --series-6: var(--pencil);
+  --series-7: var(--ink-2);
+}
+
+.lchart.on-page :is(.c2, .c3, .c6, .c7) > path[fill="none"],
+.lchart.on-page .ch-legend :is(.c2, .c3, .c6, .c7) line {
+  stroke-dasharray: 6 3;
+}
+
+/* stacked bars part by a hairline of paper */
+.lchart.on-page g[class^="c"] > rect {
+  stroke: var(--paper);
+  stroke-width: 1px;
+}
+
+.lchart.on-page .ch-legend text {
+  fill: var(--ink-2);
+  font-size: 12px;
+}
+
+.lchart.on-page .ch-grid line {
+  stroke: var(--rule);
+}
+
+.lchart.on-page .ch-grid text,
+.lchart.on-page .ch-axis text {
+  fill: var(--pencil);
+  font-size: 11px;
+}
+
+.lchart.on-page .ch-unit {
+  fill: var(--pencil);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.lchart-notes {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.lchart-notes p {
+  margin: 0;
+}
+
+.numbers-h {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+}

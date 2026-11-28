@@ -38,6 +38,10 @@ interface Props {
   notes?: boolean;
   /** layers (by id) with nothing on file at all: the note says so, not "in this range" */
   emptyOnFile?: number[];
+  /** drawn in a page's section (Revenue, Numbers) in the page's own chart language: no title or notes in the
+   * drawing (the section's heading and the text under it say them), the paper behind it, the palette's
+   * greys; exports still take the standard drawing */
+  onPage?: boolean;
 }
 
 /** stroke opacity of a faint series (a model's bear / bull case): an SVG attribute, not a style */
@@ -58,7 +62,7 @@ export function newestSource(p: Point | undefined): Source | null {
  * On screen it is drawn for the width it has (layout.ts `chartSize`), so its text is its real size
  * whatever the window. `svgRef` always gets the standard-size drawing (hidden when that isn't the
  * one on screen), so Export SVG / PNG give the same deck-ready image from a phone or a wide monitor. */
-export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, through = null, log = false, span = null, notes = true, emptyOnFile = [] }: Props) {
+export function LayerChart({ series, title, footnote, svgRef, markers = [], onOpen, subtitle = "", deck = false, compact = false, from = null, through = null, log = false, span = null, notes = true, emptyOnFile = [], onPage = false }: Props) {
   const room = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState<number | null>(null);
   useEffect(() => {
@@ -77,14 +81,17 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
     () => (notes ? [...footnote, ...chartNotes(series, { from, through, brief: compact, emptyOnFile: new Set(emptyOnFile) })] : footnote),
     [footnote.join("\n"), series, from, through, compact, notes, emptyOnFile.join(",")],
   );
-  const drawnFor = (o: { width?: number; plotHeight?: number }) => {
+  // on a page (Revenue, an analysis's Numbers) the section's heading names the chart and its notes are the
+  // page's text under it: the drawing has neither (Marek 11: a second, embedded-looking chart language);
+  // the standard size that exports take keeps both
+  const drawnFor = (o: { width?: number; plotHeight?: number }, bare = false) => {
     const w = o.width ?? WIDTH;
-    const foot = footnoteLines(said, w);
-    const heading = titleLines(title, w);
-    const lay = layout(series, Boolean(title), markers, { ...o, log, through, span, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
+    const foot = bare ? [] : footnoteLines(said, w);
+    const heading = bare ? [] : titleLines(title, w);
+    const lay = layout(series, Boolean(title) && !bare, markers, { ...o, log, through, span, subtitle: Boolean(subtitle), footLines: foot.length, titleLines: heading.length });
     return { lay, foot, heading };
   };
-  const shown = useMemo(() => drawnFor(size), [series, title, markers, subtitle, said, size.width, size.plotHeight, log, through, span?.join()]);
+  const shown = useMemo(() => drawnFor(size, onPage), [series, title, markers, subtitle, said, size.width, size.plotHeight, log, through, span?.join(), onPage]);
   const standard = useMemo(() => drawnFor(fixed), [series, title, markers, subtitle, said, compact, log, through, span?.join()]);
   const lay = shown.lay;
   const sameDrawing = shown.lay.width === standard.lay.width && shown.lay.height === standard.lay.height;
@@ -149,7 +156,7 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
     onOpen?.({ form: m.kind, filed: m.filed, accessionNo: m.accessionNo, url: null, periodEnd: m.filed, companyId: m.companyId });
 
   return (
-    <div className={["lchart", deck && "deck", compact && "compact"].filter(Boolean).join(" ")}>
+    <div className={["lchart", deck && "deck", compact && "compact", onPage && !deck && "on-page"].filter(Boolean).join(" ")}>
       <div className="lchart-bar">
         <span className="visually-hidden" id={help}>
           {onOpen ? "Click a point to open its filing. " : ""}Focus the chart for arrow keys
@@ -222,6 +229,11 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
         )}
       </div>
       {table && <DataTable series={series} title={title} onOpen={onOpen} />}
+      {onPage && said.length > 0 && (
+        <div className="lchart-notes">
+          {said.map((line, i) => <p key={i}>{line}</p>)}
+        </div>
+      )}
       {!sameDrawing && (
         <div hidden className="lchart-export">
           <svg ref={svgRef} viewBox={`0 0 ${standard.lay.width} ${standard.lay.height}`} aria-hidden="true">

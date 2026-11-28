@@ -3375,10 +3375,11 @@ mark {
   right: auto;
 }
 
+/* a breakdown's chart and table on the page's left edge (Marek 29: the heading and chart sat 8px in) */
 .rev-axis {
   display: grid;
   gap: var(--sp-3);
-  padding: var(--sp-4);
+  padding: var(--sp-4) 0;
   border-top: 1px solid var(--line);
 }
 

@@ -153,4 +153,22 @@ describe("LayerChart", () => {
     expect(exported.getAttribute("viewBox")).toContain(`0 0 ${WIDTH} `);
     expect(exported.closest("[hidden]")).not.toBeNull();
   });
+
+  it("on a page: no title or notes in the drawing, the notes as text under it, exports keep both (Marek 11)", () => {
+    function Page() {
+      const svg = useRef<SVGSVGElement>(null);
+      return <LayerChart series={[series()]} title="NVDA: revenue" footnote={["Source: SEC filings."]} svgRef={svg} onPage />;
+    }
+    act(() => root.render(<Page />));
+    expect(container.querySelector(".lchart.on-page")).not.toBeNull();
+    const shown = container.querySelector<SVGSVGElement>("svg.lchart-svg")!;
+    expect(shown.querySelector(".ch-title")).toBeNull();
+    expect(shown.querySelector(".ch-foot")).toBeNull();
+    expect(shown.getAttribute("aria-label")).toBe("NVDA: revenue");
+    expect(container.querySelector(".lchart-notes")?.textContent).toContain("Source: SEC filings.");
+    // the drawing exports take still has them
+    const exported = container.querySelector(".lchart-export svg")!;
+    expect(exported.querySelector(".ch-title")?.textContent).toBe("NVDA: revenue");
+    expect(exported.querySelector(".ch-foot")?.textContent).toContain("Source: SEC filings.");
+  });
 });

@@ -148,7 +148,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
   return (
     <div className="rev-axis">
       <h3>{AXIS_TITLES[t.axis]}</h3>
-      <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} />
+      <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} onPage />
       <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} label={label} />
       <TableScroll label="Revenue by member">
         <table className="t">
@@ -232,7 +232,7 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
         <p className="empty">No segment revenue for {c.name} to decompose.</p>
       ) : (
         <>
-          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
+          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} onPage />
           {(() => {
             // quarters with no breakdown have no bars under a continuous growth line: say so on the chart
             // (Riley, test 10, finding 23: 3 of 12 geography quarters had bars, and it looked broken)
@@ -313,7 +313,7 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
         <p className="empty">No receivables reported for {c.name} in these periods (common for banks, insurers and some retailers).</p>
       ) : (
         <>
-          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
+          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} onPage />
           <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           {flagged > 0 && (
             <p className="badge warn" role="status">

@@ -50,6 +50,12 @@ export interface StepCommon {
  * blank-line or line breaks, short fragments (headings) joined to what follows. A line a break cut
  * mid-sentence (no closing punctuation, the next line starting in lower case) runs on into the next:
  * Riley 94, Costco's "…and quickly" / "ship these goods" and Pro-Dex's hard line breaks. */
+/** "NVDA: revenue and growth" → "Revenue and growth": the page names the company already. */
+function chartHeading(title: string): string {
+  const t = title.replace(/^[^:]{1,24}:\s*/, "");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export function paragraphs(text: string): string[] {
   const out: string[] = [];
   let carry = "";
@@ -219,7 +225,9 @@ export function Numbers({ token, companyId, name, ticker, label, saved, projectI
           <Fragment key={s.key}>
           <section className="card numbers-chart" id={`numbers-${s.key}`} aria-label={s.chart.title}>
             <div className="card-b">
-              <ChartView token={token} chart={s.chart} name={s.chart.title} label={label} hasTtm={everyMetric} />
+              {/* the chart's name over it, as a section's: the drawing has no title of its own (Marek 11) */}
+              <h3 className="numbers-h">{chartHeading(s.chart.title)}</h3>
+              <ChartView token={token} chart={s.chart} name={s.chart.title} label={label} hasTtm={everyMetric} onPage />
               <p className="small muted read-hint">{s.read}</p>
               <div className="row wrap chart-actions">
                 <button className="btn sm ghost" onClick={() => onOpenChart(s.chart)}>Open in Chart builder</button>

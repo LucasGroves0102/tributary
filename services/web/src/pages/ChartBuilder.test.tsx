@@ -141,7 +141,7 @@ it("evaluates each layer through the formula API and draws them", async () => {
   expect($(".ch-title")?.textContent).toBe("NVDA: revenue (quarterly) and operating margin (TTM)");
   expect([...container.querySelectorAll(".ch-legend text")].map((t) => t.textContent)).toEqual([
     "NVDA revenue",
-    "NVDA operating margin (TTM) (right axis)",
+    "NVDA operating margin (TTM, right axis)",
   ]);
   expect(container.querySelectorAll(".lchart-svg rect[fill='currentColor']")).toHaveLength(2);
   expect($(".ch-foot")?.textContent).toContain("Fiscal quarters");

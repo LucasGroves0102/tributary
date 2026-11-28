@@ -345,7 +345,8 @@ export function layout(input: Series[], title: boolean, markers: Marker[] = [], 
   let x = lead;
   const legend: LegendItem[] = [];
   for (const s of series.filter(hasValues)) {
-    const name = s.name + (s.axis === "R" ? " (right axis)" : "");
+    // one pair of brackets: "Revenue growth (YoY, right axis)", never "(YoY) (right axis)" (Marek 11)
+    const name = s.axis !== "R" ? s.name : /\)$/.test(s.name) ? `${s.name.slice(0, -1)}, right axis)` : `${s.name} (right axis)`;
     const w = 18 + name.length * CHAR_W + 16;
     if (x + w > W - PAD.r && x > lead) {
       x = lead;
