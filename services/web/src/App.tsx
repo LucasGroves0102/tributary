@@ -6,6 +6,7 @@ import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
 import { chartTitle, companiesChart, companyChart, emptyChart, MAX_COMPANY_LINES, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
+import { localToday } from "./format";
 import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
@@ -488,8 +489,9 @@ export function App(props: Props = {}) {
     if (!token) return;
     watchlistCsv(token, views.watchlistColumns)
       .then((blob) => {
-        download("watchlist.csv", blob);
-        toast({ text: "Exported your watchlist to watchlist.csv.", topic: "watchlist-csv" });
+        const file = `watchlist-${localToday()}.csv`;
+        download(file, blob);
+        toast({ text: `Exported your watchlist to ${file}.`, topic: "watchlist-csv" });
       })
       .catch(() => setError("Couldn't export the watchlist. Try again."));
   }, [token, views.watchlistColumns]);

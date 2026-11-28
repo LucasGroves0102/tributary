@@ -459,14 +459,19 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
           </span>
           <span className="sub">percent per fiscal year; each next to its default</span>
           <span className="grow" />
-          <label className="small" htmlFor={`${id}-years`}>Forecast years</label>
-          <select id={`${id}-years`} className="field narrow" value={cases.base.length} onChange={(e) => resize(Number(e.target.value))}>
-            {Array.from({ length: MAX_YEARS }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <label className="small" htmlFor={`${id}-hist`}>History years</label>
-          <select id={`${id}-hist`} className="field narrow" value={historyYears} onChange={(e) => set({ historyYears: Number(e.target.value) })}>
-            {Array.from({ length: MAX_HISTORY - MIN_HISTORY + 1 }, (_, k) => k + MIN_HISTORY).map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          {/* each label with its select: they wrap together, never apart (Marek 54) */}
+          <span className="row nowrap-pair">
+            <label className="small" htmlFor={`${id}-years`}>Forecast years</label>
+            <select id={`${id}-years`} className="field narrow" value={cases.base.length} onChange={(e) => resize(Number(e.target.value))}>
+              {Array.from({ length: MAX_YEARS }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </span>
+          <span className="row nowrap-pair">
+            <label className="small" htmlFor={`${id}-hist`}>History years</label>
+            <select id={`${id}-hist`} className="field narrow" value={historyYears} onChange={(e) => set({ historyYears: Number(e.target.value) })}>
+              {Array.from({ length: MAX_HISTORY - MIN_HISTORY + 1 }, (_, k) => k + MIN_HISTORY).map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </span>
           <button className="btn sm" disabled={!defaults || (sel !== "base" && !cases[sel])}
             title={`Set every year of the ${caseLabel} case to the defaults shown beside it`} onClick={reset}>
             Reset to defaults

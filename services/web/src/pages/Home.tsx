@@ -89,10 +89,11 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
               </span>
               <span className="grow" />
               {columnPicker}
-              <button className="btn sm" onClick={onAdd}>
+              {/* the same 32px as Statements' Export CSV (Marek 31) */}
+              <button className="btn" onClick={onAdd}>
                 + Add
               </button>
-              <button className="btn sm" onClick={onExport} disabled={watchlist.state !== "ok"}>
+              <button className="btn" onClick={onExport} disabled={watchlist.state !== "ok"}>
                 Export CSV
               </button>
             </div>

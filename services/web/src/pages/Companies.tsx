@@ -31,7 +31,7 @@ import {
 } from "../companies/screen";
 import { ANNUAL_FORMS, NOT_MEANINGFUL, NOT_REPORTED } from "../blanks";
 import { metricKey } from "../data/dataset";
-import { paren } from "../format";
+import { localToday, paren } from "../format";
 import { FigureText } from "../components/FigureText";
 import { MenuButton } from "../components/MenuButton";
 import { toast } from "../components/Toasts";
@@ -144,9 +144,11 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
     setExporting(true);
     screenerCsv(token, params)
       .then((blob) => {
-        download("screener.csv", blob);
+        // the day in its name, so two exports don't overwrite each other (Marek 60)
+        const file = `screener-${localToday()}.csv`;
+        download(file, blob);
         const n = Math.min(total ?? 0, SCREENER_CSV_ROWS);
-        toast({ text: `Exported ${n.toLocaleString()} ${n === 1 ? "company" : "companies"} to screener.csv.`, topic: "screener-csv" });
+        toast({ text: `Exported ${n.toLocaleString()} ${n === 1 ? "company" : "companies"} to ${file}.`, topic: "screener-csv" });
       })
       .catch(() => toast({ text: "Couldn't export the screen. Try again.", error: true, topic: "screener-csv" }))
       .finally(() => setExporting(false));

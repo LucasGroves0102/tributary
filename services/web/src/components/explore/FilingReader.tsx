@@ -250,7 +250,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
         )}
         {!changesOn && (
         <form className="reader-search" role="search" onSubmit={submit}>
-          <input className="field" type="search" aria-label="Search this filing" placeholder={'Search this filing: words or "a phrase"'}
+          <input className="field" type="search" aria-label="Search this filing" placeholder="Search this filing: words or “a phrase”"
             value={draft} maxLength={200} onChange={(e) => setDraft(e.target.value)} onKeyDown={onSearchKey} />
           <button className="btn sm" type="submit">Search</button>
           <label className="chk small" title="Match the words together, in this order (the same as typing them in quotes)">

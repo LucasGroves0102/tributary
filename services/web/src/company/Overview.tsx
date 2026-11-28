@@ -125,7 +125,8 @@ export function Overview({
       </div>
       <div className="ov-side">
         <TodaysView.Provider value={asOf ?? null}>
-          {canFin && <RevenueBars companyId={companyId} name={name} load={quarters} rows={quarterRows} hl={asOf ? null : hl} foreign={foreign} asOf={asOf} />}
+          {canFin && <RevenueBars companyId={companyId} name={name} load={quarters} rows={quarterRows} hl={asOf ? null : hl} foreign={foreign} asOf={asOf}
+            label={isBankRow(row) ? "Net revenue" : "Revenue"} />}
           {foreign ? (
             <Folio name="Since the last report" line="Files 6-Ks, not 8-Ks" className="events-card">
               <p className="empty foreign-note">
@@ -531,7 +532,7 @@ function Recap({ token, companyId, name, accession, sixK, canFin, foreign, asOf 
               )}
               <p className="foot">
                 {data!.flags_unavailable ? `${sentence(data!.flags_unavailable)} ` : ""}
-                Each column is the figures as its own filing printed them; a restated value cites the restating filing. Margins
+                Each column's figures are read from the filing it names: a later filing's where one restated them. Margins
                 change in basis points; a change in a balance is uncoloured.
                 {fromRelease && " A 6-K's figures are read from its results release's own tables (no XBRL covers those quarters), so they carry no tick; each card names the table and row."}
               </p>
@@ -610,7 +611,9 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
  * edge, a derived quarter hatched; hairlines at round values; the first and last bars labelled. Bars
  * appear at their value (no growing from zero). "View as table" lists the same figures, each opening
  * its card. A footing term outlines its bar. */
-function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
+function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf, label = "Revenue" }: {
+  /** what the hero calls it: a bank's is net revenue (Marek 63: "Net revenue" beside "Revenue by quarter") */
+  label?: string;
   companyId: string;
   name: string;
   load: Load<FinancialRow[]> | null;
@@ -631,7 +634,7 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
   const derivedForm = bars.find((r) => r.value_source === "derived")?.citation.form;
   const derivedFrom = derivedForm === undefined ? null : /^(20-F|40-F)/.test(derivedForm) ? derivedForm.slice(0, 4) : "10-K";
   return (
-    <Folio name="Revenue by quarter" className="ov-bars"
+    <Folio name={`${label} by quarter`} className="ov-bars"
       line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
       aside={bars.length ? (
         <button type="button" className="link view-table" aria-pressed={table} onClick={() => setTable((t) => !t)}>

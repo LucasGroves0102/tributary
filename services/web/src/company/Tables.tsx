@@ -172,7 +172,7 @@ function inputLines(row: TableRow): [string, string | undefined][] {
 
 /** A column's source line (§5.1: tables don't put marks in cells; each column names its source): the
  * filing its figures share, "10-Q Aug 26, 2026", or its form when they differ; d when they are derived. */
-function columnSource(table: MetricTable, i: number): { text: string; derived: boolean } | null {
+function columnSource(table: MetricTable, i: number): { text: string; form: string; filed: string | null; derived: boolean } | null {
   const cells = table.rows.map((r) => r.cells[i]).filter((c): c is TableCell => !!c?.source);
   if (!cells.length) return null;
   const accessions = new Set(cells.map((c) => c.source!.accessionNo));
@@ -180,8 +180,9 @@ function columnSource(table: MetricTable, i: number): { text: string; derived: b
   // derived when the column's revenue (its first line) is: a fiscal Q4 from the 10-K
   const derived = cellMark(table.rows[0]?.cells[i] ?? cells[0]!) === "d";
   const first = cells[0]!.source!;
-  const text = accessions.size === 1 ? `${first.form}${first.filed ? ` ${day(first.filed, true)}` : ""}` : forms.join(", ");
-  return { text, derived };
+  const one = accessions.size === 1;
+  const text = one ? `${first.form}${first.filed ? ` ${day(first.filed, true)}` : ""}` : forms.join(", ");
+  return { text, form: one ? first.form : forms.join(", "), filed: one && first.filed ? day(first.filed, true) : null, derived };
 }
 
 /** A metric × period ledger (§4): the unit's statement in the first header cell, each column's label,
@@ -220,7 +221,8 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
                 <th key={c.periodEnd} className={src?.derived ? "n derived" : "n"}>
                   {c.label}
                   <span className="pe unit">{c.sub}</span>
-                  {src && <span className="src">{src.text}{src.derived && <i> d</i>}</span>}
+                  {/* the form set as a code, its filing day as words (Marek 57: some dates letter-spaced, some not) */}
+                  {src && <span className="src" title={src.text}>{src.form}{src.filed && <span className="src-day"> {src.filed}</span>}{src.derived && <i> d</i>}</span>}
                 </th>
               );
             })}

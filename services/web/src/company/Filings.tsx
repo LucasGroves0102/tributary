@@ -106,16 +106,19 @@ export function Filings({ token, companyId, name, canRead, initialDiff, fiscalYe
               </button>
             ))}
           </span>
-          <label className="row">
-            <span className="faint">from</span>
-            <input type="date" className="field narrow" aria-label="Filed from" value={from}
-              onChange={(e) => refilter(() => setFrom(e.target.value))} />
-          </label>
-          <label className="row">
-            <span className="faint">to</span>
-            <input type="date" className="field narrow" aria-label="Filed to" value={to}
-              onChange={(e) => refilter(() => setTo(e.target.value))} />
-          </label>
+          {/* the range is one group: "from" and "to" never end and start two lines (Marek 39) */}
+          <span className="row date-range">
+            <label className="row">
+              <span className="faint">from</span>
+              <input type="date" className="field narrow" aria-label="Filed from" value={from}
+                onChange={(e) => refilter(() => setFrom(e.target.value))} />
+            </label>
+            <label className="row">
+              <span className="faint">to</span>
+              <input type="date" className="field narrow" aria-label="Filed to" value={to}
+                onChange={(e) => refilter(() => setTo(e.target.value))} />
+            </label>
+          </span>
           {/* dates apply as they change; one click puts them back (Riley 76: no Clear) */}
           {(from || to) && (
             <button className="btn sm ghost" onClick={() => refilter(() => {
@@ -339,7 +342,7 @@ export function Changes({ token, companyId, accessionNo, name, pin, form = null 
           }}>
             <input type="search" className="field" aria-label="Topic" placeholder="Topic, e.g. tariffs" maxLength={100}
               value={draft} onChange={(e) => setDraft(e.target.value)} />
-            <button className="btn sm" type="submit">Filter</button>
+            <button className="btn" type="submit">Filter</button>
             {topic && (
               <button className="btn sm ghost" type="button" onClick={() => {
                 setDraft("");

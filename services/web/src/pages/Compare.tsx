@@ -311,7 +311,7 @@ export function Compare({ token, compare: asked, onChart, saveBar, embedded }: P
                   <option key={k} value={k}>{COMPARE_COLUMNS.find((c) => c.key === k)!.long}</option>
                 ))}
               </select>
-              <button className="btn sm" onClick={chartThese} disabled={!readableIds.length}
+              <button className="btn" onClick={chartThese} disabled={!readableIds.length}
                 title={`One line per company you can read, calendar quarters${readableIds.length > MAX_COMPANY_LINES ? `: the first ${MAX_COMPANY_LINES} of ${readableIds.length}` : ""}`}>
                 Chart these
               </button>

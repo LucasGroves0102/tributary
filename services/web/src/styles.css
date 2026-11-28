@@ -329,9 +329,10 @@ html[data-motion="reduced"] .btn:active:not(:disabled) {
   white-space: nowrap;
 }
 
+/* an annual report: a step louder than a 10-Q, never the heaviest mark on the page (Marek 58) */
 .tag.k {
-  color: var(--page);
-  background: var(--ink);
+  color: var(--ink);
+  background: var(--well);
   border-color: var(--ink);
 }
 
@@ -970,24 +971,29 @@ table.t {
 
 /* Tiles wrap and the last row fills its width: a grid left a dead grey cell there. */
 /* the figures that answer "how fresh": large serif figures between ink rules, each after a red rule */
+/* a strip of stats: each cell's label, figure and note on rows shared across the strip (subgrid), so a
+   label that wraps doesn't drop its figure below its neighbours' (Marek 25: "0" at y=581 beside "83,864"
+   at 603); each cell sits 17px left, under the clip, so the first cell of every wrapped row loses its rule
+   and inset (Marek 28: row 2 at x=35 under row 1 at x=16) */
 .status-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 0;
+  overflow: hidden;
   border-top: 2px solid var(--ink);
   border-bottom: 1px solid var(--rule);
 }
 
 .status-strip > div {
-  flex: 1 1 170px;
-  padding: 14px 18px 16px;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  row-gap: 0;
+  padding: 14px 16px 16px;
+  margin-left: -17px;
   min-width: 0;
   border-left: 1px solid var(--col-rule);
-}
-
-.status-strip > div:first-child {
-  border-left: 0;
-  padding-left: 0;
 }
 
 .status-strip .k,
@@ -3768,8 +3774,10 @@ button.link.num {
   padding: 0;
 }
 
+/* each item's words from its top, whatever its neighbours' height (Marek 26: bodies centred, 11-42px apart) */
 .cover-list li {
   display: grid;
+  align-content: start;
   gap: var(--sp-2);
   padding: var(--sp-5) var(--sp-6);
   border-bottom: 1px solid var(--line);
@@ -8102,9 +8110,20 @@ label.check {
   flex-basis: 100%;
 }
 
+/* beside the name where there's room, so a row keeps the ledger's 32px (Marek 30: 49px rows); under it
+   where the table is narrow (below) */
 .t.screen .co-conf {
+  display: inline-block;
+  margin-left: 8px;
   color: var(--ink-3);
   white-space: normal;
+}
+
+@container tw (max-width: 1080px) {
+  .t.screen .co-conf {
+    display: block;
+    margin-left: 0;
+  }
 }
 
 /* the Filings tab's filters: a row of their own under its heading, in one place whatever is chosen

@@ -77,7 +77,7 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
 
   const legend = page.locator(".lchart-svg .ch-legend text");
   // the first layer starts from the watchlist's first company
-  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net income ÷ revenue (TTM) (right axis)"]);
+  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net income ÷ revenue (TTM, right axis)"]);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings");
 
   // the bar's exports are one menu (Riley 101: three buttons wrapped the toolbar)

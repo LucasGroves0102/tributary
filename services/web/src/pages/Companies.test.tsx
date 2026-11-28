@@ -227,7 +227,8 @@ it("exports the whole screen as the API's CSV", async () => {
   expect(csv.searchParams.get("limit")).toBe("5000");
   expect(csv.searchParams.get("offset")).toBe("0");
   expect(csv.searchParams.get("access")).toBe("financials");
-  expect(vi.mocked(download).mock.calls[0]?.[0]).toBe("screener.csv");
+  // the day in its name (Marek 60)
+  expect(vi.mocked(download).mock.calls[0]?.[0]).toMatch(/^screener-\d{4}-\d{2}-\d{2}\.csv$/);
 });
 
 it("moves through rows with the keyboard and opens one with Enter", async () => {

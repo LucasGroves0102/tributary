@@ -924,3 +924,10 @@ html[data-motion="reduced"] .tab-ink {
     display: flex;
   }
 }
+
+/* a column's filing day beside its form: words, not a code (Marek 57) */
+.t.led th .src .src-day {
+  font-stretch: 100%;
+  font-weight: 400;
+  letter-spacing: 0;
+}

@@ -253,6 +253,28 @@
   padding-left: 8px;
 }
 
+/* the screener's watched rows keep the column's edge: the notch sits 8px out, in the scroller's own
+   inset (Marek 30: their names were pushed 8px right, x=272 against 264) */
+.screen-results .tw {
+  margin-left: -8px;
+  padding-left: 8px;
+}
+
+.t.screen tr.watched td.first {
+  padding-left: 0;
+  box-shadow: none;
+}
+
+.t.screen tr.watched td.first::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: -8px;
+  width: 2px;
+  background: var(--ink);
+}
+
 /* row actions: a fixed slot at the row's end, quiet; shown on hover on a fine pointer, always on a coarse one */
 .t td.actions {
   text-align: right;
@@ -938,10 +960,14 @@ button.chip.on,
   transition: background-color var(--t-hover-out) linear;
 }
 
+/* an item's number takes the room it needs and keeps 8px from its title (Marek 21: "2.02Results of
+   Operations", "EX-" over "99.1") */
 .toc .key {
   flex: none;
-  width: 30px;
-  min-width: 0;
+  width: auto;
+  min-width: 30px;
+  margin-right: 8px;
+  white-space: nowrap;
   padding-left: 8px;
   font-size: 12px;
   font-stretch: 82%;
@@ -2259,22 +2285,23 @@ html[data-motion="reduced"] .release-table-box summary::before {
   border: 0;
 }
 
+/* each cell 25px left, under the clip: the first of every wrapped row loses its rule and inset, so row two
+   starts where row one does (Marek 28: "128 of 128" 26px right of "6,670" at 768) */
 .welcome .proof {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--rule);
 }
 
-.welcome .proof > div {
-  padding: 16px 24px 16px 0;
-}
-
+.welcome .proof > div,
 .welcome .proof > div + div {
-  padding-left: 24px;
+  padding: 16px 24px;
+  margin-left: -25px;
   border-left: 1px solid var(--rule);
 }
 
@@ -2366,6 +2393,7 @@ html[data-motion="reduced"] .release-table-box summary::before {
   .welcome .proof > div,
   .welcome .proof > div + div {
     padding: 12px 12px 12px 0;
+    margin-left: 0;
     border-left: 0;
     border-bottom: 1px solid var(--rule);
   }
@@ -2503,9 +2531,11 @@ html[data-motion="reduced"] .release-table-box summary::before {
   line-height: 22px;
 }
 
+/* one outline (Marek 53: a border inside a ring drew a double, focus-like box on every step) */
 .step-done {
   min-height: var(--control-h);
   padding: 0 12px;
+  border: 0;
   border-radius: var(--r-control);
   box-shadow: inset 0 0 0 1px var(--rule-2);
   font-size: 13px;
@@ -2738,4 +2768,21 @@ html[data-motion="reduced"] .release-table-box summary::before {
   line-height: 22px;
   font-weight: 600;
   color: var(--ink);
+}
+
+/* a date range keeps its two ends together on one line (Marek 39) */
+.date-range {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+/* a label and its control wrap together (Marek 54) */
+.nowrap-pair {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+/* Customize Home: each card's name in a column wide enough for the longest, its arrows right after */
+.view-editor .view-card {
+  min-width: 240px;
 }

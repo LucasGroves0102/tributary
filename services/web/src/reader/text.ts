@@ -146,7 +146,9 @@ export function firstMatchFrom(ps: Paragraph[], terms: string[], target: number)
  * ts_headline, the text from the filing. ts_headline marks every word of a quoted phrase wherever
  * it stands ("«controls» to restrict" for "export controls"), so with a phrase among `terms` the
  * snippet is marked here instead, as the reader marks the section (#80). */
-export function snippetRuns(snippet: string, terms: string[] = []): Run[] {
+export function snippetRuns(raw: string, terms: string[] = []): Run[] {
+  // the API's " ... " between passages is an ellipsis (Marek 49)
+  const snippet = raw.replace(/\s*\.\.\.\s*/g, (m: string, at: number) => (at === 0 ? "… " : m.endsWith(" ") ? " … " : " …"));
   if (terms.some((t) => /\s/.test(t))) return highlight(snippet.replace(/[«»]/g, ""), terms);
   const out: Run[] = [];
   for (const part of snippet.split(/(«[^»]*»)/)) {

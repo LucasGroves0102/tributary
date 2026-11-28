@@ -81,7 +81,7 @@ export function Search({ token, search, companies, open = false, suggestions = N
       <form className="card card-b search-form" role="search" onSubmit={submit}>
         <div className="row wrap">
           <input className="field grow" type="search" aria-label="Search words" maxLength={200}
-            placeholder={'Words, "an exact phrase", or, -excluded'} value={draft.q}
+            placeholder="Words, “an exact phrase”, or −excluded" value={draft.q}
             onChange={(e) => setDraft((d) => ({ ...d, q: e.target.value }))} />
           <button className="btn primary" type="submit" disabled={!draft.q.trim()}>Search</button>
         </div>
@@ -112,16 +112,18 @@ export function Search({ token, search, companies, open = false, suggestions = N
             <CompanyFilter token={token} value={draft.company} open={open} companies={readable} suggestions={suggestions}
               set={(company) => filter({ company })} />
           </div>
-          <label className="row">
-            <span className="faint">Filed from</span>
-            <input className="field narrow" type="date" aria-label="Filed from" value={draft.from ?? ""}
-              onChange={(e) => filter({ from: e.target.value || undefined, allDates: undefined })} />
-          </label>
-          <label className="row">
-            <span className="faint">to</span>
-            <input className="field narrow" type="date" aria-label="Filed to" value={draft.to ?? ""}
-              onChange={(e) => filter({ to: e.target.value || undefined, allDates: undefined })} />
-          </label>
+          <span className="row date-range">
+            <label className="row">
+              <span className="faint">Filed from</span>
+              <input className="field narrow" type="date" aria-label="Filed from" value={draft.from ?? ""}
+                onChange={(e) => filter({ from: e.target.value || undefined, allDates: undefined })} />
+            </label>
+            <label className="row">
+              <span className="faint">to</span>
+              <input className="field narrow" type="date" aria-label="Filed to" value={draft.to ?? ""}
+                onChange={(e) => filter({ to: e.target.value || undefined, allDates: undefined })} />
+            </label>
+          </span>
         </div>
         {inverted && (
           <p className="error small" role="alert">

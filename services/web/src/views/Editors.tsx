@@ -32,7 +32,8 @@ export function HomeLayoutEditor({
       <ol className="view-list">
         {cards.map((c, i) => (
           <li key={c.id}>
-            <label className="chk grow">
+            {/* the arrows sit by the label they move, not 1,000px off at the row's end (Marek 59) */}
+            <label className="chk view-card">
               <input type="checkbox" checked={!c.hidden} onChange={() => onChange(toggleCard(cards, c.id))} />
               {HOME_CARD_LABELS[c.id]}
             </label>
