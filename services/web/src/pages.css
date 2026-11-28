@@ -2189,12 +2189,13 @@ html[data-motion="reduced"] .release-table-box summary::before {
   margin: 0 auto;
   padding: 24px 32px 64px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  column-gap: 64px;
   grid-template-areas:
-    "head"
-    "card"
-    "proof"
-    "more";
+    "head spec"
+    "card spec"
+    "proof proof"
+    "more more";
   grid-template-rows: none;
   background: transparent;
   border: 0;
@@ -2785,4 +2786,129 @@ html[data-motion="reduced"] .release-table-box summary::before {
 /* Customize Home: each card's name in a column wide enough for the longest, its arrows right after */
 .view-editor .view-card {
   min-width: 240px;
+}
+
+/* --- the front door's specimen (§6): a statement's lines, the first figure framed in seal and ticked, the
+   filing's own line under it in the serif; drawn with blank values (no figure it doesn't read live) ---- */
+.welcome-specimen {
+  grid-area: spec;
+  align-self: center;
+  margin: 0;
+  padding: 24px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pop);
+}
+
+.welcome-layout > .welcome-head { grid-area: head; }
+.welcome-layout > .welcome-card { grid-area: card; }
+.welcome-layout > .welcome-proof { grid-area: proof; }
+.welcome-layout > .welcome-more { grid-area: more; }
+
+.spec-ledger {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.spec-h,
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.spec-h {
+  border-bottom-color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.spec-h .spec-col {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.spec-row {
+  color: var(--ink-2);
+}
+
+.spec-row.total {
+  font-weight: 650;
+  color: var(--ink);
+  border-top: 1px solid var(--ink);
+  border-bottom: 3px double var(--ink);
+}
+
+.spec-fig {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.spec-fig.framed,
+.spec-quote .framed {
+  box-shadow: 0 0 0 2px var(--seal);
+}
+
+.blank-v.w-72 { width: 72px; }
+.blank-v.w-80 { width: 80px; }
+.blank-v.w-88 { width: 88px; }
+.blank-v.w-96 { width: 96px; }
+
+.spec-line {
+  display: grid;
+  gap: 4px;
+  margin: 24px 0 0;
+  padding: 12px 16px;
+  background: var(--paper);
+  border-left: 2px solid var(--ink-2);
+}
+
+.spec-form {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  font-stretch: 82%;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+.spec-quote {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.welcome-specimen figcaption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+/* narrower than the two columns: the specimen goes, the first screen keeps the way in */
+@container welcome (max-width: 1000px) {
+  .welcome-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "card"
+      "proof"
+      "more";
+  }
+
+  .welcome-specimen {
+    display: none;
+  }
 }

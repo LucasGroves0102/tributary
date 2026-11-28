@@ -4371,6 +4371,21 @@ button.link.num {
   flex-basis: 170px;
 }
 
+/* each section's figures on one line across its cells, whatever their labels wrap to (subgrid rows:
+   Marek 25, "667,034" at y=617 beside "3,862,990" at 595) */
+.status-grid > .card > .kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.status-grid > .card > .kv > div {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  row-gap: 0;
+}
+
 @container main (max-width: 1000px) {
   .status-grid {
     grid-template-columns: minmax(0, 1fr);

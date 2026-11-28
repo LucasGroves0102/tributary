@@ -11,6 +11,7 @@ import {
   passwordSignIn,
   sandboxOffer,
 } from "../api";
+import { Mark } from "../components/Mark";
 import { Seal } from "../components/Seal";
 import { duration } from "../format";
 import { href } from "../route";
@@ -292,6 +293,7 @@ export function Welcome({ onReady, notice, github, pollMs = 1000, now = Date.now
             </div>
           )}
         </section>
+        <Specimen />
         {/* the proof as one ledger row, read live from Data status (spec §6 Front door) */}
         <section className="welcome-proof" aria-label="What's in Tributary">
           <Proof />
@@ -473,5 +475,36 @@ function Progress({ phase, onContinue }: { phase: Phase; onContinue: () => void 
         </p>
       )}
     </div>
+  );
+}
+
+/** The idea at the right of the first screen (spec §6 Front door, Marek 69: its right 45% was empty paper):
+ * a statement's lines with the first figure framed in seal and ticked, and the filing's own line under it
+ * in the serif. Drawn, not quoted: the values are blank blocks, because the front door shows no figure it
+ * doesn't read live (web CLAUDE.md), and signed out there's none to read. */
+function Specimen() {
+  const lines: [string, string][] = [["Revenue", "w-96"], ["Cost of revenue", "w-80"], ["Gross profit", "w-88"], ["Operating income", "w-80"], ["Net income", "w-72"]];
+  return (
+    <figure className="welcome-specimen" aria-label="An illustration: a figure on a statement, framed and ticked, opens the filing's own line it came from">
+      <div className="spec-ledger" aria-hidden="true">
+        <div className="spec-h"><span>Income statement</span><span className="spec-col">Latest quarter</span></div>
+        {lines.map(([label, w], i) => (
+          <div key={label} className={i === lines.length - 1 ? "spec-row total" : "spec-row"}>
+            <span>{label}</span>
+            <span className={i === 0 ? "spec-fig framed" : "spec-fig"}>
+              <span className={`blank-v ${w}`} />
+              {i === 0 && <Mark kind="ok" />}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="spec-line" aria-hidden="true">
+        <span className="spec-form">10-Q, Part I, Item 1</span>
+        <span className="spec-quote">Revenue <span className="blank-v w-96 framed" /></span>
+      </div>
+      <figcaption>
+        <Mark kind="ok" /> agrees to the filing: every figure opens the line it came from.
+      </figcaption>
+    </figure>
   );
 }
