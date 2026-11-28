@@ -399,7 +399,7 @@ function ModelEditor({ token, item, initial, saved, label, embedded = false, act
                   <li key={v.version_id}>
                     <span className="grow">
                       Saved {localTime(v.saved_at)}
-                      <span className="faint"> · {v.years ?? "?"} forecast year{v.years === 1 ? "" : "s"}{v.cases ? ", bear and bull" : ""} · {v.name}</span>
+                      <span className="faint"> · {v.years ?? "?"} forecast year{v.years === 1 ? "" : "s"}{v.cases ? ", bear and bull" : ""} · {v.name}</span>
                     </span>
                     <button className="btn sm" onClick={() => void restoreVersion(v)} title="Put this version in the editor; nothing is saved until you Save">
                       Restore

@@ -143,7 +143,7 @@ describe("series", () => {
     expect(eps.unit).toBe("EUR/shares");
     expect(formatValue(1.22, eps.unit)).toBe("€1.22");
     expect(unitLabel(eps.unit)).toBe("EUR per share");
-    expect(formatValue(2.1e9, "CAD")).toBe("CAD 2.10B");
+    expect(formatValue(2.1e9, "CAD")).toBe("CAD\u00a02.10B");
     // an older API, or dollars: as before
     expect(toSeries(series([[8100, "CY2025 Q1", "1"]]), metric(), "x", 0).unit).toBe("USD");
     expect(formatValue(96.2e9, "USD")).toBe("$96.20B");

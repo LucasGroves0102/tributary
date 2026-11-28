@@ -587,6 +587,15 @@ Statements since F5 (migration 049; `company/data.ts` `STATEMENTS`, `cashBridges
 
 ### Blanks, readings, currencies and per-share figures
 
+Number format (Marek 18, 19, 37, 38): Statements keep each row's own unit (`moneyRow`: the owner's call, not one
+unit per statement), and every table lines its column's decimal points up: `TableScroll` reads each numeric
+cell's text after render and `decimalPads` gives it the unseen digits, point, scale letter or closing
+parenthesis it lacks against the column (drawn by `td[data-pad]::after`, hidden, so the cell's text stays the
+figure): AAPL's "$124.3B" over "$66.03B", 7px apart before, now on one point. `format.ts` writes every negative
+with U+2212 (`MINUS`, `signed`; CSVs keep the API's numbers), a currency code and a scale word with a no-break
+space ("TWD 1.49T", "$303.0 billion"), and the space before a " · " in on-screen text is a no-break one; a
+section's line separates its parts by a 16px gap instead of a dot.
+
 What a table shows where there's no usable figure is one vocabulary, in `src/blanks.ts`: **—** not
 reported, **·** no data in this period, **n/a** not applicable, **n/m** not meaningful, **$0** a real
 zero. Whether a value is n/m, n/a or old is the database's call (migration 035), sent as `readings` so

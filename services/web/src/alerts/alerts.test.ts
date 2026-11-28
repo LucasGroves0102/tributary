@@ -34,7 +34,7 @@ it("words figures as the statements do", () => {
   expect(figureChange(fig({}))).toBe("+62.5% on a year earlier");
   const gm = fig({ metric: "gross_margin", label: "Gross margin", value: "0.735", unit: "ratio", change: "-0.010", pct_change: null });
   expect(figureValue(gm)).toBe("73.5%");
-  expect(figureChange(gm)).toBe("-1.0 pts on a year earlier");
+  expect(figureChange(gm)).toBe("−1.0 pts on a year earlier");
   expect(figureValue(fig({ value: "1.3", unit: "USD/shares" }))).toBe("$1.30");
   expect(figureChange(fig({ change: null, pct_change: null }))).toBeNull();
 });

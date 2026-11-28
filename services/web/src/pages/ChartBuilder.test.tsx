@@ -179,7 +179,7 @@ it("shows each layer's value, period and source filing on hover", async () => {
   expect(tip.textContent).toContain("FY2027 Q2");
   expect(tip.textContent).toContain("$46.74B");
   expect(tip.textContent).toContain("62.0%");
-  expect(tip.textContent).toContain("10-Q filed Aug 26, 2026 · 0001045810-26-000075");
+  expect(tip.textContent).toContain("10-Q filed Aug 26, 2026\u00a0· 0001045810-26-000075");
 });
 
 it("switches transform and hides layers", async () => {

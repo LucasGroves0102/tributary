@@ -145,13 +145,13 @@ function Provider({ token, provider, connection }: { token: string; provider: Ma
       <p className="small">
         {provider.data}.{" "}
         <a href={provider.signup_url} target="_blank" rel="noreferrer">Get your API key</a>
-        {" · "}
+        {" · "}
         <a href={provider.terms_url} target="_blank" rel="noreferrer">Plans and terms</a>
       </p>
       {connection ? (
         <div className="row wrap">
           <span className="grow">
-            Connected · key <code>{connection.key_hint}</code> · added {localDay(connection.created_at, true)}
+            Connected · key <code>{connection.key_hint}</code> · added {localDay(connection.created_at, true)}
           </span>
           <button className="btn" onClick={() => void disconnect()} disabled={busy}>
             Disconnect

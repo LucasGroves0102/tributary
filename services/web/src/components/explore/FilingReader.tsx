@@ -203,7 +203,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
   const index = f.sections.findIndex((s) => s.section_key === active?.section_key);
   const neighbour = (i: number) => f.sections[i] && (
     <a href={href({ view: "filing", companyId, accessionNo, section: f.sections[i]!.section_key, ...(query ? { q: query } : {}) })}>
-      {i < index ? "← " : ""}{f.sections[i]!.section_key} · {sectionTitle(f.sections[i]!.section_key, f.sections[i]!.title)}{i > index ? " →" : ""}
+      {i < index ? "← " : ""}{f.sections[i]!.section_key} · {sectionTitle(f.sections[i]!.section_key, f.sections[i]!.title)}{i > index ? " →" : ""}
     </a>
   );
 
@@ -324,7 +324,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
           {active && (
             <div className="row wrap section-h" data-sticky-bar="">
               <h2 className="grow">
-                {active.section_key} · {sectionTitle(active.section_key, active.title)}
+                {active.section_key} · {sectionTitle(active.section_key, active.title)}
               </h2>
               {terms.length > 0 && sectionText && !diffOn && (
                 <MatchNav matches={matches} current={match} passages={hitsBySection.get(active.section_key)?.passages_matched ?? 0}
@@ -608,7 +608,7 @@ function SideBySide({ diff, companyId, basis, form, onBasis }: {
         <span className="tag e">{m ? m.rewritten : diff.summary.rewritten} rewritten</span>
         <span className="tag warn">{m ? m.removed : diff.summary.removed} removed</span>
         <span className="faint">
-          · {diff.summary.unchanged + hidden} unchanged or minor, hidden
+          · {diff.summary.unchanged + hidden} unchanged or minor, hidden
         </span>
       </div>
       {diff.stale ? (

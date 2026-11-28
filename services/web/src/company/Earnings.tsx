@@ -55,11 +55,11 @@ export function EarningsView({ token, companyId, name, canReadFilings, canReadFi
                 {data.quarters.map((q) => (
                   <button key={q.period_end} className={q === shown ? "on" : undefined} aria-pressed={q === shown}
                     onClick={() => setPick(q.period_end)} title={quarterName(q)}>
-                    {day(q.period_end, true)}{q.release ? "" : " · no release"}
+                    {day(q.period_end, true)}{q.release ? "" : " · no release"}
                   </button>
                 ))}
               </span>
-              <span className="faint small">quarters by their end date · no consensus or beat/miss in Tributary</span>
+              <span className="faint small">quarters by their end date · no consensus or beat/miss in Tributary</span>
             </div>
             <Quarter key={shown.period_end} token={token} companyId={companyId} name={name} q={shown} canReadFinancials={canReadFinancials} />
             <p className="faint small earnings-method">{data.method}</p>
@@ -80,8 +80,8 @@ function exhibitName(key: string | null): string {
 /** "8-K filed Oct 28, 2026 · Results of operations" or, for a foreign filer (migration 095),
  * "6-K filed Oct 15, 2026 · results release": a 6-K has no items. */
 function releaseLine(rel: EarningsRelease): string {
-  if (rel.form === "6-K") return `6-K filed ${day(rel.filed, true)} · results release`;
-  return `8-K filed ${day(rel.filed, true)} · ${rel.items.filter((i) => i.item !== "9.01").map(itemLabel).join(", ") || "Results of operations"}`;
+  if (rel.form === "6-K") return `6-K filed ${day(rel.filed, true)} · results release`;
+  return `8-K filed ${day(rel.filed, true)} · ${rel.items.filter((i) => i.item !== "9.01").map(itemLabel).join(", ") || "Results of operations"}`;
 }
 
 /** What a pinned passage of this release says about where it's from (its quarter: H13). */
@@ -126,7 +126,7 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
               {q.headline ? <blockquote className="release-headline">{q.headline.text}</blockquote> : null}
               <p className="small muted">
                 {releaseLine(rel)}
-                {rel.section_key ? ` · ${exhibitName(rel.section_key)}` : " · its text isn't stored here"}
+                {rel.section_key ? ` · ${exhibitName(rel.section_key)}` : " · its text isn't stored here"}
               </p>
               <div className="row wrap">
                 {rel.section_key && (
@@ -159,7 +159,7 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
       <section className="card" aria-labelledby={`${id}-out`}>
         <div className="card-h wrap">
           <h3 id={`${id}-out`}>Outlook stated in the release</h3>
-          <span className="sub">quoted from its Outlook or Guidance sections{rel ? " · pin a block to quote it in your thesis with its quarter" : ""}</span>
+          <span className="sub">quoted from its Outlook or Guidance sections{rel ? " · pin a block to quote it in your thesis with its quarter" : ""}</span>
         </div>
         {!rel ? (
           <p className="empty">No release, so no outlook for this quarter.</p>
@@ -268,7 +268,7 @@ function Figures({ token, companyId, name, q, canReadFinancials }: {
       <div className="card-h">
         <h3>Reported figures</h3>
         <span className="sub">
-          {q.report ? `${q.report.form} filed ${day(q.report.filed, true)} · vs the same quarter a year ago`
+          {q.report ? `${q.report.form} filed ${day(q.report.filed, true)} · vs the same quarter a year ago`
             : relData ? `${relData.form} filed ${day(relData.filed, true)}, against the same quarter a year ago` : "from the quarter's 10-Q or 10-K"}
         </span>
       </div>

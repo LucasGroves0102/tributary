@@ -18,7 +18,7 @@
  *   reference the user reads, never an input. */
 
 import type { Series, Source } from "../chart/series";
-import { day, money } from "../format";
+import { day, money, signed } from "../format";
 import type { EarningsQuarter, EarningsResponse } from "../types";
 
 export const MAX_YEARS = 10;
@@ -749,9 +749,9 @@ export function formatCell(v: CellValue, unit: Unit, currency = "USD"): string {
       return abs >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : `${(v / 1e6).toFixed(1)}M`;
     }
     case "multiple":
-      return `${v.toFixed(1)}x`;
+      return `${signed(v.toFixed(1))}x`;
     default:
-      return `${(v * 100).toFixed(1)}%`;
+      return `${signed((v * 100).toFixed(1))}%`;
   }
 }
 

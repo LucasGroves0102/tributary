@@ -98,7 +98,11 @@ front door, keeps the request in the tab while you sign in, and opens again afte
 - **Money** has four significant figures at most, thousands grouped, negatives in parentheses on every
   table and the lists under them (display only: CSV and hovers keep the sign), one unit per row
   (`format.ts` `moneyRow`: the next smaller unit when a figure would read under one, so $119M ... $3,955M,
-  not $0.12B), and another currency shown in it, never converted.
+  not $0.12B), and another currency shown in it, never converted. A column's decimal points line up
+  (`components/TableScroll` `decimalPads`: unseen digits, a point or a hanging parenthesis after a figure).
+  A negative is written with the true minus (U+2212), and a change's fall is rust (`.neg` = `.loss`), a
+  level uncoloured; a figure never parts from its currency code or scale word at a line's end (no-break
+  spaces), and a " · " never starts a wrapped line.
 - **One sign convention**: outflows (capex, dividends, buybacks) are negative on statements, their CSV
   and the Numbers charts; the chart builder and screener keep the API's metric, the amount paid.
 - **Times** are the viewer's local date and clock with the zone (`format.ts` `localTime`).

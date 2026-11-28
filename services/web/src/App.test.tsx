@@ -201,7 +201,7 @@ describe("Home", () => {
   it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
     await render();
     const card = [...container.querySelectorAll("section.card")].find((c) => c.querySelector("h2")?.textContent === "Recent data notes for your companies")!;
-    expect(card.querySelector(".note")?.textContent).toContain("Nvidia (NVDA) · Revenue restated");
+    expect(card.querySelector(".note")?.textContent).toContain("Nvidia (NVDA)\u00a0· Revenue restated");
     // the date beside the title is set apart by space, not a middle dot (Seal)
     expect(card.querySelector(".note .note-when")?.textContent).toBe("Feb 26, 2026");
     expect(card.querySelector(".note a")?.getAttribute("href")).toBe(`#/company/${NVDA}/notes`);

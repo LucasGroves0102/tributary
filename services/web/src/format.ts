@@ -14,7 +14,15 @@ export function currencyOf(unit: string | null | undefined): string {
   return /^[A-Z]{3}$/.test(code) ? code : "USD";
 }
 
-const prefix = (code: string) => SYMBOLS[code] ?? `${code} `;
+/** The sign a negative figure is shown with: the true minus (U+2212), never a hyphen (Marek 19: "-6.1%"
+ * beside "−1.4%" in one table). Display only: CSVs keep the API's numbers. */
+export const MINUS = "\u2212";
+
+/** A no-break space: a figure never parts from its currency code or its unit at a line's end (Marek 37:
+ * "$303.0 / billion"). */
+export const NBSP = "\u00a0";
+
+const prefix = (code: string) => SYMBOLS[code] ?? `${code}${NBSP}`;
 
 /** Amounts as $96.22B / -$1.30B (€2.10B, CAD 1.20B in another currency, migration 056); per-share
  * values (EPS: a unit like "USD/shares") as $1.05. */
@@ -28,7 +36,7 @@ const places = (scaled: number) => (Math.abs(scaled) >= 999.95 ? 0 : Math.abs(sc
 const grouped = (n: number, dp: number) => n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 
 export function money(value: number, unit: string): string {
-  const sign = value < 0 ? "-" : "";
+  const sign = value < 0 ? MINUS : "";
   const abs = Math.abs(value);
   const p = prefix(currencyOf(unit));
   if (!/^[A-Z]{3}$/.test(unit)) return `${sign}${p}${grouped(abs, 2)}`;
@@ -42,9 +50,9 @@ export function money(value: number, unit: string): string {
  * tags of one line read side by side (a data note, migration 075). Per share as $1.0523, shares as
  * "1,234 shares", a ratio as a plain number. Not for tables, which keep four significant figures. */
 export function asFiled(value: number, unit: string): string {
-  const sign = value < 0 ? "-" : "";
+  const sign = value < 0 ? MINUS : "";
   const digits = Math.abs(value).toLocaleString("en-US", { maximumFractionDigits: 4 });
-  if (unit === "shares") return `${sign}${digits} shares`;
+  if (unit === "shares") return `${sign}${digits}${NBSP}shares`;
   if (/^[A-Z]{3}(\/shares)?$/.test(unit)) return `${sign}${prefix(currencyOf(unit))}${digits}`;
   return `${sign}${digits}`;
 }
@@ -54,11 +62,11 @@ export function asFiled(value: number, unit: string): string {
  * card shows no figure Tributary doesn't hold (.interface-design/system.md §4). */
 export function exactAmount(value: number, unit: string): string {
   if (!/^[A-Z]{3}$/.test(unit)) return asFiled(value, unit);
-  const sign = value < 0 ? "-" : "";
+  const sign = value < 0 ? MINUS : "";
   const abs = Math.abs(value);
   const p = prefix(currencyOf(unit));
-  if (abs >= 1e6 && abs % 1e6 === 0) return `${sign}${p}${grouped(abs / 1e6, 0)} million`;
-  if (abs >= 1e3 && abs % 1e3 === 0) return `${sign}${p}${grouped(abs / 1e3, 0)} thousand`;
+  if (abs >= 1e6 && abs % 1e6 === 0) return `${sign}${p}${grouped(abs / 1e6, 0)}${NBSP}million`;
+  if (abs >= 1e3 && abs % 1e3 === 0) return `${sign}${p}${grouped(abs / 1e3, 0)}${NBSP}thousand`;
   return asFiled(value, unit);
 }
 
@@ -70,8 +78,8 @@ const SCALE_WORDS: Record<string, string> = { T: "trillions", B: "billions", M: 
 export function ledgerUnit(values: number[], currency = "USD"): { unit: string; text: (v: number) => string } {
   const top = Math.max(0, ...values.map((v) => Math.abs(v)));
   const scale = SCALES.find(([size]) => top >= size);
-  if (!scale) return { unit: currency, text: (v) => grouped(v, 0) };
-  return { unit: `${currency} ${SCALE_WORDS[scale[1]]}`, text: (v) => grouped(v / scale[0], 2) };
+  if (!scale) return { unit: currency, text: (v) => signed(grouped(v, 0)) };
+  return { unit: `${currency} ${SCALE_WORDS[scale[1]]}`, text: (v) => signed(grouped(v / scale[0], 2)) };
 }
 
 /** A row of amounts in one unit, so periods compare at a glance: the largest value's ($2.43M,
@@ -93,7 +101,7 @@ export function moneyRow(values: (number | null)[], currency = "USD"): (string |
   return values.map((v) => {
     if (v === null) return null;
     if (!scale || v === 0 || Math.abs(v) / scale[0] < 0.5 * 10 ** -dp) return money(v, currency);
-    return `${v < 0 ? "-" : ""}${p}${grouped(Math.abs(v) / scale[0], dp)}${scale[1]}`;
+    return `${v < 0 ? MINUS : ""}${p}${grouped(Math.abs(v) / scale[0], dp)}${scale[1]}`;
   });
 }
 
@@ -128,24 +136,32 @@ export function sentenceCase(text: string): string {
 }
 
 export function paren(text: string): string {
-  return /^-\D/.test(text) && !/[%x]$/.test(text) ? `(${text.slice(1)})` : text;
+  return /^[-\u2212]\D/.test(text) && !/[%x]$/.test(text) ? `(${text.slice(1)})` : text;
+}
+
+/** A number's text with the true minus for its sign ("-4.0" → "−4.0"); a figure that rounds to zero
+ * has no sign ("-0.0" → "0.0"). */
+export function signed(text: string): string {
+  if (!/^-/.test(text)) return text;
+  return /^-[0.,]*$/.test(text.replace(/[^\d.,-]/g, "")) ? text.slice(1) : MINUS + text.slice(1);
 }
 
 const WORDS: Record<string, string> = { T: "trillion", B: "billion", M: "million", K: "thousand" };
 
 /** An amount in a sentence: "$302.97B" → "$302.97 billion", "€2.10B" → "€2.10 billion". */
 export function inWords(text: string): string {
-  return text.replace(/^(.*\d)([TBMK])$/, (_, n: string, s: string) => `${n} ${WORDS[s]}`);
+  return text.replace(/^(.*\d)([TBMK])$/, (_, n: string, s: string) => `${n}${NBSP}${WORDS[s]}`);
 }
 
 /** Ratios as percentages: 0.2134 → "21.3%". */
 export function pct(ratio: number, digits = 1): string {
-  return `${(ratio * 100).toFixed(digits)}%`;
+  return `${signed((ratio * 100).toFixed(digits))}%`;
 }
 
 /** Growth with its sign: 0.123 → "+12.3%", -0.04 → "-4.0%". */
 export function change(ratio: number): string {
-  return `${ratio >= 0 ? "+" : ""}${pct(ratio)}`;
+  const text = pct(ratio);
+  return text.startsWith(MINUS) ? text : `+${text}`;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

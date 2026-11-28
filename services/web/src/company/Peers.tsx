@@ -150,7 +150,7 @@ export function Peers({
                               {r.ticker && <span className="faint mono">{r.ticker}</span>}
                               {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                             </a>
-                            {why && <div className="co-sub faint small" title={why}>{alike ? `${alike} · ` : ""}{why}</div>}
+                            {why && <div className="co-sub faint small" title={why}>{alike ? `${alike} · ` : ""}{why}</div>}
                           </td>
                           {cols.map((k) => {
                             const cell = r.cells[k]!;
@@ -169,7 +169,7 @@ export function Peers({
                                 {alike && <span className="alike" title={`Business sections: cosine similarity ${p?.match.similarity?.toFixed(2)} (0 none, 1 the same words)`}>{alike}</span>}
                                 {reasons.filter((x) => x.short !== null).map((x, i) => (
                                   <Fragment key={i}>
-                                    {(i > 0 || alike) && <span className="faint"> · </span>}
+                                    {(i > 0 || alike) && <span className="faint"> · </span>}
                                     {x.cite ? (
                                       <a href={href({ view: "filing", companyId: x.cite.companyId, accessionNo: x.cite.mention.accession_no, section: x.cite.mention.section_key, at: x.cite.mention.char_start })}
                                         title={`${x.text}: open the sentence in the filing reader`}>

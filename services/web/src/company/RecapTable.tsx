@@ -74,7 +74,7 @@ function Change({ d, colour }: { d: RecapDelta | null; colour: boolean }) {
 function recapCard(v: RecapValue, label: string, unit: string, period: string, companyId: string): SourceInfo {
   const n = Number(v.value);
   const derived = v.value_source === "derived";
-  const title = `${label} · ${period}, the quarter to ${day(v.period_end, true)}`;
+  const title = `${label} · ${period}, the quarter to ${day(v.period_end, true)}`;
   const value = Number.isFinite(n) ? exactAmount(n, unit) : String(v.value);
   const note = v.not_meaningful ? { note: `Not meaningful: ${v.not_meaningful}.` } : {};
   const edgar = v.citation.filing_url?.startsWith("https://www.sec.gov/") ? v.citation.filing_url : null;
@@ -97,7 +97,7 @@ function Figure({ r, col, text, label, companyId, first = false }: { r: RecapRow
   const v = r.values[col];
   const ratio = r.unit === "ratio";
   const { props, card } = useSourceCard(() => (v && !ratio ? recapCard(v, r.label, r.unit, label, companyId) : v ? {
-    title: `${r.label} · ${label}, the quarter to ${day(v.period_end, true)}`,
+    title: `${r.label} · ${label}, the quarter to ${day(v.period_end, true)}`,
     value: text,
     mark: null,
     how: `A ratio of figures from the ${v.citation.form} filed ${day(v.citation.filed, true)}.`,

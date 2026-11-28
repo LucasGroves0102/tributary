@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, duration, inWords, lateFiling, localClock, localTime, localToday, money, moneyRow, paren, pct, quarter, sentenceCase } from "./format";
+import { ago, change, companyName, day, displayNames, duration, inWords, lateFiling, localClock, localTime, localToday, money, moneyRow, paren, pct, quarter, sentenceCase, signed } from "./format";
 
 describe("moneyRow", () => {
   it("reads a row in one unit: the largest value's, or the next smaller one when a value would read under one", () => {
@@ -10,7 +10,7 @@ describe("moneyRow", () => {
     expect(moneyRow([119e6, 249.8e6, 3.955e9])).toEqual(["$119M", "$250M", "$3,955M"]);
     expect(moneyRow([54740, 963570, 2430000])).toEqual(["$55K", "$964K", "$2,430K"]);
     expect(moneyRow([897e6, 1.04e9, null])).toEqual(["$897M", "$1,040M", null]);
-    expect(moneyRow([-198360, 2430000])).toEqual(["-$198K", "$2,430K"]);
+    expect(moneyRow([-198360, 2430000])).toEqual(["−$198K", "$2,430K"]);
     // the largest wouldn't fit four digits of the smaller unit: the larger stays
     expect(moneyRow([0.5e9, 12.3e9])).toEqual(["$0.50B", "$12.30B"]);
   });
@@ -39,20 +39,20 @@ describe("money", () => {
     expect(money(96221000000, "USD")).toBe("$96.22B");
     expect(money(812400000, "USD")).toBe("$812.4M");
     expect(money(4.2e12, "USD")).toBe("$4.20T");
-    expect(money(-1300000000, "USD")).toBe("-$1.30B");
+    expect(money(-1300000000, "USD")).toBe("−$1.30B");
   });
 
   it("shows per-share values in dollars", () => {
     expect(money(1.05, "USD/shares")).toBe("$1.05");
-    expect(money(-0.4, "USD/shares")).toBe("-$0.40");
+    expect(money(-0.4, "USD/shares")).toBe("−$0.40");
   });
 
   it("shows another currency as its symbol or its code, never as dollars (migration 056)", () => {
     expect(money(2097429000, "EUR")).toBe("€2.10B");
     expect(money(1.87, "EUR/shares")).toBe("€1.87");
-    expect(money(-1.2e9, "CAD")).toBe("-CAD 1.20B");
+    expect(money(-1.2e9, "CAD")).toBe("−CAD\u00a01.20B");
     expect(moneyRow([4.94e9, 1.1e9], "EUR")).toEqual(["€4.94B", "€1.10B"]);
-    expect(moneyRow([4.94e9, null], "BRL")).toEqual(["BRL 4.94B", null]);
+    expect(moneyRow([4.94e9, null], "BRL")).toEqual(["BRL\u00a04.94B", null]);
     expect(money(3, "shares")).toBe("$3.00"); // as before: not a currency
   });
 });
@@ -60,7 +60,7 @@ describe("money", () => {
 it("formats ratios, growth and dates", () => {
   expect(pct(0.21345)).toBe("21.3%");
   expect(change(0.123)).toBe("+12.3%");
-  expect(change(-0.04)).toBe("-4.0%");
+  expect(change(-0.04)).toBe("−4.0%");
   expect(day("2026-10-28")).toBe("Oct 28");
   expect(day("2026-01-05", true)).toBe("Jan 5, 2026");
 });
@@ -122,9 +122,9 @@ describe("Seal: negatives in parentheses, amounts in words", () => {
   });
 
   it("writes an amount's scale as a word", () => {
-    expect(inWords("$303.0B")).toBe("$303.0 billion");
-    expect(inWords("€2.10M")).toBe("€2.10 million");
-    expect(inWords("$1.20T")).toBe("$1.20 trillion");
+    expect(inWords("$303.0B")).toBe("$303.0\u00a0billion");
+    expect(inWords("€2.10M")).toBe("€2.10\u00a0million");
+    expect(inWords("$1.20T")).toBe("$1.20\u00a0trillion");
     expect(inWords("$950")).toBe("$950");
   });
 });
@@ -183,5 +183,16 @@ describe("truth in time (Marek 9, 15)", () => {
     expect(lateFiling({ expected_date: "2026-12-04", status: "upcoming" }, "2026-11-27")).toBe(false);
     expect(lateFiling({ expected_date: "2026-11-01", status: "overdue" }, "2026-11-27")).toBe(false);
     expect(lateFiling({ expected_date: null, status: "due" }, "2026-11-27")).toBe(false);
+  });
+});
+
+describe("one negative format (Marek 19)", () => {
+  it("writes the true minus, never a hyphen, and no sign on a figure that rounds to zero", () => {
+    expect(pct(-0.061)).toBe("\u22126.1%");
+    expect(pct(-0.0004)).toBe("0.0%");
+    expect(change(-0.0004)).toBe("+0.0%");
+    expect(signed("-0.40")).toBe("\u22120.40");
+    expect(signed("12")).toBe("12");
+    expect(paren(money(-6.05e9, "USD"))).toBe("($6.05B)");
   });
 });

@@ -161,8 +161,8 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
           <a href={href({ view: "companies" })}>Companies</a>
           {(h.industry || r.sector) && <span className="sep" aria-hidden="true"> / </span>}
           {r.sector && <span title="Tributary's sector, its own grouping of SIC codes">{r.sector}{r.sector_industry ? `, ${r.sector_industry}` : ""}</span>}
-          {r.sector && h.industry && <span className="sep" aria-hidden="true"> · </span>}
-          {h.industry && <span title={h.sic ? `SIC ${h.sic}, the SEC's industry code` : undefined}>{h.industry}{h.sic ? ` · SIC ${h.sic}` : ""}</span>}
+          {r.sector && h.industry && <span className="sep" aria-hidden="true"> · </span>}
+          {h.industry && <span title={h.sic ? `SIC ${h.sic}, the SEC's industry code` : undefined}>{h.industry}{h.sic ? ` · SIC ${h.sic}` : ""}</span>}
         </p>
         <div className="co-titlerow">
           <div className="co-title">

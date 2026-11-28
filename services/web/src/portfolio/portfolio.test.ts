@@ -44,7 +44,7 @@ it("a price always says where it came from and its day, and when it's old", () =
 
 it("words gains with their sign and a review with its report", () => {
   expect(gainWords("33.1", "0.0667")).toBe("up $33.10 (+6.7%)");
-  expect(gainWords("-5", "-0.125")).toBe("down $5.00 (-12.5%)");
+  expect(gainWords("-5", "-0.125")).toBe("down $5.00 (−12.5%)");
   expect(gainWords("0")).toBe("flat");
   expect(gainWords(null)).toBeNull();
   expect(signedPct(null)).toBeNull();

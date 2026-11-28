@@ -66,12 +66,12 @@ it("shows the release beside its 10-Q figures, its outlook and its adjustments, 
   expect(seg).toEqual([["Sep 30, 2026", "true"], ["Jun 30, 2026", "false"]]);
   const release = $(".release-card")!;
   expect(release.querySelector(".release-headline")?.textContent).toMatch(/^Vertiv Reports Strong Third Quarter 2026 with Net Sales Growth of 61%/);
-  expect(release.textContent).toContain("8-K filed Oct 28, 2026 · Results of operations, Regulation FD disclosure · Exhibit 99.1");
+  expect(release.textContent).toContain("8-K filed Oct 28, 2026\u00a0· Results of operations, Regulation FD disclosure\u00a0· Exhibit 99.1");
   expect([...release.querySelectorAll("a")].find((a) => a.textContent === "Read the release")?.getAttribute("href"))
     .toBe(`#/filing/${VRT}/${RELEASE}/EX-99.1`);
   // the quarter's own figures from the 10-Q (the recap route), with the year-ago comparison
   const figures = $$("section.card").find((s) => s.querySelector("h3")?.textContent === "Reported figures")!;
-  expect(figures.querySelector(".sub")?.textContent).toBe("10-Q filed Oct 28, 2026 · vs the same quarter a year ago");
+  expect(figures.querySelector(".sub")?.textContent).toBe("10-Q filed Oct 28, 2026\u00a0· vs the same quarter a year ago");
   expect([...figures.querySelectorAll("thead th")].map((t) => t.firstChild?.textContent)).toEqual(["Reported figures", "FY2026 Q3", "FY2025 Q3", "YoY"]);
   const rows = [...figures.querySelectorAll("tbody tr")].map((r) => r.querySelector("td")?.textContent);
   expect(rows).toEqual(["Revenue", "Operating income", "Net income", "EPS (diluted)", "Free cash flow", "Gross margin", "Operating margin", "Net margin"]);
@@ -199,7 +199,7 @@ it("flags Vertiv's Sep 30 cash and net debt on the Overview's key stats, with th
   const card = document.querySelector(".source-card")!.textContent!;
   expect(card).toContain("Net cash, computed: debt (long-term and due within a year) less cash and short-term investments.");
   expect(card).toContain("Net debt at Sep 30, 2026 is from before the Oct 27, 2026 8-K");
-  expect(card).toContain("(net debt -$783.2M)");
+  expect(card).toContain("(net debt −$783.2M)");
   await act(async () => stat("net_debt_q").querySelector<HTMLElement>("dd button")!.click());
   // the figure itself is unchanged (a negative net debt reads as net cash, its exact figure in the hover)
   expect(stat("net_debt_q").querySelector("dt")?.textContent).toBe("Net cash");
@@ -235,7 +235,7 @@ it("a foreign filer's 6-K results release beside its 20-F, worded as such (migra
   await render(view());
   expect($(".release-card .sub")?.textContent).toBe("Period ended Sep 30, 2026");
   expect($(".release-card")?.textContent).toContain("6-K filed");
-  expect($(".release-card")?.textContent).toContain("results release · Exhibit 99.1");
+  expect($(".release-card")?.textContent).toContain("results release\u00a0· Exhibit 99.1");
   expect($(".release-card")?.textContent).toContain("Also stored for this period: 6-K of Nov 13, 2026");
   expect(container.textContent).toContain("files its annual report on Form 20-F or 40-F and its results on 6-K");
   await act(async () => $$(".earnings-pick .seg button").find((b) => b.textContent?.startsWith("Dec 31, 2025"))!.click());
@@ -266,7 +266,7 @@ it("a foreign filer's quarter read from its 6-K results release: the figures, no
   const figures = $$(".card").find((c) => c.querySelector("h3")?.textContent === "Reported figures")!;
   expect(figures.querySelector(".sub")?.textContent).toBe("6-K filed Oct 15, 2026, against the same quarter a year ago");
   // in its own currency, never "$" (the recap ledger said "$1.49T" for New Taiwan dollars before)
-  expect(figures.querySelector("tbody tr")?.textContent).toBe("RevenueTWD 1.49TTWD 759.7B+96.7%");
+  expect(figures.querySelector("tbody tr")?.textContent).toBe("RevenueTWD\u00a01.49TTWD\u00a0759.7B+96.7%");
   expect(figures.querySelector(".foot")?.textContent).toContain("read from its own tables where no XBRL covers the quarter, so those figures carry no tick");
   // the release's figure: no tick, its own words, the table and row, the reader at the release
   await act(async () => (figures.querySelector("td[data-cell]") as HTMLElement).click());

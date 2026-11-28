@@ -123,7 +123,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
           <section className="card">
             <div className="card-h">
               <h2>Expected filings</h2>
-              <span className="sub">next {EXPECTED_DAYS} days · estimated from each company's history</span>
+              <span className="sub">next {EXPECTED_DAYS} days · estimated from each company's history</span>
             </div>
             <ExpectedTable expected={expected} />
             <div className="foot">

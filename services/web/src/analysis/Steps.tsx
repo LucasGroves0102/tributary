@@ -121,7 +121,7 @@ export function Business({ token, companyId, name, project, onNotes, notesStatus
       <section className="card" aria-labelledby={`${id}-item1`}>
         <div className="card-h">
           <h3 id={`${id}-item1`}>Business: 10-K Item 1</h3>
-          <span className="sub">{section ? `10-K filed ${day(section.citation.filed, true)} · pin a paragraph to quote it in your thesis` : "the latest 10-K's description of the business"}</span>
+          <span className="sub">{section ? `10-K filed ${day(section.citation.filed, true)} · pin a paragraph to quote it in your thesis` : "the latest 10-K's description of the business"}</span>
           <span className="grow" />
           {section && (
             <a className="btn sm ghost" href={href({ view: "filing", companyId, accessionNo: section.citation.accession_no, section: section.section_key })}>
@@ -297,7 +297,7 @@ export function WhatChanged({ token, companyId, name, canReadFilings }: StepComm
           <span className="seg" role="group" aria-label="Filing">
             {choices.map((f) => (
               <button key={f.accession_no} className={f === shown ? "on" : undefined} aria-pressed={f === shown} onClick={() => setPick(f.accession_no)}>
-                Latest {f.form} · {day(f.filed, true)}
+                Latest {f.form} · {day(f.filed, true)}
               </button>
             ))}
           </span>

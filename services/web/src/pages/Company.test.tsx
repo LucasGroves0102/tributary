@@ -395,12 +395,12 @@ it("overview: a foreign filer's quarter read from its 6-K results release, in it
   expect(latest.textContent).toContain("6-K filed Oct 15, 2026");
   expect(latest.textContent).not.toContain("no quarterly recap here");
   expect(latest.querySelector("th .src")?.textContent).toBe("6-K Oct 15, 2026");
-  expect(latest.querySelector("tbody tr")?.textContent).toBe("RevenueTWD 1.49TTWD 1.27T+17.6%TWD 759.7B+96.7%");
+  expect(latest.querySelector("tbody tr")?.textContent).toBe("RevenueTWD\u00a01.49TTWD\u00a01.27T+17.6%TWD\u00a0759.7B+96.7%");
   expect(latest.querySelector(".foot")?.textContent).toContain("A 6-K's figures are read from its results release's own tables");
   const card = (await cardOf(latest.querySelector("td[data-cell]")))!;
   expect(card.querySelector(".mk-ok")).toBeNull();
   expect(card.querySelector(".sc-agree")?.textContent).toBe("from the press release");
-  expect(card.textContent).toContain("TWD 1,494,243 million");
+  expect(card.textContent).toContain("TWD\u00a01,494,243\u00a0million");
   expect(card.textContent).toContain("EX-99.1, table 1, row 2");
   expect(card.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${TSMC}/${SIX_K}/EX-99.1`);
   await click(latest.querySelector("td[data-cell]"));
@@ -455,7 +455,7 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   expect(hero.querySelector(".mk-sum")).not.toBeNull();
   expect((await cardOf(hero))?.textContent).toContain("Revenue, the four quarters to Jul 26, 2026 added up.");
   await click(hero);
-  expect($(".ov-label")?.textContent).toBe("Revenue · the twelve months to Jul 26, 2026 · USD");
+  expect($(".ov-label")?.textContent).toBe("Revenue\u00a0· the twelve months to Jul 26, 2026\u00a0· USD");
   // the rest of the twelve months: a ledger, each figure a button with its mark; the period they share is in its line
   expect([...container.querySelectorAll(".rubric")].find((r) => r.textContent?.startsWith("The rest of the twelve months"))?.textContent).toContain("As filed, to Jul 26, 2026");
   expect([...container.querySelectorAll(".ledger dl > div")].some((d) => d.getAttribute("data-key") === "revenue_ttm")).toBe(false);
@@ -483,7 +483,7 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   // a figure that isn't a plain one reads as a dash and a letter, explained on the same line
   expect($(".ov-rest .mk-legend")?.textContent).toContain("a not reported");
   // the year as a sentence, without a mark of its own (the hero carries it)
-  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.2 billion, up 69.0% on the year before.");
+  expect($(".story")?.textContent).toContain("In the twelve months to July 26, 2026, Nvidia reported revenue of $165.2\u00a0billion, up 69.0% on the year before.");
   expect($(".story a.seal-link")).toBeNull();
   expect(paths().some((u) => u.pathname === `/api/query/v1/filings/${ACC}/recap`)).toBe(true);
   // the latest quarter: a ledger whose columns name their quarter, end and filing; a change coloured by its direction
@@ -494,7 +494,7 @@ it("overview: key stats with periods, the latest quarter recap with flags, and I
   expect(recap.querySelectorAll("td.gain")).toHaveLength(2);
   // one tab stop for the table; its figures open their cards
   expect(recap.querySelectorAll('[data-cell][tabindex="0"]')).toHaveLength(1);
-  expect((await cardOf(recap.querySelector("td[data-cell]")))?.textContent).toContain("$46,743 million");
+  expect((await cardOf(recap.querySelector("td[data-cell]")))?.textContent).toContain("$46,743\u00a0million");
   expect($(".flags")?.textContent).toContain("a $184 million restructuring charge");
   expect($(".flags a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-2`);
   expect($(".excerpt")?.textContent).toBe("NVIDIA pioneered accelerated computing. We sell GPUs.");
@@ -537,7 +537,7 @@ it("statements: what's chosen comes from the address and goes back to it", async
   // callouts are for quarters: a TTM view doesn't ask
   expect(q.searchParams.get("callouts")).toBeNull();
   // the range and basis are the view menu's (spec §6: "8 quarters · Fiscal ▾"), the menu says which
-  expect($(".view-menu")?.textContent).toBe("5 years · Calendar");
+  expect($(".view-menu")?.textContent).toBe("5 years\u00a0· Calendar");
   await click(await viewItem("All periods"));
   expect(window.location.hash).toBe(`#/company/${NVDA}/statements?kind=cf&period=ttm&basis=calendar&range=max`);
   await click(button("Income statement"));
@@ -712,7 +712,7 @@ it("statements say how far behind EDGAR they are, and promise nothing (H9)", asy
 it("statements: range is for Quarterly and TTM; Annual has its ten years", async () => {
   await render("statements", NVDA, null, { period: "a" });
   // the view menu says ten years, and its ranges are there but off, each saying why (Riley, test 10, finding 79)
-  expect($(".view-menu")?.textContent).toBe("10 years · Fiscal");
+  expect($(".view-menu")?.textContent).toBe("10 years\u00a0· Fiscal");
   const range = await viewItem("8 quarters");
   expect(range?.getAttribute("aria-disabled") ?? range?.getAttribute("data-disabled")).not.toBeNull();
   expect(range?.getAttribute("title")).toContain("Annual shows the last ten years");
@@ -732,7 +732,7 @@ it("statements: quarterly, annual and TTM, each value cited, CSV export", async 
   expect(cell.textContent).toBe("$46.74B");
   // #113: the figure opens its card: the filing printed as shown (ticked), the 10-Q's statements in the reader, EDGAR
   const card = (await cardOf(cell))!;
-  expect(card.textContent).toContain("$46,743 million");
+  expect(card.textContent).toContain("$46,743\u00a0million");
   expect(card.textContent).toContain("agrees to the filing");
   expect(card.textContent).toContain("10-Q filed Aug 26, 2026");
   expect(card.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);
@@ -920,7 +920,7 @@ it("overview: the footing adds the twelve months' quarters as the API gives them
   expect(terms[1]!.className).toContain("derived");
   const q4 = (await cardOf(terms[1]))!.textContent!;
   expect(q4).toContain("Derived: the 10-K's fiscal year to Jan 25, 2026 less the three 10-Qs before it.");
-  expect(q4).toContain("$39,400 million");
+  expect(q4).toContain("$39,400\u00a0million");
   await click(terms[1]);
   // a term outlines its bar in the chart
   await act(async () => terms[3]!.dispatchEvent(new FocusEvent("focus", { bubbles: false })));
@@ -1018,7 +1018,7 @@ it("F4 peers: by what they do, each with why, a named competitor linked to its s
   const apple = [...container.querySelectorAll("tbody tr:not(.agg)")][1]!;
   const why = apple.querySelector("td.why")!;
   // short pencil tags (spec §6), every reason whole on the hover
-  expect(why.textContent).toBe("very similar · named as a competitor · similar size");
+  expect(why.textContent).toBe("very similar\u00a0· named as a competitor\u00a0· similar size");
   expect(why.getAttribute("title")).toBe("named as a competitor in Nvidia's 10-K; business: cpus, gpus; similar size (>=$100B)");
   expect(why.querySelector("a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${cite.accession_no}/1?at=4200`);
   // only the answer's columns: here just revenue, with its median's n of N
@@ -1033,7 +1033,7 @@ it("F4 bank: a bank's statements and key stats are its own lines, and say what i
   await render("overview", JPM);
   // the ledger: a bank's own amounts first, then its rates
   const keys = [...container.querySelectorAll(".ledger dt")].map((k) => k.firstChild?.textContent);
-  expect($(".ov-label")?.textContent).toMatch(/^Net revenue · /);
+  expect($(".ov-label")?.textContent).toMatch(/^Net revenue\u00a0· /);
   expect(keys.slice(0, 3)).toEqual(["Net interest income", "Provision for credit losses", "Net income"]);
   expect(keys).toContain("Efficiency ratio");
   expect(container.textContent).toContain("51.9%");
@@ -1078,7 +1078,7 @@ it("F4 #135: a company that files one combined 10-K with another says it isn't a
     co_registrants: [{ company_id: CORP, name: "PG&E Corp", accession_no: "0001004980-26-000009", filed: "2026-02-12", filed_by: CORP }] });
   await render("overview", UTIL);
   // Tributary's sector and the SEC's industry, with its code, are the header's crumb
-  expect($(".co-head .crumb")?.textContent).toBe("Companies / Utilities, Multi-utilities · Electric & Other Services Combined · SIC 4931");
+  expect($(".co-head .crumb")?.textContent).toBe("Companies / Utilities, Multi-utilities\u00a0· Electric & Other Services Combined\u00a0· SIC 4931");
   expect($(".joint-note")?.textContent).toContain("Not a duplicate: Pacific Gas & Electric and PG&E file one combined 10-K as separate SEC registrants");
   expect($(".joint-note a")?.getAttribute("href")).toBe(`#/company/${CORP}`);
 });
@@ -1141,7 +1141,7 @@ it("F5: the cash flow statement has its subtotals, starts and ends with cash, an
   // Seal: an outflow (negative since F5) reads in parentheses, as the statement prints it; the hover keeps the sign
   expect([...dividends.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["·", "($243M)", "($6,047M)"]);
   const called = dividends.querySelector("td.called")!;
-  expect((await cardOf(called))?.textContent).toContain("Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it");
+  expect((await cardOf(called))?.textContent).toContain("Dividends paid, FY2027 Q2: −$6.05B, 25 times the two quarters before it");
   await click(called);
   expect($(".callouts")?.textContent).toContain("Worth a look");
   expect($(".callouts a")?.getAttribute("href")).toBe(`#/filing/${NVDA}/${ACC}/I-1`);

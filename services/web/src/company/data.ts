@@ -6,7 +6,7 @@ import { csvCell } from "../chart/series";
 import { calendarLabel } from "../compare/state";
 import { FILER_LABELS, fyeMonth, type FilerCategory } from "../companies/screen";
 import { BANK_NA, NO_DATA, NO_DATA_TITLE, NOT_APPLICABLE, NOT_MEANINGFUL, NOT_REPORTED, readFigure } from "../blanks";
-import { change, currencyOf, day, inWords, money, moneyRow, pct } from "../format";
+import { change, currencyOf, day, inWords, money, moneyRow, pct, signed } from "../format";
 import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { memberTree, treeOrder } from "../chart/segments";
@@ -27,7 +27,7 @@ export function fmt(kind: Fmt, v: number, currency = "USD"): string {
     case "growth":
       return change(v);
     case "x":
-      return `${v.toFixed(2)}x`;
+      return `${signed(v.toFixed(2))}x`;
     case "shares":
       return v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : `${(v / 1e6).toFixed(1)}M`;
   }

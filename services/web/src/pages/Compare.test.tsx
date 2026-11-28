@@ -136,7 +136,7 @@ it("asks the screener for the comps by id and shows each value with its period a
   expect(revenue.getAttribute("title")).toContain("Source: 10-Q filed Aug 26, 2026");
   expect(tsla!.className).toBe("masked");
   expect(tsla!.textContent).toContain("metadata only");
-  expect(aapl!.querySelector("td.n.neg")?.textContent).toBe("-2.0%");
+  expect(aapl!.querySelector("td.n.neg")?.textContent).toBe("−2.0%");
 });
 
 it("puts the peer median, without the target, under the table", async () => {
@@ -144,7 +144,7 @@ it("puts the peer median, without the target, under the table", async () => {
   const median = rows().find((r) => r.textContent?.startsWith("Peer median"))!;
   // only AAPL: TSLA is ungranted and NVDA is the target
   // each median says how many of the peers it uses: AAPL of AAPL and TSLA
-  expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.0B1 of 2", "30.0%1 of 2", "-2.0%1 of 2"]);
+  expect([...median.querySelectorAll("td.n")].map((td) => td.textContent)).toEqual(["$400.0B1 of 2", "30.0%1 of 2", "−2.0%1 of 2"]);
   expect([...median.querySelectorAll("td.n .count")].map((td) => td.textContent)).toEqual(["1 of 2", "1 of 2", "1 of 2"]);
   expect(median.querySelector("td.n")?.getAttribute("title")).toContain("Left out: 1 metadata only");
   // beside "Peer median", how many peers the table has (analyst test 4: it read a literal "n of N")

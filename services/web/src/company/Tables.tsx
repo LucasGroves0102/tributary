@@ -104,7 +104,7 @@ function cellCard(cell: TableCell, row: string, column: { label: string; sub: st
   const mark = cellMark(cell);
   const n = Number(cell.raw);
   const exact = cell.raw !== "" && Number.isFinite(n) && /^-?([$€£¥₹₩]|CN¥|[A-Z]{3} )[\d,.]+[TBMK]?$/.test(cell.text.replace(/^\(|\)$/g, ""));
-  const title = `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`;
+  const title = `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`;
   const value = exact ? exactAmount(n, currency) : paren(cell.text);
   const s = cell.source;
   if (s?.release && mark === null) {
@@ -364,7 +364,7 @@ function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind;
       period ending {day(behind.through, true)}, {behind.quarters === 1 ? "a quarter" : `${behind.quarters} quarters`} behind
       it. Until they include it (Data notes says why when it's known), read the filing:{" "}
       <a href={href({ view: "filing", companyId, accessionNo: behind.accessionNo, section: statementSection(behind.form) })}>its financial statements</a>
-      {url?.startsWith("https://www.sec.gov/") && <> · <a href={url} target="_blank" rel="noopener noreferrer">EDGAR ↗</a></>}.
+      {url?.startsWith("https://www.sec.gov/") && <> · <a href={url} target="_blank" rel="noopener noreferrer">EDGAR ↗</a></>}.
     </p>
   );
 }
@@ -489,11 +489,11 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
         <Choices label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
-        {/* the rest of the view in one menu (§6 Statements: "8 quarters · Fiscal ▾"): the range (for Quarterly and
+        {/* the rest of the view in one menu (§6 Statements: "8 quarters · Fiscal ▾"): the range (for Quarterly and
             TTM; Annual is ten years), the basis and, on the income statement, the per-share basis */}
         <MenuButton className="btn view-menu" count={false} align="start"
           title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change."
-          label={<>{period === "a" ? "10 years" : RANGE_WORDS[range]} · {basis === "calendar" ? "Calendar" : "Fiscal"}{kind === "is" && asFiled ? " · As filed" : ""}</>}
+          label={<>{period === "a" ? "10 years" : RANGE_WORDS[range]} · {basis === "calendar" ? "Calendar" : "Fiscal"}{kind === "is" && asFiled ? " · As filed" : ""}</>}
           items={[
             ...RANGES.map(([r]) => ({ label: RANGE_WORDS[r], checked: range === r, disabled: period === "a", title: period === "a" ? ANNUAL_RANGE : undefined,
               onCheckedChange: () => set({ range: r }) })),
@@ -626,7 +626,7 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [], asO
       <div className="card-h">
         <h2>Ratios</h2>
         <span className="sub">
-          TTM to each quarter end · balance sheet at the quarter end · no price-based multiples
+          TTM to each quarter end · balance sheet at the quarter end · no price-based multiples
           (Tributary has no market prices)
         </span>
         <span className="grow" />
@@ -709,7 +709,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
               <section key={`${t.axis}|${t.metric}`} className="card">
                 <div className="card-h">
                   <h2>{t.title}</h2>
-                  <span className="sub">quarterly · USD · as reported in the filings' XBRL</span>
+                  <span className="sub">quarterly · USD · as reported in the filings' XBRL</span>
                 </div>
                 {t.staleNote && <p className="card-b stale-note" role="note">⚠ {t.staleNote}</p>}
                 <TableScroll atEnd resetKey={t.columns.length} label={t.title}>

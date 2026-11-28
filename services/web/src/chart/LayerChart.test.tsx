@@ -65,7 +65,7 @@ describe("axes and bars", () => {
     expect(formatValue(400e9, "USD", true)).toBe("$400B");
     expect(formatValue(2.5e9, "USD", true)).toBe("$2.5B");
     expect(formatValue(100e6, "USD", true)).toBe("$100M");
-    expect(formatValue(-50e9, "USD", true)).toBe("-$50B");
+    expect(formatValue(-50e9, "USD", true)).toBe("−$50B");
     expect(formatValue(0, "USD", true)).toBe("$0");
     expect(formatValue(400e9, "USD")).toBe("$400.0B");
   });

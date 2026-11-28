@@ -85,7 +85,7 @@ function Elapsed({ started, usual }: { started: number; usual: number | null }) 
   const minutes = usual ? Math.max(1, Math.round(usual / 60)) : null;
   return (
     <span aria-hidden="true">
-      {` · ${clock((now - started) / 1000)}`}{minutes ? ` of about ${minutes} min` : ""}
+      {` · ${clock((now - started) / 1000)}`}{minutes ? ` of about ${minutes} min` : ""}
     </span>
   );
 }
@@ -112,8 +112,8 @@ function CheckBody({ check, previous, onQuote, label }: {
     <div className="check-body" ref={body}>
       <div className="faint small check-meta">
         <span>
-          Checked {ago(r.checked_at)} · counted as {r.questions} questions
-          {r.as_of ? ` · data as of ${day(r.as_of, true)}` : ""}
+          Checked {ago(r.checked_at)} · counted as {r.questions} questions
+          {r.as_of ? ` · data as of ${day(r.as_of, true)}` : ""}
         </span>
         <details className="tech">
           <summary>Details</summary>
@@ -273,11 +273,11 @@ function Assumptions({ model, label }: { model: CheckModel; label: (c: string) =
     <div className="check-model">
       <p className="small">
         <a href={href({ view: "model", itemId: model.item_id })}>{model.name}</a>
-        <span className="muted"> · {label(model.company_id)}</span>
+        <span className="muted"> · {label(model.company_id)}</span>
         {s && (
           <span className="muted">
             {" "}· {s.cagr !== null ? `${s.cagr_years}-yr revenue CAGR ${pct(s.cagr)}` : "no growth history"}
-            {s.avg_margin !== null ? ` · ${s.margin_years}-yr typical margin ${pct(s.avg_margin)}` : ""}
+            {s.avg_margin !== null ? ` · ${s.margin_years}-yr typical margin ${pct(s.avg_margin)}` : ""}
             {model.margin_min != null && model.margin_max != null ? ` (range ${pct(model.margin_min)} to ${pct(model.margin_max)})` : ""}
           </span>
         )}
@@ -341,7 +341,7 @@ function Cites({ cites }: { cites: CheckCitation[] }) {
               <FilingLinks form={c.form ?? null} filed={c.filed ?? null} accessionNo={c.accession_no} url={c.url ?? null}
                 companyId={c.company_id} sections={c.section_key ? [c.section_key] : []} />
               {c.figure && (
-                <span className={c.figure_status === "unverified" ? "figure unverified" : "muted"} title={c.figure_status ?? undefined}> · {c.figure}</span>
+                <span className={c.figure_status === "unverified" ? "figure unverified" : "muted"} title={c.figure_status ?? undefined}> · {c.figure}</span>
               )}
             </>
           ) : (

@@ -423,7 +423,7 @@ function FilterRail({ screen, set, sectors }: {
     <div className="filter-band">
       <button type="button" className="btn filter-toggle" aria-expanded={open} aria-controls="screen-filters"
         onClick={() => setOpen((o) => !o)}>
-        Filters{active ? ` · ${active} active` : ""}
+        Filters{active ? ` · ${active} active` : ""}
         <span className="more-caret" aria-hidden="true" />
       </button>
       <form id="screen-filters" className={open ? "filters filter-row" : "filters filter-row folded"} onSubmit={submit}
@@ -682,7 +682,7 @@ function Table({
                       </div>
                     )}
                   </td>
-                  <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>
+                  <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>
                     <span className="ind-in">
                       <span className="ind-name">
                         {r.industry ?? "—"}

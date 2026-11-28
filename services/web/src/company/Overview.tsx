@@ -183,7 +183,7 @@ function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
   return (
     <section className="ov-hero" aria-label={`${rev.label}, ${annual ? "the year" : "twelve months"}`}>
       <p className="ov-label">
-        {rev.label} · {annual ? "the year" : "the twelve months"} to {day(src.period_end, true)} · {currency}
+        {rev.label} · {annual ? "the year" : "the twelve months"} to {day(src.period_end, true)} · {currency}
       </p>
       <div className="hero">
         <FigureButton text={rev.text} mark={mark} hero info={() => statCard(rev, companyId)} />
@@ -248,7 +248,7 @@ function footingTerms(ttm: FinancialRow, quarters: FinancialRow[]): Term[] {
       form: r?.citation.form ?? "",
       release: !!same && !!releaseOf(r!),
       info: () => (same ? rowCard(r!, "Revenue", "") : {
-        title: `Revenue · three months to ${day(q.period_end!, true)}`,
+        title: `Revenue · three months to ${day(q.period_end!, true)}`,
         value: exactAmount(value, ttm.unit),
         mark: null,
         where: q.accession_no ? [q.accession_no] : [],
@@ -278,7 +278,7 @@ function Footing({ ttm, quarters, companyId, label, total, hl, onHl }: {
     },
   }));
   const sum: SourceInfo = {
-    title: `${label} · twelve months to ${day(ttm.period_end, true)}`,
+    title: `${label} · twelve months to ${day(ttm.period_end, true)}`,
     value: exactAmount(Number(ttm.value), ttm.unit),
     mark: "sum",
     how: `Added up from ${terms.length} quarters: ${terms.map((t) => t.text).join(" + ")} (${unit.unit}), each marked on this line.`,
@@ -632,7 +632,7 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
   const derivedFrom = derivedForm === undefined ? null : /^(20-F|40-F)/.test(derivedForm) ? derivedForm.slice(0, 4) : "10-K";
   return (
     <Folio name="Revenue by quarter" className="ov-bars"
-      line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
+      line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
       aside={bars.length ? (
         <button type="button" className="link view-table" aria-pressed={table} onClick={() => setTable((t) => !t)}>
           {table ? "View as chart" : "View as table"}

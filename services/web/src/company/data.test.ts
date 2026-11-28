@@ -81,7 +81,7 @@ describe("header and key stats", () => {
     }));
     const net = stats.find((s) => s.key === "net_debt_q")!;
     expect(net).toMatchObject({ label: "Net debt", text: "—", value: null, old: true, period: "not reported since Sep 30, 2014" });
-    expect(net.title).toContain("The last figure on file, -$63.10M");
+    expect(net.title).toContain("The last figure on file, −$63.10M");
     expect(net.title).toContain("latest period is Sep 30, 2026");
     expect(stats.find((s) => s.key === "debt_to_equity_q")).toMatchObject({ text: "—", period: "not reported since Sep 30, 2014" });
   });
@@ -129,7 +129,7 @@ describe("a figure read from a 6-K results release's table (165)", () => {
     expect([card.mark, card.words]).toEqual([null, "from the press release"]);
     expect(card.where).toEqual(["6-K filed Oct 15, 2026", "EX-99.1, table 1, row 2"]);
     expect(card.reader).toEqual({ href: `#/filing/${NVDA}/${ACC}/EX-99.1`, label: "Open the 6-K at its press release" });
-    expect(card.value).toBe("TWD 1,494,243 million");
+    expect(card.value).toBe("TWD\u00a01,494,243\u00a0million");
   });
 
   it("in a statement: no mark, and its links open the release", () => {
@@ -152,10 +152,10 @@ describe("a restated figure (point in time, query_api/point_in_time.py)", () => 
         form: "10-K", filed: "2025-03-10", known_from: "2025-03-10", filing_url: null, kind: "same_line" as const } };
     const t = metricTable([now, fin("revenue", "2025-01-31", "1058541000", "FY2025 Q4")], STATEMENTS.is.rows, "q");
     const net = t.rows.find((r) => r.metric === "net_income")!.cells[0]!;
-    expect(net.restated).toBe("Restated: first reported as -$92.28M in the 10-K filed Mar 10, 2025 " +
+    expect(net.restated).toBe("Restated: first reported as −$92.28M in the 10-K filed Mar 10, 2025 " +
       "(0001535527-25-000008); the company restated it since.");
     expect(net.title).toContain(net.restated!);
-    expect(net.text).toBe("-$88.25M"); // the figure stays the cell's text
+    expect(net.text).toBe("−$88.25M"); // the figure stays the cell's text
     expect(t.rows.find((r) => r.metric === "revenue")!.cells[0]!.restated).toBeUndefined();
   });
 });
@@ -264,7 +264,7 @@ describe("recap", () => {
         prior_quarter: v("-25280000000", "FY2026 Q2", { change: "58440000000", pct_change: null, pct_not_meaningful: why }),
         year_ago: v("-12130000000", "FY2025 Q3", { change: "45290000000", pct_change: null, pct_not_meaningful: why }) }],
     });
-    expect(rows[0]).toMatchObject({ current: "$33.16B", prior: "-$25.28B", qoq: { text: "n/m", why }, yoy: { text: "n/m", why } });
+    expect(rows[0]).toMatchObject({ current: "$33.16B", prior: "−$25.28B", qoq: { text: "n/m", why }, yoy: { text: "n/m", why } });
     // an older API without the reason: no percentage, a blank as before
     const older = recapRows({ ...recap, metrics: [{ ...recap.metrics[1]!, prior_quarter: v("-1", "x", { change: "2", pct_change: null }) }] });
     expect(older.rows[0]!.qoq).toBeNull();
@@ -634,7 +634,7 @@ describe("segment shares", () => {
     expect(t!.rows.map((r) => r.label)).toEqual(["Compute and Networking", "Graphics", "All other"]);
     const other = t!.rows.at(-1)!;
     expect(other.reconciling).toBe(true);
-    expect(other.cells.map((c) => c?.text ?? null)).toEqual(["-$1.71B", null]);
+    expect(other.cells.map((c) => c?.text ?? null)).toEqual(["−$1.71B", null]);
     expect(other.cells[0]!.title).toContain("reported outside the segments as Corporate");
     expect(other.share).toBeNull();
     // without the consolidated figure nothing can tie: no row
@@ -701,7 +701,7 @@ describe("what a statement's own lines can't say", () => {
     const t = table([row("operating_income", "2428257"), row("interest_expense", "186257"), row("net_income", "-3731159")], "is");
     const bridge = t.rows.find((r) => r.metric === "other_items")!;
     expect(bridge.label).toBe("Other items, net");
-    expect(bridge.cells[0]).toMatchObject({ text: "-$6.16M", derived: true, url: null });
+    expect(bridge.cells[0]).toMatchObject({ text: "−$6.16M", derived: true, url: null });
     expect(bridge.cells[0]!.title).toContain("where the filing tags no pretax income");
     expect(t.rows.map((r) => r.metric)).toEqual(["operating_income", "interest_expense", "other_items", "net_income"]);
   });
@@ -764,9 +764,9 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
   it("reads revenue, growth, net income and net cash for the same twelve months, in words", () => {
     const story = yearStory(row({ revenue_ttm: "302970000000", revenue_growth_ttm: "0.834", net_income_ttm: "192880000000", net_debt_q: "-66000000000" }))!;
     expect(story).toMatchObject({
-      end: "2026-07-26", revenueLabel: "revenue", revenue: "$303.0 billion",
-      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.9 billion", loss: false },
-      balance: { text: "$66.00 billion", netCash: true },
+      end: "2026-07-26", revenueLabel: "revenue", revenue: "$303.0\u00a0billion",
+      growth: { text: "up 83.4%", rise: true }, netIncome: { text: "$192.9\u00a0billion", loss: false },
+      balance: { text: "$66.00\u00a0billion", netCash: true },
     });
     expect(story.source.accession_no).toBe(ACC);
   });
@@ -778,7 +778,7 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
       sources: { revenue_ttm: SRC, revenue_growth_ttm: SRC, net_income_ttm: SRC, net_debt_q: old },
     }))!;
     expect(story.growth).toEqual({ text: "down 4.0%", rise: false });
-    expect(story.netIncome).toEqual({ text: "$20.00 million", loss: true });
+    expect(story.netIncome).toEqual({ text: "$20.00\u00a0million", loss: true });
     expect(story.balance).toBeNull();
   });
 
@@ -796,7 +796,7 @@ describe("Seal: the year as a sentence and the ledger's net cash (analyst test 4
     const stats = keyStats(row({ net_debt_q: "-66000000000", cash_q: "22440000000", cash_and_investments_q: "98370000000" }));
     const net = stats.find((s) => s.key === "net_debt_q")!;
     expect(net).toMatchObject({ label: "Net cash", text: "$66.00B" });
-    expect(net.title).toContain("Cash and short-term investments exceed debt by $66.00B (net debt -$66.00B)");
+    expect(net.title).toContain("Cash and short-term investments exceed debt by $66.00B (net debt −$66.00B)");
     expect(stats.find((s) => s.key === "cash_and_investments_q")).toMatchObject({ label: "Cash and short-term investments", text: "$98.37B" });
     // a positive net debt keeps its name
     expect(keyStats(row({ net_debt_q: "9930000000" })).find((s) => s.key === "net_debt_q")).toMatchObject({ label: "Net debt", text: "$9.93B" });

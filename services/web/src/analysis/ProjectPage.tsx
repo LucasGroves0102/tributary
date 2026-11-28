@@ -526,7 +526,7 @@ function Monitor(props: Parameters<typeof ThesisMonitor>[0] & { name: string }) 
           <h3 id="monitor-alerts-h">New filings</h3>
           <span className="sub">
             10-K, 10-Q and material 8-Ks of {name} since you started following it, checked every 10 minutes
-            {check ? ` · last checked ${localTime(check.checked_at, true)}` : ""}
+            {check ? ` · last checked ${localTime(check.checked_at, true)}` : ""}
           </span>
           <span className="grow" />
           <a className="btn sm ghost" href={href({ view: "settings" })}>Alert settings</a>
@@ -596,7 +596,7 @@ function ThesisMonitor({ token, companyId, projectId, thesisId, status, checks, 
         </button>
         <span className="faint small">
           {checks.history[0] ? `Last checked ${localDay(checks.history[0].checked_at ?? checks.history[0].created_at, true)}` : "Not checked yet"}
-          {status?.dirty && " · the thesis has unsaved changes"}
+          {status?.dirty && " · the thesis has unsaved changes"}
         </span>
       </div>
       {/* #154: the new-filing notice the guide promises, always in its place */}

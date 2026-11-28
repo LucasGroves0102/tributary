@@ -89,7 +89,7 @@ describe("screener rows", () => {
     expect(r.cells.revenue_ttm?.title).toContain("trailing twelve months to Jul 26, 2026");
     expect(r.cells.operating_margin_ttm?.text).toBe("62.3%");
     expect(r.cells.revenue_growth_ttm?.text).toBe("+69.0%");
-    expect(r.cells.net_debt_q?.text).toBe("-$43.21B");
+    expect(r.cells.net_debt_q?.text).toBe("−$43.21B");
     // not requested in the fixture: shown as missing, not masked
     expect(r.cells.debt_to_equity_q?.text).toBe("—");
     expect(r.cells.debt_to_equity_q?.title).not.toBe(MASKED_TITLE);
@@ -121,7 +121,7 @@ describe("how a row reads what the API says about each value", () => {
       expect(r.cells[k]).toMatchObject({ text: "n/a (bank)", value: null });
       expect(r.cells[k]?.title).toContain("This is a bank");
     }
-    expect(r.cells.free_cash_flow_ttm?.title).toContain("The figure on file: -$74.15B");
+    expect(r.cells.free_cash_flow_ttm?.title).toContain("The figure on file: −$74.15B");
     expect(r.cells.gross_margin_ttm?.text).toBe("—");
     expect(r.cells.gross_margin_ttm?.title).toContain("can't be computed");
     expect(r.cells.revenue_ttm).toMatchObject({ text: "$180.0B", value: 180000000000 });

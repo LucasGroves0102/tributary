@@ -109,7 +109,7 @@ it("shows the outline by part, the section, the prior filing's section and asks 
   await render("II-1A");
   expect([...container.querySelectorAll(".toc .grp-h")].map((e) => e.textContent)).toEqual(["Part I", "Part II", "Exhibits"]);
   expect($('.toc a[aria-current="page"]')?.textContent).toContain("Risk Factors");
-  expect($(".section-text h2")?.textContent).toBe("II-1A · Risk Factors");
+  expect($(".section-text h2")?.textContent).toBe("II-1A\u00a0· Risk Factors");
   expect(container.querySelectorAll(".section-text p")).toHaveLength(3);
   // the outline is this one filing, whatever its age
   expect(paths().find((u) => u.pathname.endsWith("/filings"))?.searchParams.get("accession_no")).toBe(ACC);
@@ -118,7 +118,7 @@ it("shows the outline by part, the section, the prior filing's section and asks 
   const index = paths().find((u) => u.pathname.endsWith("/filing-index"))!;
   expect(index.searchParams.getAll("form")).toEqual(["10-Q"]);
   expect(index.searchParams.get("to")).toBe("2026-08-26");
-  expect($(".section-nav")?.textContent).toContain("I-2 · MD&A");
+  expect($(".section-nav")?.textContent).toContain("I-2\u00a0· MD&A");
   await act(async () => [...container.querySelectorAll("button")].find((b) => b.textContent === "Ask about this section")!.click());
   expect(onAsk).toHaveBeenCalledWith("Summarize Risk Factors in this 10-Q.");
 });

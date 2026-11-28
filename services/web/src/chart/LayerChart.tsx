@@ -189,8 +189,8 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
           <div className={`tip ${lay.x[hover!]! > lay.width / 2 ? "at-l" : "at-r"}`} role="tooltip" aria-live="polite">
             <div className="h">
               {tick.period}
-              {periodEnd && <span className="faint"> · to {day(periodEnd, true)}</span>}
-              {tick.partial && <span className="faint"> · the latest quarter, not a full year</span>}
+              {periodEnd && <span className="faint"> · to {day(periodEnd, true)}</span>}
+              {tick.partial && <span className="faint"> · the latest quarter, not a full year</span>}
             </div>
             {series.map((s, k) => {
               const p = pointAt(s, tick.key);
@@ -208,8 +208,8 @@ export function LayerChart({ series, title, footnote, svgRef, markers = [], onOp
                     <div className="tip-src">
                       {p.sources.map((src) => (
                         <div key={src.accessionNo}>
-                          {src.form} filed {day(src.filed, true)} · {src.accessionNo}
-                          {src.periodEnd !== p.periodEnd && ` · period to ${day(src.periodEnd, true)}`}
+                          {src.form} filed {day(src.filed, true)} · {src.accessionNo}
+                          {src.periodEnd !== p.periodEnd && ` · period to ${day(src.periodEnd, true)}`}
                         </div>
                       ))}
                     </div>

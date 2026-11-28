@@ -1,7 +1,7 @@
 /** Formula metrics for the chart builder, from /v1/screener/columns (the API's formula
  * catalog: each metric with its unit and the spans it has values for). */
 
-import { money } from "../format";
+import { MINUS, money, signed } from "../format";
 import type { ColumnInfo } from "../types";
 
 export interface MetricInfo {
@@ -117,16 +117,16 @@ export function formatValue(v: number, unit: string, compact = false, step?: num
       return compact ? money(v, "USD").replace(/\.?0+(?=[TBMK]$)/, "") : money(v, "USD");
     case "USD/shares":
       if (compact && Math.abs(v) >= 1000) return money(v, "USD").replace(/\.?0+(?=[TBMK]$)/, "");
-      return `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(compact && step !== undefined && step >= 1 ? 0 : 2)}`;
+      return `${v < 0 ? MINUS : ""}$${Math.abs(v).toFixed(compact && step !== undefined && step >= 1 ? 0 : 2)}`;
     case "ratio":
     case "pct":
-      return `${(v * 100).toFixed(compact ? decimalsFor(step === undefined ? undefined : step * 100) : 1)}%`;
+      return `${signed((v * 100).toFixed(compact ? decimalsFor(step === undefined ? undefined : step * 100) : 1))}%`;
     case "pts":
-      return `${(v * 100).toFixed(compact ? decimalsFor(step === undefined ? undefined : step * 100) : 1)} pts`;
+      return `${signed((v * 100).toFixed(compact ? decimalsFor(step === undefined ? undefined : step * 100) : 1))} pts`;
     case "index":
       return v.toFixed(compact ? 0 : 1);
     case "multiple":
-      return `${v.toFixed(compact ? decimalsFor(step) : 2)}x`;
+      return `${signed(v.toFixed(compact ? decimalsFor(step) : 2))}x`;
     case "number":
       return plainNumber(v, compact, step);
     case "shares": {

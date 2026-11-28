@@ -150,13 +150,15 @@ th.n {
   color: var(--ink-3);
 }
 
-/* a rise is green; a fall keeps its minus sign and the ink: red is never a loss */
+/* a change's direction (§2.3): a rise green, a fall rust with the true minus, the same token as `.loss`
+   (Marek 19: a fall was rust in one column and ink in the next); a level is never coloured, and red is
+   never a loss */
 .pos {
-  color: var(--up);
+  color: var(--gain);
 }
 
 .neg {
-  color: var(--ink);
+  color: var(--loss);
 }
 
 .small {
@@ -752,6 +754,12 @@ html[data-motion="reduced"] .btn:active:not(:disabled) {
   pointer-events: none;
   z-index: 3;
   background: linear-gradient(to left, var(--edge-shadow), transparent);
+}
+
+/* the unseen digits, point or parenthesis that line a column's decimal points up (TableScroll decimalPads) */
+.t td[data-pad]::after {
+  content: attr(data-pad);
+  visibility: hidden;
 }
 
 /* part of a column at an edge: blank, not a number with digits missing (TableScroll cutColumns) */

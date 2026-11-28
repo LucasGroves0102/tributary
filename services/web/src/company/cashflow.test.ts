@@ -46,11 +46,11 @@ describe("the cash flow statement (F5, #111)", () => {
     const rows = cashflow();
     const t = table(rows);
     const capex = t.rows.find((r) => r.metric === "capex")!;
-    expect(capex.cells.map((c) => c?.text)).toEqual(["-$1.76B", "-$2.68B"]);
+    expect(capex.cells.map((c) => c?.text)).toEqual(["−$1.76B", "−$2.68B"]);
     expect(capex.cells[1]!.raw).toBe("-2680000000");
     expect(capex.cells[1]!.title).toContain("Shown negative: an outflow");
     expect(capex.cells[1]!.title).toContain("the amount paid, $2.68B");
-    expect(t.rows.find((r) => r.metric === "investing_cash_flow")!.cells[0]!.text).toBe("-$31.00B");
+    expect(t.rows.find((r) => r.metric === "investing_cash_flow")!.cells[0]!.text).toBe("−$31.00B");
     const csv = financialsCsv(rows, t, "quarter");
     expect(csv).toContain("capex,quarter,FY2027 Q2,,2026-04-27,2026-07-26,-2680000000,");
     expect(csv).toContain("investing_cash_flow,quarter,FY2027 Q2,,2026-04-27,2026-07-26,-2000000000,");
@@ -81,7 +81,7 @@ describe("the cash flow statement (F5, #111)", () => {
   it("puts exchange rates and anything else apart in its own line, only when it is more than rounding", () => {
     const t = table(cashflow());
     const other = t.rows.find((r) => r.metric === "fx_and_other")!;
-    expect(other.cells.map((c) => c?.text)).toEqual(["$0", "-$103.0M"]);
+    expect(other.cells.map((c) => c?.text)).toEqual(["$0", "−$103.0M"]);
     expect(other.cells[1]!.title).toContain("the effect of exchange rates on cash");
     const exact = cashflow().map((r) => (r.metric === "change_in_cash" && r.period_end === Q2[0] ? { ...r, value: "13580000000" } : r));
     expect(table(exact).rows.some((r) => r.metric === "fx_and_other")).toBe(false);
@@ -107,7 +107,7 @@ describe("callouts (F5, #106, #112)", () => {
 
   it("say what the figure is next to, in the statement's sign, and where to read why", () => {
     expect(calloutText(DIVIDENDS, "Dividends paid", "FY2027 Q2", -1)).toBe(
-      "Dividends paid, FY2027 Q2: -$6.05B, 25 times the two quarters before it, -$242.0M and -$243.0M. The filing says why.");
+      "Dividends paid, FY2027 Q2: −$6.05B, 25 times the two quarters before it, −$242.0M and −$243.0M. The filing says why.");
     const seasonal = { ...DIVIDENDS, edge: false, seasonal: true, factor: 6.4 };
     expect(calloutText(seasonal, "Operating cash flow", "FY2026 Q3")).toContain("6.4 times the quarters either side");
     expect(calloutText(seasonal, "Operating cash flow", "FY2026 Q3")).toContain("it's the company's pattern");
@@ -168,6 +168,6 @@ describe("a standardised line opens into its parts (F5)", () => {
       components: [], parts: [], facts: [],
       figure: { metric: "net_debt", period_start: null, period_end: "2026-07-26", fiscal_period: "FY2027 Q2", value: "-66003000000", unit: "USD", value_source: "computed", how: "derived",
         citation: { accession_no: "a", form: "10-Q", filed: "2026-08-26", xbrl_tag: null, source_accessions: null, filing_url: null } },
-    }, "Net debt")).toBe("Net debt, FY2027 Q2 (Jul 26, 2026): -$66.00B");
+    }, "Net debt")).toBe("Net debt, FY2027 Q2 (Jul 26, 2026): −$66.00B");
   });
 });

@@ -4,7 +4,7 @@
  * the peer median (target excluded), and the CSV. Pure, tested without rendering. */
 
 import { NOT_REPORTED, readFigure, type Figure } from "../blanks";
-import { change, day, money, paren, pct } from "../format";
+import { change, day, money, paren, pct, signed } from "../format";
 import { num } from "../home/data";
 import type { ScreenerRow, ValueSource } from "../types";
 import { csvCell } from "../chart/series";
@@ -211,7 +211,7 @@ export function formatValue(kind: Kind, v: number): string {
     case "growth":
       return change(v);
     case "x":
-      return `${v.toFixed(2)}x`;
+      return `${signed(v.toFixed(2))}x`;
   }
 }
 

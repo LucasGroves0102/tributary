@@ -218,8 +218,8 @@ function EmbeddedScreen({ item }: Common) {
   ].filter(Boolean);
   return (
     <p className="embed-screen">
-      Screen: {parts.length ? parts.join(" · ") : "all companies"}
-      {f.sort && <span className="muted"> · sorted by {f.sort.replace(/^-/, "").replace(/_/g, " ")}{f.sort.startsWith("-") ? ", highest first" : ""}</span>}
+      Screen: {parts.length ? parts.join(" · ") : "all companies"}
+      {f.sort && <span className="muted"> · sorted by {f.sort.replace(/^-/, "").replace(/_/g, " ")}{f.sort.startsWith("-") ? ", highest first" : ""}</span>}
     </p>
   );
 }

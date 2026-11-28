@@ -253,11 +253,11 @@ function Webhooks({ token, settings, onChanged }: { token: string; settings: Ale
           {settings.webhooks.map((w) => (
             <li key={w.id} className={w.enabled ? undefined : "off"}>
               <span className="grow">
-                <code>{w.url}</code> <span className="faint small">· {FORMAT_WORDS[w.format]} · added {localDay(w.created_at, true)}</span>
+                <code>{w.url}</code> <span className="faint small">· {FORMAT_WORDS[w.format]} · added {localDay(w.created_at, true)}</span>
                 {w.last_delivery && (
-                  <span className="faint small"> · last: {w.last_delivery.status}{w.last_delivery.last_status ? ` (${w.last_delivery.last_status})` : ""}</span>
+                  <span className="faint small"> · last: {w.last_delivery.status}{w.last_delivery.last_status ? ` (${w.last_delivery.last_status})` : ""}</span>
                 )}
-                {stallNote(w) && <span className="small muted webhook-stalled"> · {stallNote(w)}</span>}
+                {stallNote(w) && <span className="small muted webhook-stalled"> · {stallNote(w)}</span>}
               </span>
               <label className="chk small">
                 <input type="checkbox" checked={w.enabled} onChange={() => void act(() => setWebhookEnabled(token, w.id, !w.enabled))} />
@@ -309,7 +309,7 @@ function Webhooks({ token, settings, onChanged }: { token: string; settings: Ale
                   <tr key={d.id} className={d.status}>
                     <td className="first muted">{localTime(d.last_attempt_at ?? d.created_at, true)}</td>
                     <td>{d.test ? "Test" : "Filing alert"}</td>
-                    <td>{deliveryText(d)}{d.next_attempt_at && <span className="faint small"> · next try {localClock(d.next_attempt_at)}</span>}</td>
+                    <td>{deliveryText(d)}{d.next_attempt_at && <span className="faint small"> · next try {localClock(d.next_attempt_at)}</span>}</td>
                   </tr>
                 ))}
               </tbody>

@@ -165,7 +165,7 @@ describe("Try the demo", () => {
     await settle();
     expect(window.location.hash).toBe("#/");
     // two items, not a dotted string (Seal)
-    expect($(".top .who")?.textContent).toMatch(/^Demo sandbox · resets in 2[34]h$/);
+    expect($(".top .who")?.textContent).toMatch(/^Demo sandbox\u00a0· resets in 2[34]h$/);
     expect($(".top .who button")?.getAttribute("title")).toContain("A temporary demo sandbox (20 companies)");
     expect(container.querySelector("select[aria-label='Demo user']")).toBeNull();
     // the session survives a reload
@@ -349,7 +349,7 @@ describe("a sandbox lists only its own companies", () => {
     stored();
     await mount(<App picker={false} />);
     const chip = $(".top .who button") as HTMLElement;
-    expect(chip.textContent).toMatch(/^Demo sandbox · resets in/);
+    expect(chip.textContent).toMatch(/^Demo sandbox\u00a0· resets in/);
     expect(chip.title).toMatch(/temporary demo sandbox/);
     expect(chip.title).not.toMatch(/top bar/);
   });

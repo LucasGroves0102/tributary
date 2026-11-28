@@ -657,3 +657,8 @@ html[data-motion="reduced"] .ai-drawer.closing {
 main.content[tabindex="-1"]:focus {
   outline: none;
 }
+
+/* the credit's links never break inside (Marek 44: "How it / works") */
+.credit a {
+  white-space: nowrap;
+}
