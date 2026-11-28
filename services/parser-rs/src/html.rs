@@ -195,6 +195,9 @@ impl Ix {
     }
 }
 
+/// An element's (name, value) attributes as rule 14 keeps them.
+type Attributes = Vec<(Box<[u8]>, Box<[u8]>)>;
+
 /// The attributes rule 14 reads.
 const IX_ATTRIBUTES: &[&[u8]] = &[
     b"id",
@@ -772,7 +775,7 @@ struct Dom {
     spans: HashMap<u32, u32, BuildHasherDefault<Fnv>>,
     /// Rule 14's attributes (IX_ATTRIBUTES) of facts, contexts and units, by node: the first of
     /// each name, a valueless one as "".
-    attrs: HashMap<u32, Vec<(Box<[u8]>, Box<[u8]>)>, BuildHasherDefault<Fnv>>,
+    attrs: HashMap<u32, Attributes, BuildHasherDefault<Fnv>>,
 }
 
 impl Dom {
@@ -2463,7 +2466,7 @@ impl<'a> Parser<'a> {
             }
         }
         if let Some(node) = node.filter(|_| ix) {
-            let kept: Vec<(Box<[u8]>, Box<[u8]>)> = atts
+            let kept: Attributes = atts
                 .iter()
                 .filter(|(n, _)| IX_ATTRIBUTES.contains(&n.as_slice()))
                 .map(|(n, v)| (n.as_slice().into(), v.as_deref().unwrap_or_default().into()))
