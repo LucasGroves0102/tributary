@@ -13,7 +13,7 @@ test("try the demo lands on Home with the sandbox and its watchlist", async ({ p
   await expect(page.getByRole("heading", { name: "Tributary" })).toBeVisible();
   await page.getByRole("button", { name: "Try the demo" }).click();
   // the sandbox is the top bar's account chip (spec §4): what it covers in its title
-  await expect(page.locator(".top .who")).toContainText("Demo sandbox · resets in");
+  await expect(page.locator(".top .who")).toContainText(/Demo sandbox\s· resets in/);
   await expect(page.locator(".top .who button")).toHaveAttribute("title", /\(4 companies\)/);
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   const rows = page.locator("table.watchlist tbody tr");

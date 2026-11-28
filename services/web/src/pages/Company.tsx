@@ -32,6 +32,7 @@ import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
 import { HoldingLine } from "../portfolio/HoldingLine";
 import { coRegistrantNote } from "../compare/peers";
+import { NotFound } from "./TickerPage";
 
 interface Props {
   token: string;
@@ -131,13 +132,12 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
     );
   }
   if (meta.state !== "ok" || meta.data === null) {
+    // the one not-found page (Marek 46)
     return (
-      <div className="page">
-        <p className="empty">
-          This company has no financials or filings here. Find one under{" "}
-          <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
-        </p>
-      </div>
+      <NotFound title="No company here">
+        No company with financials or filings here has the number {companyId}. Find one under{" "}
+        <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
+      </NotFound>
     );
   }
   const r = meta.data;

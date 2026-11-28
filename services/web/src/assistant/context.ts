@@ -220,6 +220,8 @@ export function pageContext(
       return { label: "Using the API", suggestions: [] };
     case "notfound":
       return { label: "No page here", suggestions: [] };
+    case "ticker":
+      return { label: route.ticker, suggestions: [] };
     case "settings":
       return { label: "Settings", suggestions: [] };
     case "connect":

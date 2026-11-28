@@ -26,6 +26,7 @@ import { StartCard } from "./home/StartCard";
 import { useFeedStatus } from "./home/useFeedStatus";
 import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
+import { NotFound, TickerPage } from "./pages/TickerPage";
 import {
   About,
   AlertsPage,
@@ -1089,13 +1090,12 @@ export function App(props: Props = {}) {
                 }}
               />
             ) : route.view === "connect" ? null /* drawn without the shell, above */ : route.view === "notfound" ? (
-              <div className="page not-found">
-                <h1>No page here</h1>
-                <p className="empty">
-                  Tributary has no page at <code>#/{route.path}</code>. Find one from the menu on the left, search with Ctrl K,
-                  or go <a href={href({ view: "home" })}>Home</a>.
-                </p>
-              </div>
+              <NotFound title="No page here">
+                Tributary has no page at <code>#/{route.path}</code>. Find one from the menu on the left, search with Ctrl K,
+                or go <a href={href({ view: "home" })}>Home</a>.
+              </NotFound>
+            ) : route.view === "ticker" ? (
+              <TickerPage token={token} ticker={route.ticker} tab={route.tab} />
             ) : (
               <Compare
                 key={user}

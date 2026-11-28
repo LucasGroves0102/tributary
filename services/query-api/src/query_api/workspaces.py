@@ -446,11 +446,12 @@ def validate_project(raw: Any) -> dict:
     return project
 
 
-def starter(name: str, items: list[tuple[str, str, dict]]) -> dict:
-    """A workspace to seed (demo sandboxes): {name, items: [(kind, name, state)]}, each item
-    validated like any saved one."""
+def starter(name: str, items: list[tuple[str, str, dict]], project: dict | None = None) -> dict:
+    """A workspace to seed (demo sandboxes): {name, items: [(kind, name, state)], project}, each
+    item validated like any saved one; with `project` (validated), an analysis project."""
     return {"name": clean_name(name, WORKSPACE_NAME),
-            "items": [(k, clean_name(n, ITEM_NAME), validate_state(k, s)) for k, n, s in items]}
+            "items": [(k, clean_name(n, ITEM_NAME), validate_state(k, s)) for k, n, s in items],
+            "project": validate_project(project) if project is not None else None}
 
 
 # --- storage --------------------------------------------------------------------------------
@@ -821,9 +822,11 @@ def seed(cur: psycopg.Cursor, user_id: str, workspaces: list[dict]) -> None:
     creation); sets app.user_id for the row-level security."""
     cur.execute("SELECT set_config('app.user_id', %s, true)", (user_id,))
     for w in workspaces:
-        cur.execute("INSERT INTO workspaces (user_id, name, created_at, updated_at)"
-                    " VALUES (%s, %s, statement_timestamp(), statement_timestamp())"
-                    " RETURNING workspace_id", (user_id, w["name"]))
+        project = w.get("project")
+        cur.execute("INSERT INTO workspaces (user_id, name, project, created_at, updated_at)"
+                    " VALUES (%s, %s, %s, statement_timestamp(), statement_timestamp())"
+                    " RETURNING workspace_id",
+                    (user_id, w["name"], _jsonb(project) if project is not None else None))
         row = cur.fetchone()
         assert row is not None
         workspace_id = row[0]

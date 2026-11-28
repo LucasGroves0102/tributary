@@ -45,6 +45,9 @@ DEMO_PLAN = "pro"
 CATALOG = "sec"
 # The starter workspace every sandbox gets (sandbox_workspaces); it goes with the user.
 DEMO_WORKSPACE = "PepsiCo vs Coca-Cola"
+# A sandbox's example analysis (demo_analysis): the eight guided steps on this company, nothing
+# written in them, so the signature flow opens on a project instead of "No analyses yet".
+DEMO_ANALYSIS = ("NVDA", "Nvidia")
 # Sandbox user ids start with this; nothing else in the app database does (named demo users
 # are alice/bob/carol/dave, GitHub sign-in uses "gh-<id>", query_api.github, and owner-created
 # password accounts "pw-<username>", query_api.passwords).
@@ -132,6 +135,17 @@ def sandbox_workspaces(ids: Mapping[str, str]) -> list[dict]:
         ("comps", f"PEP vs {', '.join(peers)}",
          {"target": pep, "peers": [ids[t] for t in peers]}),
     ])]
+
+
+def demo_analysis(ids: Mapping[str, str]) -> list[dict]:
+    """A sandbox's example analysis project (DEMO_ANALYSIS) from ticker → company_id: the
+    company only (no peers, notes or steps done: the visitor's to do). None if it doesn't
+    resolve. Sandboxes only: a GitHub or password account starts with its own."""
+    ticker, name = DEMO_ANALYSIS
+    company = ids.get(ticker)
+    if not company:
+        return []
+    return [starter(name, [], {"companyId": company, "peers": [], "notes": "", "done": []})]
 
 
 class Refused(Exception):

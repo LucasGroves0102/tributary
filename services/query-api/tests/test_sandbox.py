@@ -22,6 +22,7 @@ from query_api.sandbox import (
     Refused,
     SandboxConfig,
     SandboxGone,
+    demo_analysis,
     ip_key,
     sandbox_workspaces,
 )
@@ -489,8 +490,12 @@ def test_demo_tables_are_not_streamed():
 def test_sandbox_starts_with_the_pepsico_vs_coca_cola_workspace(world):
     client, sandboxes, _, _ = world
     body = create(client).json()
-    assert body["workspaces"] == [DEMO_WORKSPACE] == ["PepsiCo vs Coca-Cola"]
-    (ws,) = sandboxes.sandboxes[body["user_id"]].workspaces
+    # the starter workspace, then the example analysis (an analysis project on NVDA)
+    assert body["workspaces"] == [DEMO_WORKSPACE, "Nvidia"] == ["PepsiCo vs Coca-Cola", "Nvidia"]
+    (ws, analysis) = sandboxes.sandboxes[body["user_id"]].workspaces
+    assert analysis["items"] == []
+    assert analysis["project"] == {"companyId": IDS["NVDA"], "peers": [], "notes": "", "done": []}
+    assert ws["project"] is None
     chart, comps = ws["items"]
     assert chart[0] == "chart"
     assert {(x["companyId"], x["metric"]) for x in chart[2]["layers"]} == {
@@ -501,5 +506,6 @@ def test_sandbox_starts_with_the_pepsico_vs_coca_cola_workspace(world):
 
 def test_starter_workspace_skips_what_does_not_resolve():
     assert sandbox_workspaces({"KO": IDS["KO"]}) == []
+    assert demo_analysis({"KO": IDS["KO"]}) == []
     (ws,) = sandbox_workspaces({t: IDS[t] for t in ("PEP", "KO", "MNST")})
     assert ws["items"][1][1] == "PEP vs KO, MNST"

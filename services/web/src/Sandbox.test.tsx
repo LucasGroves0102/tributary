@@ -165,7 +165,7 @@ describe("Try the demo", () => {
     await settle();
     expect(window.location.hash).toBe("#/");
     // two items, not a dotted string (Seal)
-    expect($(".top .who")?.textContent).toMatch(/^Demo sandbox\u00a0· resets in 2[34]h$/);
+    expect($(".top .who")?.textContent).toMatch(/^Demo sandbox\u00a0· resets in 2[34] h$/);
     expect($(".top .who button")?.getAttribute("title")).toContain("A temporary demo sandbox (20 companies)");
     expect(container.querySelector("select[aria-label='Demo user']")).toBeNull();
     // the session survives a reload
@@ -178,7 +178,7 @@ describe("Try the demo", () => {
     saveSession({ kind: "sandbox", token: "stored", userId: "demo-aa", expiresAt: new Date(Date.now() + 5 * HOUR).toISOString(), companies: IDS });
     await mount(<App picker={false} />);
     expect(created).toBe(0);
-    expect($(".top .who")?.textContent).toContain("resets in 4h");
+    expect($(".top .who")?.textContent).toContain("resets in 4 h");
     expect(button("Try the demo")).toBeUndefined();
   });
 
@@ -266,10 +266,10 @@ describe("session", () => {
 
   it("formats the time until reset", () => {
     const at = "2026-10-22T12:00:00Z";
-    expect(resetsIn(at, Date.parse("2026-10-21T12:00:00Z"))).toBe("24h");
-    expect(resetsIn(at, Date.parse("2026-10-22T09:30:00Z"))).toBe("2h");
-    expect(resetsIn(at, Date.parse("2026-10-22T11:20:00Z"))).toBe("40m");
-    expect(resetsIn(at, Date.parse("2026-10-22T12:30:00Z"))).toBe("1m");
+    expect(resetsIn(at, Date.parse("2026-10-21T12:00:00Z"))).toBe("24 h");
+    expect(resetsIn(at, Date.parse("2026-10-22T09:30:00Z"))).toBe("2 h");
+    expect(resetsIn(at, Date.parse("2026-10-22T11:20:00Z"))).toBe("40 min");
+    expect(resetsIn(at, Date.parse("2026-10-22T12:30:00Z"))).toBe("1 min");
   });
 });
 

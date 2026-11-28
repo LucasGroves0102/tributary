@@ -179,10 +179,10 @@ page that fails to render shows "This page didn't load" with Reload and Home, ke
 
 The frame (spec §3): a 48px **top bar** across the window over a 232px **rail**, both on the paper and still on
 every page change. The top bar (`components/TopBar.tsx`): the logo (Home), the search button (Ctrl/Cmd-K
-opens the palette), the feed's freshness as a status point ("Listed 2 min ago", green in EDGAR's hours; it
+opens the palette), the feed's freshness as a status point ("Newest filing listed 2 min ago", green in EDGAR's hours; it
 opens a popover with the newest text parsed, the watchlist's values' time, who is signed in, the readable
 count and Data status, in the freshness words: never "live"), Alerts with its count, the Assistant
-(Ctrl/Cmd-J) and the account chip (a sandbox's "Demo sandbox · resets in 23h" with End demo; a GitHub or
+(Ctrl/Cmd-J) and the account chip (a sandbox's "Demo sandbox · resets in 23 h" with End demo; a GitHub or
 password account's name with Sign out; the named demo users' picker). The rail (`components/Sidebar.tsx`):
 Home, Companies (its count), Compare, Charts, Analysis, Portfolio, Your data (Ask stays a g-key and a palette
 entry); then **Watching** (code, name and "new" for a filing since the last visit, no figures: those are on
@@ -412,6 +412,14 @@ watchlist's "as of", and the assistant's daily reset (midnight UTC, the service'
 viewer's own time: "resets at 5:00 PM MST"). No UTC clock beside a local one and no numeric
 `toLocaleString` dates; a moment's date alone is `localDay`.
 
+
+Dates of moments are the viewer's (Marek 15): `format.ts` `day` reads a timestamp as `localDay` (a plain
+date stays as written), so "since your last visit", an alert's "since", a report's "data as of" and a
+recorded suite's day never show tomorrow's UTC date in the evening; As of's "today" is `localToday`. A
+company's address can name its ticker (`#/company/NVDA`, `route.ts` `ticker`): `pages/TickerPage` finds the
+company with that current ticker and replaces the address with its own (same tab), or says no company has
+it on the not-found page every missing thing uses (`NotFound`: a heading and one line; an unknown company
+id says "No company here"); a CIK without its leading zeros is the company's own address.
 ## Home
 
 Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the

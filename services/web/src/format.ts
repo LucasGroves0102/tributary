@@ -166,8 +166,11 @@ export function change(ratio: number): string {
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "2026-10-28" → "Oct 28"; with the year, "Oct 28, 2026". */
+/** "2026-10-28" → "Oct 28"; with the year, "Oct 28, 2026". A moment ("2026-11-28T04:29:00Z") is its date
+ * where the viewer is (`localDay`), never its UTC date (Marek 15: "since your last visit (Nov 28)" read on
+ * Nov 27 in Phoenix). */
 export function day(isoDate: string, withYear = false): string {
+  if (/T\d{2}:\d{2}/.test(isoDate)) return localDay(isoDate, withYear);
   const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number);
   return `${MONTHS[m! - 1]} ${d}${withYear ? `, ${y}` : ""}`;
 }
@@ -189,7 +192,7 @@ export function lateFiling(e: { expected_date: string | null; status: string }, 
  * London. A timestamp without a zone is local already; one that doesn't parse reads as written. */
 export function localDay(timestamp: string, withYear = false): string {
   const at = new Date(timestamp);
-  if (Number.isNaN(at.getTime())) return day(timestamp, withYear);
+  if (Number.isNaN(at.getTime())) return day(timestamp.slice(0, 10), withYear);
   return `${MONTHS[at.getMonth()]} ${at.getDate()}${withYear ? `, ${at.getFullYear()}` : ""}`;
 }
 

@@ -171,6 +171,11 @@ describe("sentenceCase", () => {
 });
 
 describe("truth in time (Marek 9, 15)", () => {
+  it("a moment's day is where the viewer is; a plain date reads as written", () => {
+    expect(day(new Date(2026, 10, 27, 21, 30).toISOString())).toBe("Nov 27");
+    expect(day("2026-11-28")).toBe("Nov 28");
+  });
+
   it("today is the viewer's date, not UTC's", () => {
     // 9 PM on Nov 27 where the viewer is, whatever the UTC date
     expect(localToday(new Date(2026, 10, 27, 21, 0))).toBe("2026-11-27");
