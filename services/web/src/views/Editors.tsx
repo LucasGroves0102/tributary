@@ -1,5 +1,6 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 
+import { useDismiss } from "../components/useDismiss";
 import type { ColumnInfo } from "../types";
 import { columnSpec, HOME_CARD_LABELS, isDefaultHome, move, offeredColumn, sameColumns, toggleCard, type HomeCard } from "./model";
 
@@ -72,6 +73,10 @@ export function ColumnPicker({
   const [open, setOpen] = useState(false);
   const [find, setFind] = useState("");
   const id = useId();
+  const opener = useRef<HTMLButtonElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  // Escape or a press outside closes it, the focus back on Columns (Marek 50)
+  useDismiss(open, () => setOpen(false), pop, () => opener.current);
   const byKey = new Map((options ?? []).map((o) => [o.key, o]));
   const spec = (k: string) => columnSpec(k, byKey.get(k));
   const name = (k: string) => {
@@ -87,12 +92,12 @@ export function ColumnPicker({
 
   return (
     <div className="col-picker">
-      <button className="btn sm" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}
+      <button ref={opener} className="btn sm" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}
         disabled={options === null} title={options === null ? "Column choices are unavailable right now" : undefined}>
         Columns
       </button>
       {open && (
-        <div className="col-pop" id={id} role="dialog" aria-label={`Choose ${table} columns`}>
+        <div className="col-pop" id={id} ref={pop} role="dialog" aria-label={`Choose ${table} columns`}>
           <ol className="view-list">
             {columns.map((k, i) => (
               <li key={k}>
@@ -144,7 +149,10 @@ export function ColumnPicker({
             <button className="btn sm ghost" onClick={onReset} disabled={sameColumns(columns, defaults)}>
               Reset
             </button>
-            <button className="btn sm" onClick={() => setOpen(false)}>
+            <button className="btn sm" onClick={() => {
+              setOpen(false);
+              opener.current?.focus();
+            }}>
               Done
             </button>
           </div>

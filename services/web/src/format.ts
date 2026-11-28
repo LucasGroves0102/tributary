@@ -156,6 +156,19 @@ export function day(isoDate: string, withYear = false): string {
   return `${MONTHS[m! - 1]} ${d}${withYear ? `, ${y}` : ""}`;
 }
 
+/** Today's date where the viewer is, "2026-11-27": never the UTC date, which at 9 PM in Phoenix is
+ * already tomorrow (Marek 15). */
+export function localToday(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+/** An expected filing whose estimated date has passed where the viewer is and that isn't in yet: it's
+ * "late", never "about <a past date>" (Marek 9: "10-Q ~Nov 25" read on Nov 27). The API's `overdue` (past
+ * the SEC's deadline) says more and wins. */
+export function lateFiling(e: { expected_date: string | null; status: string }, today: string = localToday()): boolean {
+  return e.status !== "overdue" && !!e.expected_date && e.expected_date < today;
+}
+
 /** A moment's date where the viewer is: "2026-11-07T03:00:00Z" is Nov 6 in Phoenix, Nov 7 in
  * London. A timestamp without a zone is local already; one that doesn't parse reads as written. */
 export function localDay(timestamp: string, withYear = false): string {

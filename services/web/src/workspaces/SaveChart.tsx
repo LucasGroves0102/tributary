@@ -1,6 +1,7 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 
 import { failureReason } from "../api";
+import { useDismiss } from "../components/useDismiss";
 import type { ChartState } from "../chart/model";
 import { href } from "../route";
 import { companyOf, defaultWorkspace, ITEM_NAME_MAX, nameProblem, NEW_WORKSPACE, stateOf, WORKSPACE_NAME_MAX } from "./model";
@@ -25,6 +26,9 @@ export function SaveChart({ saved, chart, label }: { saved: Saved; chart: ChartS
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ workspaceId: string; workspace: string } | null>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const box = useRef<HTMLFormElement>(null);
+  useDismiss(open, () => setOpen(false), box, () => opener.current);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -46,7 +50,7 @@ export function SaveChart({ saved, chart, label }: { saved: Saved; chart: ChartS
 
   return (
     <span className="savebar save-chart">
-      <button className="btn sm" disabled={offline} aria-expanded={open}
+      <button ref={opener} className="btn sm" disabled={offline} aria-expanded={open}
         title={offline ? "Saving is unavailable right now" : "Save this chart to a workspace; a thesis there can embed it"}
         onClick={() => {
           setOpen((o) => !o);
@@ -61,12 +65,11 @@ export function SaveChart({ saved, chart, label }: { saved: Saved; chart: ChartS
         </span>
       )}
       {open && (
-        <form className="save-form card" onSubmit={(e) => void submit(e)} aria-label="Save chart to a workspace"
-          onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+        <form ref={box} className="save-form card" onSubmit={(e) => void submit(e)} aria-label="Save chart to a workspace">
           <label htmlFor={`${id}-name`}>Name</label>
-          <input id={`${id}-name`} value={name} maxLength={ITEM_NAME_MAX} autoFocus onChange={(e) => setName(e.target.value)} />
+          <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} autoFocus onChange={(e) => setName(e.target.value)} />
           <label htmlFor={`${id}-ws`}>Workspace</label>
-          <select id={`${id}-ws`} value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
+          <select id={`${id}-ws`} className="field" value={workspace} onChange={(e) => setWorkspace(e.target.value)}>
             {list.map((w) => (
               <option key={w.workspace_id} value={w.workspace_id}>{w.name}</option>
             ))}
@@ -75,7 +78,7 @@ export function SaveChart({ saved, chart, label }: { saved: Saved; chart: ChartS
           {workspace === NEW && (
             <>
               <label htmlFor={`${id}-new`}>New workspace</label>
-              <input id={`${id}-new`} value={newName} maxLength={WORKSPACE_NAME_MAX} placeholder="e.g. Semis"
+              <input id={`${id}-new`} className="field" value={newName} maxLength={WORKSPACE_NAME_MAX} placeholder="e.g. Semis"
                 onChange={(e) => setNewName(e.target.value)} />
             </>
           )}

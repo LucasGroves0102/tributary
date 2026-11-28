@@ -161,6 +161,11 @@ h1.co-name {
   transition: color var(--t-hover-out) linear;
 }
 
+/* a tab in More (CompanyTabs) */
+.tabs.co-tabs a[hidden] {
+  display: none;
+}
+
 .tabs.co-tabs a[aria-current="page"] {
   color: var(--ink);
   font-weight: 500;
@@ -171,6 +176,36 @@ h1.co-name {
   .tabs.co-tabs a:hover {
     color: var(--ink);
     transition-duration: 0s;
+  }
+}
+
+/* the tabs that don't fit, in a menu at the strip's end: set like a tab, the current tab's name when it's
+   one of them (Marek 7) */
+.tab-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab-more.on {
+  color: var(--ink);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tab-more:hover {
+    color: var(--ink);
   }
 }
 
@@ -723,6 +758,16 @@ html[data-motion="reduced"] .tab-ink {
   font-weight: 600;
 }
 
+/* the corner stays over the frozen column, opaque, so a scrolled column's header never shows through
+   it (Marek 17: "TTM FY2025 Q4" read where "Ratio" should be) and the cut-column measure finds the
+   frozen edge (TableScroll cutColumns) */
+.t.led th.first {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--paper);
+}
+
 .t.led th .pe,
 .t.led th .src {
   display: block;
@@ -820,6 +865,22 @@ html[data-motion="reduced"] .tab-ink {
 
 /* --- widths ----------------------------------------------------------------------------------- */
 
+/* below 960px of page (a tablet, or 1440 with the assistant open) As of leaves the tab strip for its own
+   line above it, so the tabs keep the strip's width (Marek 7: the strip ran 174px under As of) */
+@container main (max-width: 959px) {
+  .co-tabsrow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .co-asof {
+    order: -1;
+    align-self: flex-end;
+    padding: 0 0 8px;
+  }
+}
+
 @container main (max-width: 767px) {
   .hide-narrow {
     display: none;
@@ -838,14 +899,8 @@ html[data-motion="reduced"] .tab-ink {
     display: none;
   }
 
-  .co-tabsrow {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-  }
-
   .co-asof {
-    padding: 8px 0;
+    align-self: stretch;
     flex-wrap: wrap;
   }
 

@@ -70,6 +70,16 @@
   padding: 0;
 }
 
+/* a form that floats under its button is a popover, not a section: the sheet, popover corners and the
+   one shadow (§2.4; Marek 5: the screener's Save was see-through, its labels printed over the chips) */
+.page .card.save-form,
+.page .card.col-pop {
+  background: var(--sheet);
+  border: 0;
+  border-radius: var(--r-pop);
+  box-shadow: var(--float);
+}
+
 .page .card > .card-h,
 .page .card-h {
   display: flex;
@@ -1850,9 +1860,26 @@ html[data-motion="reduced"] .release-table-box summary::before {
   margin-top: 4px;
 }
 
-/* a section's chart and its ledger: the chart 7 columns, the ledger 5 (Revenue / Segments, §6) */
+/* a section's chart and its ledger: the chart 7 columns, the ledger 5 (Revenue / Segments, §6). The
+   segment tables keep fixed columns so periods line up from one table to the next; each column has a
+   width, so a table with more columns than room is wider than its box and scrolls, never squeezes
+   (Marek 4: at 768 cells 46px wide held 60px of figures and printed over each other) */
 .co-panel .t.aligned {
   min-width: 0;
+}
+
+.co-panel .t.aligned th.first {
+  width: 200px;
+}
+
+.co-panel .t.aligned th:not(.first) {
+  width: 88px;
+}
+
+@container tw (max-width: 600px) {
+  .co-panel .t.aligned th.first {
+    width: 136px;
+  }
 }
 
 /* --- the assistant's insides (§4 Assistant panel): the question 14/600, the answer in Archivo 14/22 with its

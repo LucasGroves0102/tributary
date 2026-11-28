@@ -23,7 +23,7 @@ import { Choices } from "../components/Choices";
 import { Notice } from "../components/Notice";
 import { Why } from "../components/Why";
 import { ErrorPanel, Skeleton } from "../components/States";
-import { day } from "../format";
+import { day, lateFiling, localToday } from "../format";
 import { reduced, viaKeyboard } from "../motion";
 import { COMPANY_TABS, EARLIEST_AS_OF, asOfDay, go, href, type CompanyTab } from "../route";
 import { NEW_WORK_TITLE, NewWorkForm, newWorkOffline } from "../workspaces/NewWork";
@@ -262,7 +262,7 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
             </a>}>
             {h.name} released its results on {longDay(results.filed)}. The figures below run
             {r.latest_period ? ` to ${day(r.latest_period, true)}` : " to its last report"} until its {next?.form ?? "10-Q or 10-K"} is
-            filed{next?.expected_date ? `, about ${day(next.expected_date)}` : ""}.
+            filed{next ? whenFiled(next) : ""}.
           </Notice>
         ) : null}
         <CompanyTabs companyId={companyId} tab={tab} tabs={tabs} asOf={asOf} statements={statements} />
@@ -298,15 +298,54 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
 }
 
 /** The tabs (§4): links, one per route, 40px, the current one in ink over a 2px indicator that slides
- * 180ms to it (instant from the keyboard and under reduced motion); As of at the right. */
+ * 180ms to it (instant from the keyboard and under reduced motion); As of at the right, or on its own
+ * line above the tabs where the page is narrower than 960px (a tablet; the assistant open at 1440).
+ * Tabs that don't fit go into a "More" menu at the strip's end, never cut or hidden (Marek 7: at 768
+ * "Filings" showed as "F" and Data notes and Peers were gone with no sign of them); the current tab,
+ * if it's one of those, names the menu. */
 function CompanyTabs({ companyId, tab, tabs, asOf, statements }: {
   companyId: string; tab: CompanyTab; tabs: (typeof COMPANY_TABS)[number][]; asOf?: string; statements?: StatementView;
 }) {
   const nav = useRef<HTMLElement>(null);
   const ink = useRef<HTMLSpanElement>(null);
   const placed = useRef(false);
+  // how many tabs show in the strip; the rest are in More
+  const [fit, setFit] = useState(tabs.length);
+  const widths = useRef<number[]>([]);
   useLayoutEffect(() => {
-    const on = nav.current?.querySelector<HTMLElement>('a[aria-current="page"]');
+    const el = nav.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const links = [...el.querySelectorAll<HTMLElement>(":scope > a")];
+      // a tab in More has no width now: it keeps the one it had in the strip
+      links.forEach((a, i) => {
+        if (a.offsetWidth) widths.current[i] = a.offsetWidth;
+      });
+      const gap = 2;
+      const room = el.clientWidth;
+      const each = widths.current.slice(0, tabs.length);
+      const all = each.reduce((a, w) => a + w + gap, 0);
+      if (all <= room + 1) return setFit(tabs.length);
+      const more = el.querySelector<HTMLElement>(":scope > .tab-more")?.offsetWidth || 96;
+      let used = more;
+      let n = 0;
+      for (const w of each) {
+        if (used + w + gap > room) break;
+        used += w + gap;
+        n++;
+      }
+      setFit(Math.max(1, n));
+    };
+    measure();
+    const seen = new ResizeObserver(measure);
+    seen.observe(el);
+    void document.fonts?.ready.then(measure);
+    return () => seen.disconnect();
+  }, [tabs.length]);
+  const rest = tabs.slice(fit);
+  const inMore = rest.find(([t]) => t === tab);
+  useLayoutEffect(() => {
+    const on = nav.current?.querySelector<HTMLElement>('a[aria-current="page"]:not([hidden]), .tab-more.on');
     const i = ink.current;
     if (!i || !on) return;
     const still = !placed.current || viaKeyboard() || reduced();
@@ -318,15 +357,36 @@ function CompanyTabs({ companyId, tab, tabs, asOf, statements }: {
       i.classList.remove("no-anim");
     }
     placed.current = true;
-  }, [tab, tabs.length]);
+  }, [tab, tabs.length, fit]);
+  const link = (t: CompanyTab) => href({ view: "company", companyId, tab: t, ...(asOf ? { asOf } : {}) });
   return (
     <div className="co-tabsrow">
       <nav className="tabs co-tabs" aria-label="Company sections" ref={nav}>
-        {tabs.map(([t, label]) => (
-          <a key={t} href={href({ view: "company", companyId, tab: t, ...(asOf ? { asOf } : {}) })} aria-current={t === tab ? "page" : undefined}>
+        {tabs.map(([t, label], i) => (
+          <a key={t} href={link(t)} aria-current={t === tab ? "page" : undefined} hidden={i >= fit || undefined}>
             {label}
           </a>
         ))}
+        {rest.length > 0 && (
+          <Menu.Root modal={false}>
+            <Menu.Trigger asChild>
+              <button type="button" className={inMore ? "tab-more on" : "tab-more"}
+                aria-label={inMore ? `More sections, showing ${inMore[1]}` : "More sections"}>
+                {inMore ? inMore[1] : "More"}
+                <span className="more-caret" aria-hidden="true" />
+              </button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content className="menu" align="end" sideOffset={6} collisionPadding={12}>
+                {rest.map(([t, label]) => (
+                  <Menu.Item key={t} asChild className="menu-item">
+                    <a href={link(t)} aria-current={t === tab ? "page" : undefined}>{label}</a>
+                  </Menu.Item>
+                ))}
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
+        )}
         <span className="tab-ink" ref={ink} aria-hidden="true" />
       </nav>
       <AsOfControl companyId={companyId} tab={tab} asOf={asOf} statements={statements} />
@@ -414,7 +474,7 @@ const TODAY_WORDS: Partial<Record<CompanyTab, string>> = {
  * address (`?asof=`) so it can be linked. A segmented Today | Pick a day; the day is typed in a field
  * (never the browser's own date input, §2.5). */
 function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; tab: CompanyTab; asOf?: string; statements?: StatementView }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const [picking, setPicking] = useState(!!asOf);
   const [typed, setTyped] = useState(asOf ?? "");
   useEffect(() => {
@@ -454,13 +514,22 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
   );
 }
 
+/** When the next report is expected, for the results notice: ", about Nov 25" while that's ahead; once
+ * it has passed, that it's late (Marek 9), or past the SEC's deadline (the API's overdue). */
+function whenFiled(next: { expected_date: string | null; deadline?: string | null; status: string }): string {
+  if (next.status === "overdue") return `: it's past the SEC's deadline${next.deadline ? ` (${day(next.deadline)})` : ""}`;
+  if (!next.expected_date) return "";
+  return lateFiling(next) ? `: it's late, expected about ${day(next.expected_date)}` : `, about ${day(next.expected_date)}`;
+}
+
 /** The next periodic report in plain words (Riley, test 10, finding 53: "(an estimate, due)"): when it's
  * expected, and that the date is an estimate; a report past its date says so. */
 export function nextWords(next: { form: string; period_end: string; expected_date: string | null; status: string }): string {
   const when = next.expected_date ? `, expected around ${day(next.expected_date, true)}` : "";
-  const status = next.status === "due" ? ": due about now (an estimated date)"
-    : next.status === "overdue" ? ": later than its estimated date"
-      : next.expected_date ? " (an estimated date)" : "";
+  const status = next.status === "overdue" ? ": past the SEC's deadline"
+    : lateFiling(next) ? ": late, not filed yet"
+      : next.status === "due" ? ": due about now (an estimated date)"
+        : next.expected_date ? " (an estimated date)" : "";
   return `Next ${next.form}, for the period ending ${day(next.period_end, true)}${when}${status}`;
 }
 

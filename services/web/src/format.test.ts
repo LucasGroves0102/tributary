@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ago, change, companyName, day, displayNames, duration, inWords, localClock, localTime, money, moneyRow, paren, pct, quarter, sentenceCase } from "./format";
+import { ago, change, companyName, day, displayNames, duration, inWords, lateFiling, localClock, localTime, localToday, money, moneyRow, paren, pct, quarter, sentenceCase } from "./format";
 
 describe("moneyRow", () => {
   it("reads a row in one unit: the largest value's, or the next smaller one when a value would read under one", () => {
@@ -167,5 +167,21 @@ describe("sentenceCase", () => {
     expect(sentenceCase("RECONCILIATION OF GAAP TO NON-GAAP OUTLOOK")).toBe("Reconciliation of GAAP to non-GAAP outlook");
     expect(sentenceCase("FREE CASH FLOW, Q3 FY2027")).toBe("Free cash flow, Q3 FY2027");
     expect(sentenceCase("Reconciliation of GAAP to Non-GAAP")).toBe("Reconciliation of GAAP to Non-GAAP");
+  });
+});
+
+describe("truth in time (Marek 9, 15)", () => {
+  it("today is the viewer's date, not UTC's", () => {
+    // 9 PM on Nov 27 where the viewer is, whatever the UTC date
+    expect(localToday(new Date(2026, 10, 27, 21, 0))).toBe("2026-11-27");
+    expect(localToday(new Date(2026, 0, 5, 0, 30))).toBe("2026-01-05");
+  });
+
+  it("an expected filing past its estimated date is late; past the deadline, the API's overdue says it", () => {
+    expect(lateFiling({ expected_date: "2026-11-25", status: "due" }, "2026-11-27")).toBe(true);
+    expect(lateFiling({ expected_date: "2026-11-27", status: "due" }, "2026-11-27")).toBe(false);
+    expect(lateFiling({ expected_date: "2026-12-04", status: "upcoming" }, "2026-11-27")).toBe(false);
+    expect(lateFiling({ expected_date: "2026-11-01", status: "overdue" }, "2026-11-27")).toBe(false);
+    expect(lateFiling({ expected_date: null, status: "due" }, "2026-11-27")).toBe(false);
   });
 });

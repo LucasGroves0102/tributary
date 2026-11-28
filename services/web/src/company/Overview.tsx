@@ -405,9 +405,13 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
   }
   const bank = isBankRow(row);
   const rest = stats.filter((s) => s.key !== "revenue_ttm" && s.key !== "revenue_growth_ttm");
-  // the period most of them share goes in the section's line; the others say their own
-  const ends = rest.map((s) => s.periodEnd).filter((e): e is string => !!e);
-  const common = ends.sort((a, b) => ends.filter((x) => x === b).length - ends.filter((x) => x === a).length)[0] ?? null;
+  // one period for them all goes in the section's line; when they differ (a 20-F filer's year beside the
+  // twelve months its releases add up to) every figure says its own and the line claims none (Marek 8:
+  // "As filed, to Dec 31, 2025" over TSMC's net income to Sep 30, 2026)
+  // (an old figure says its own already: "not reported since")
+  const ends = rest.filter((s) => !s.old).map((s) => s.periodEnd).filter((e): e is string => !!e);
+  const mixed = new Set(ends).size > 1;
+  const common = mixed ? null : ends[0] ?? null;
   const flagged = [...new Map(rest.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
   const letters = [...new Set(rest.map((s) => readingOf(s, bank)).filter((l): l is string => !!l))];
   const marks = [...new Set(rest.map((s) => statMark(s)).filter((m): m is MarkKind => !!m))];
@@ -416,7 +420,7 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
   const rates = rest.filter((s) => !(s.kind === "usd" || s.kind === "eps"));
   return (
     <Folio name="The rest of the twelve months" className="ov-rest"
-      line={common ? `As filed, to ${day(common, true)}` : "As filed"} aside={currency ?? "USD"}>
+      line={mixed ? "As filed, each to the date under it" : common ? `As filed, to ${day(common, true)}` : "As filed"} aside={currency ?? "USD"}>
       <div className="ledger">
         <dl aria-label="Amounts">{amounts.map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} bank={bank} />)}</dl>
         <dl aria-label="Rates">{rates.map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} bank={bank} />)}</dl>
@@ -442,7 +446,8 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
 
 function LedgerRow({ s, common, companyId, armNote, bank }: { s: Stat; common: string | null; companyId: string; armNote: string | null; bank: boolean }) {
   const letter = readingOf(s, bank);
-  const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || letter;
+  // with no period shared by them all, every figure says its own
+  const differs = s.old || (s.periodEnd && s.periodEnd !== common) || letter;
   const extra = [s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n") || null;
   const mark = statMark(s);
   return (

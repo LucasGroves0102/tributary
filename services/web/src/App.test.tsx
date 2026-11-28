@@ -173,7 +173,8 @@ describe("Home", () => {
     await render();
     const strip = $(".status-strip")!.textContent!;
     expect(strip).toContain("2 companies");
-    expect(strip).toContain("~Nov 19NVDA 10-Q, an estimate");
+    // Nov 19 has passed and the 10-Q isn't in: late, never "about" a past day (Marek 9)
+    expect(strip).toContain("~Nov 19lateNVDA 10-Q, an estimate");
     expect(strip).toContain("+69.0%");
     expect(strip).toContain("Newest filing listed");
     expect(strip).toContain("just now");

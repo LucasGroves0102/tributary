@@ -6,7 +6,7 @@ import { FormMark } from "../components/FormMark";
 import { toast } from "../components/Toasts";
 import { ErrorPanel, LedgerShape } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
-import { ago, change, day, periodPhrase, UNNAMED } from "../format";
+import { ago, change, day, lateFiling, periodPhrase, UNNAMED } from "../format";
 import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
 import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
@@ -238,7 +238,7 @@ function StatusStrip({
         {s.next ? (
           <>
             {/* the date is the figure; whose and which form under it, so it never wraps (Riley 128) */}
-            <div className="v">~{day(s.next.expected.expected_date!)}</div>
+            <div className="v">~{day(s.next.expected.expected_date!)}{lateFiling(s.next.expected) && <span className="tag warn">late</span>}</div>
             <div className="p">
               {s.next.row.ticker ?? s.next.row.name} {s.next.expected.form}, an estimate for the period ending {day(s.next.expected.period_end)}
               {s.next.expected.typical_lag_days !== null &&
@@ -409,6 +409,8 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                       <span className="tag e">{r.next.form}</span>{" "}
                       <span className="muted">~{day(r.next.expected_date)}</span>
                       {r.next.status === "overdue" && <span className="tag warn">overdue</span>}
+                      {/* its estimated date has passed: late, not "about" a past day (Marek 9) */}
+                      {lateFiling(r.next) && <span className="tag warn">late</span>}
                     </>
                   ) : (
                     <span className="faint">no estimate</span>
@@ -539,6 +541,7 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
               <td className="muted">
                 ~{e.expected_date ? day(e.expected_date) : "—"}
                 {e.status === "overdue" && <span className="tag warn">overdue</span>}
+                {lateFiling(e) && <span className="tag warn">late</span>}
               </td>
               <td>{e.watched ? <b>{e.name ?? UNNAMED}</b> : (e.name ?? UNNAMED)}</td>
               <td>

@@ -199,7 +199,8 @@ by the room they have (`.main` is the `main` container): the Overview stacks its
 its content box is under 900px, so the open panel at 1440 collapses it as a narrow window does. Content has
 32px sides (16 on a phone) and is at most 1144px wide. No page scrolls sideways; tables scroll inside
 `components/TableScroll`, which opens a statement at its newest periods, moves its real header row under the
-top bar through the CSSOM (`headerShift`), and blanks a column showing only in part. The palette is 560px at
+top bar through the CSSOM (`headerShift`), and blanks a column showing only in part; the frozen column's
+header cell is sticky and opaque too, so a scrolled column's header never shows through the corner (Marek 17). The palette is 560px at
 12vh over a scrim, never animated.
 
 ### Motion
@@ -221,7 +222,9 @@ content; transform and opacity only, nothing over 280ms, exits faster than entra
   `markKeyboard`), the palette itself, sorting and moving through a table, and the figures (a value swaps;
   bars appear at their value).
 - **Popovers**: a source card or menu scales from 0.97 at its trigger with opacity (140ms in, 90ms out);
-  instant by keyboard or within 400ms of another closing. The assistant panel slides in 240ms and away 180ms
+  instant by keyboard or within 400ms of another closing. A form that floats under its button (Save…,
+  Columns, Save to workspace) is a popover too: the sheet, 6px corners and `--float`, and
+  `components/useDismiss` closes it on Escape (the focus back on its button) or a press outside (Marek 5, 50). The assistant panel slides in 240ms and away 180ms
   (it stays mounted for its exit; `App` returns the focus to the Assistant button), instantly by Ctrl J; the
   rail drawer slides 240/180.
 - **Loading**: the company page shows its own shape while its figures load (the header with the name the
@@ -468,7 +471,13 @@ most one notice: on results day (an 8-K with item 2.02 after the latest 10-Q or 
 figures and the statements don't repeat it: `ResultsPending`'s line under them shows only when the header
 says nothing, from `/earnings`); then the tabs (links with
 `aria-current`, a 2px indicator) with As of as Today | Pick a day (a typed day, never the browser's date
-input). The header asks the 8-Ks since the last report once (`/events`) for the notice and the Overview.
+input). Under 960px of page (a tablet, or 1440 with the assistant open) As of moves to its own line above the
+tabs, and tabs that don't fit the strip go into a "More" menu at its end, named after the current tab when it
+is one of them (Marek 7: at 768 "Filings" read "F" and Data notes and Peers were gone). The results notice
+words the next report's date for today (`format.ts` `lateFiling`): "about Nov 25" while that's ahead, "it's
+late, expected about Nov 25" once it has passed, "past the SEC's deadline" for the API's `overdue`; Home's
+watchlist and Coming up, and Portfolio, tag it "late" (Marek 9). A notice is never cut to an ellipsis on a
+phone. The header asks the 8-Ks since the last report once (`/events`) for the notice and the Overview.
 
 The Overview (`company/Overview.tsx`, spec §6), lead column then side column, stacked under 900px of room:
 
@@ -482,7 +491,10 @@ The Overview (`company/Overview.tsx`, spec §6), lead column then side column, s
   its bar. The terms are rounded to two decimals, so they can differ from the total by a cent of a billion:
   the total is never re-added here. Then the legend of the marks used, and the year as a sentence
   (`data.ts` `yearStory`, API values only).
-- **The rest of the twelve months**: the other key figures as a two-column ledger (amounts, then rates), each
+- **The rest of the twelve months**: the other key figures as a two-column ledger (amounts, then rates), under
+  the one period they share ("As filed, to Jul 26, 2026"); when they don't share one (a 20-F filer's year
+  beside the twelve months its releases add up to) the line says "each to the date under it" and every
+  figure says its own (Marek 8: TSMC's net income to Sep 30, 2026 sat under "to Dec 31, 2025"). Each is
   a figure button with its mark and card (`company/sources.ts` `statCard`: how a figure no filing states is
   worked out, from `COMPUTED_FROM` and `epsStat`); EPS is `/per-share`'s TTM (Σ). A figure that isn't a plain
   one reads "—" with a reading letter (a not reported, b none filed since a date, k a bank's line) explained
@@ -810,6 +822,10 @@ where the segments plus it come to the consolidated revenue, gross profit or ope
 is All Other in FY2025 (−$1.71B in Q3: $22.08B + $1.50B − $1.71B = the statement's $21.87B) but carries
 the segments' total from FY2026 ($66.6B beside segments of $66.6B), which never ties, so only the
 first is shown. It has no share or YoY and is in no sum.
+
+The tables keep fixed columns (200px for the member, 136 on a phone; 88 per period), so periods line up from
+one table to the next and a table wider than its box scrolls like a statement instead of squeezing its
+cells (Marek 4: at 768 the figures printed over each other).
 
 Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
 chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from

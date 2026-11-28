@@ -13,7 +13,7 @@ import { MenuButton } from "../components/MenuButton";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
 import { toast } from "../components/Toasts";
-import { day, pct } from "../format";
+import { day, lateFiling, pct } from "../format";
 import { go, href } from "../route";
 import type { Holding, Portfolio } from "../types";
 import { AddHolding } from "./AddHolding";
@@ -270,6 +270,7 @@ function HoldingsTable({ token, rows, data, name, onChanged }: { token: string; 
                   <span className="next-report" title={`For the period ending ${day(h.next_report.period_end, true)} (an estimate)`}>
                     <FormMark form={h.next_report.form} expected title={null} />
                     {h.next_report.expected_date ? ` ~${day(h.next_report.expected_date)}` : ""}
+                    {lateFiling({ ...h.next_report, status: "" }) && <span className="tag warn">late</span>}
                   </span>
                 ) : <span className="faint">—</span>}
               </td>
