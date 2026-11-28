@@ -657,10 +657,11 @@ def test_status_data_runs_as_query_api_without_bronze_or_ops_access(conn):
     coverage = as_query_api(conn, "SELECT * FROM ops.public_coverage()")[0]
     assert coverage[:4] == (before[0] + 1, before[1] + 1, before[2] + 1, before[3] + 7)
     # 023's eleven checks, 041's mistagged_fact and net_debt_gap, 072's tag_disagreement, 074's
-    # statement_mismatch, and the checks with findings of two severities (outlier, sign_flip,
-    # annual_sum): one row each, by tier
+    # statement_mismatch, 167's printed_mismatch, and the checks with findings of two severities
+    # (outlier, sign_flip, annual_sum): one row each, by tier
     quality = as_query_api(conn, "SELECT check_name, severity, tier FROM ops.public_quality()")
-    assert len(quality) == 18
+    assert len(quality) == 19
+    assert ("printed_mismatch", "warning", "warning") in quality
     assert ("statement_mismatch", "warning", "warning") in quality
     assert [t for _, _, t in quality] == sorted(
         (t for _, _, t in quality),

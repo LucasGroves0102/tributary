@@ -777,5 +777,10 @@ DROP FUNCTION ops.release_backlog(text);
 DROP TABLE silver.release_figures, silver.release_reads;
 DELETE FROM ops.catchup_runs WHERE kind = 'releases';
 DELETE FROM ops.catchup WHERE kind = 'releases';
+-- 167's catch-up kind 'gate' (no backout of its own): the older backouts re-create the kind CHECK
+-- without it (085's), so its rows go here. The gate's tables and functions (166-168) stay,
+-- unread; deploy the previous parser image first (parser-index runs the gate kind).
+DELETE FROM ops.catchup_runs WHERE kind = 'gate';
+DELETE FROM ops.catchup WHERE kind = 'gate';
 
 COMMIT;

@@ -112,7 +112,7 @@ def test_state_tells_paused_from_stalled(conn):
 def test_ops_reader_sees_the_status_only(conn):
     run(conn, "gold", 1, behind=3, done=1)
     conn.execute("SET LOCAL ROLE ops_reader")
-    assert conn.execute("SELECT count(*) FROM ops.catchup_status").fetchone() == (10,)
+    assert conn.execute("SELECT count(*) FROM ops.catchup_status").fetchone() == (11,)
     for table in ("ops.catchup", "ops.catchup_runs", "ops.company_builds"):
         with pytest.raises(psycopg.errors.InsufficientPrivilege), conn.transaction():
             conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
