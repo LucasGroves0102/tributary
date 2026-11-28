@@ -2990,3 +2990,15 @@ html[data-motion="reduced"] .release-table-box summary::before {
     box-shadow: inset 0 0 0 1px var(--rule-2);
   }
 }
+
+/* a phone: the search field its own row, Search and Exact phrase under it (nothing past the edge) */
+@container main (max-width: 600px) {
+  .reader-search {
+    flex-wrap: wrap;
+  }
+
+  .reader-search .field {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
