@@ -77,7 +77,7 @@ export function Revenue({ token, companyId, name, ticker, saved, onOpenChart }: 
       <section className="card">
         <div className="card-h wrap">
           <h2>Revenue trends by segment, geography and product</h2>
-          <span className="sub">trailing twelve months · fiscal periods · USD · as reported in the filings' XBRL; hover a value for its filing</span>
+          <span className="sub">trailing twelve months · fiscal periods · USD · as reported in the filings' XBRL; hover a value for its filing</span>
         </div>
         <Gate load={ttm} name={name} what="Financials">
           {() => {
@@ -148,7 +148,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
   return (
     <div className="rev-axis">
       <h3>{AXIS_TITLES[t.axis]}</h3>
-      <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} />
+      <ChartView token={token} chart={chart} name={chart.title} label={label} hasTtm={everyMetric} onPage />
       <ChartActions chart={chart} saved={saved} onOpenChart={onOpenChart} label={label} />
       <TableScroll label="Revenue by member">
         <table className="t">
@@ -165,7 +165,7 @@ function AxisBlock({ t, view, token, companyId, ticker, saved, onOpenChart, labe
                 <tr key={r.members.join("|")} className={r.parent ? "child" : r.overlaps ? "other-cut" : undefined}>
                   <td className="first" title={r.members.join(", ")}>
                     {r.label}
-                    {r.note && <span className="faint small"> · {r.note}</span>}
+                    {r.note && <span className="faint small"> · {r.note}</span>}
                   </td>
                   {r.values.map((v, i) => (
                     <td key={t.periods[i]!.key} className={v === null ? "n faint" : "n"} title={r.sources[i] ?? (v === null ? NO_DATA_TITLE : undefined)}>
@@ -232,7 +232,7 @@ function Decomposition({ rows, totals, ...c }: Common & { rows: SegmentRow[]; to
         <p className="empty">No segment revenue for {c.name} to decompose.</p>
       ) : (
         <>
-          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
+          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} onPage />
           {(() => {
             // quarters with no breakdown have no bars under a continuous growth line: say so on the chart
             // (Riley, test 10, finding 23: 3 of 12 geography quarters had bars, and it looked broken)
@@ -307,13 +307,13 @@ function Quality({ rows, ...c }: Common & { rows: FinancialRow[] }) {
     <section className="card">
       <div className="card-h">
         <h2>Revenue quality: receivables vs revenue</h2>
-        <span className="sub">receivables at each quarter end · that quarter's revenue · each against the same quarter a year earlier</span>
+        <span className="sub">receivables at each quarter end · that quarter's revenue · each against the same quarter a year earlier</span>
       </div>
       {!q.length ? (
         <p className="empty">No receivables reported for {c.name} in these periods (common for banks, insurers and some retailers).</p>
       ) : (
         <>
-          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} />
+          <ChartView token={c.token} chart={chart} name={chart.title} label={c.label} hasTtm={everyMetric} onPage />
           <ChartActions chart={chart} saved={c.saved} onOpenChart={c.onOpenChart} label={c.label} />
           {flagged > 0 && (
             <p className="badge warn" role="status">

@@ -51,7 +51,7 @@ export function TextKpisCard({ token, companyId, name, canRead, compact = false,
     <section className="card text-kpis" aria-label={`Backlog and orders ${FROM_TEXT}`}>
       <div className="card-h">
         <h2>Backlog and orders</h2>
-        <span className="sub">{FROM_TEXT}: what the 10-K, 10-Q and earnings releases state in words, not XBRL · each figure links to its passage</span>
+        <span className="sub">{FROM_TEXT}: what the 10-K, 10-Q and earnings releases state in words, not XBRL · each figure links to its passage</span>
       </div>
       {body}
     </section>
@@ -148,13 +148,13 @@ function Row({ p, companyId }: { p: TextKpiPoint; companyId: string }) {
   const exact = p.unit === "USD" ? `${p.value.toLocaleString("en-US")} US dollars` : `${p.value}%`;
   return (
     <tr>
-      <td>{when(p)}{p.basis ? <span className="faint small"> · {p.basis === "organic" ? "organic" : "as reported"}</span> : null}</td>
+      <td>{when(p)}{p.basis ? <span className="faint small"> · {p.basis === "organic" ? "organic" : "as reported"}</span> : null}</td>
       <td className="num" title={exact}>{figure(p)}</td>
       <td>
         <a href={href({ view: "filing", companyId, accessionNo: c.accession_no, section: c.section_key, at: c.char_start })}>
           {writtenIn(first)}
         </a>
-        {more.size > 0 && <span className="faint small"> · also in {more.size} more filing{more.size === 1 ? "" : "s"}</span>}
+        {more.size > 0 && <span className="faint small"> · also in {more.size} more filing{more.size === 1 ? "" : "s"}</span>}
         <q className="passage">{excerpt(first)}</q>
       </td>
     </tr>

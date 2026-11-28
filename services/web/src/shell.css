@@ -480,6 +480,12 @@ html[data-motion="reduced"] .ai-drawer {
   animation: fade-in 120ms linear;
 }
 
+/* Ctrl J is instant whatever the motion setting (Marek 36: under reduced motion the keyboard's open faded
+   120ms while the normal path's was instant) */
+html[data-motion="reduced"] .ai-drawer.instant {
+  animation: none;
+}
+
 html[data-motion="reduced"] .ai-drawer.closing {
   animation: fade-out 120ms linear forwards;
 }
@@ -628,5 +634,53 @@ html[data-motion="reduced"] .ai-drawer.closing {
 
   .icon-btn {
     width: 40px;
+  }
+}
+
+/* Skip to content (App): off screen until it has the keyboard's focus, then over the top bar's left end */
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 200;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus-visible {
+  transform: none;
+}
+
+/* the page given the focus by Skip to content shows no ring, as a heading doesn't */
+main.content[tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* the credit's links never break inside (Marek 44: "How it / works") */
+.credit a {
+  white-space: nowrap;
+}
+
+/* the freshness point says what it counts where the bar has room; a tablet's bar keeps the short word, so
+   nothing is pushed past the window's edge */
+.fresh-short {
+  display: none;
+}
+
+@media (max-width: 1199px) {
+  .fresh-long {
+    display: none;
+  }
+
+  .fresh-short {
+    display: inline;
   }
 }

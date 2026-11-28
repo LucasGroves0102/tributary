@@ -31,7 +31,7 @@ import {
 } from "../companies/screen";
 import { ANNUAL_FORMS, NOT_MEANINGFUL, NOT_REPORTED } from "../blanks";
 import { metricKey } from "../data/dataset";
-import { paren } from "../format";
+import { localToday, paren } from "../format";
 import { FigureText } from "../components/FigureText";
 import { MenuButton } from "../components/MenuButton";
 import { toast } from "../components/Toasts";
@@ -144,9 +144,11 @@ export function Companies({ token, screen: asked, watched, onWatch, onChart, sav
     setExporting(true);
     screenerCsv(token, params)
       .then((blob) => {
-        download("screener.csv", blob);
+        // the day in its name, so two exports don't overwrite each other (Marek 60)
+        const file = `screener-${localToday()}.csv`;
+        download(file, blob);
         const n = Math.min(total ?? 0, SCREENER_CSV_ROWS);
-        toast({ text: `Exported ${n.toLocaleString()} ${n === 1 ? "company" : "companies"} to screener.csv.`, topic: "screener-csv" });
+        toast({ text: `Exported ${n.toLocaleString()} ${n === 1 ? "company" : "companies"} to ${file}.`, topic: "screener-csv" });
       })
       .catch(() => toast({ text: "Couldn't export the screen. Try again.", error: true, topic: "screener-csv" }))
       .finally(() => setExporting(false));
@@ -423,7 +425,7 @@ function FilterRail({ screen, set, sectors }: {
     <div className="filter-band">
       <button type="button" className="btn filter-toggle" aria-expanded={open} aria-controls="screen-filters"
         onClick={() => setOpen((o) => !o)}>
-        Filters{active ? ` · ${active} active` : ""}
+        Filters{active ? ` · ${active} active` : ""}
         <span className="more-caret" aria-hidden="true" />
       </button>
       <form id="screen-filters" className={open ? "filters filter-row" : "filters filter-row folded"} onSubmit={submit}
@@ -601,13 +603,18 @@ function Table({
   const desc = sort.startsWith("-");
   const sortKey = sort.replace(/^-/, "");
 
-  /** Click a header: sort by it, or flip direction if it already is. Values start high-first. */
-  const th = (key: string, numeric: boolean) => ({
-    onClick: () => onSort(sortKey === key ? (desc ? key : `-${key}`) : numeric ? `-${key}` : key),
+  /** The th says how the table is sorted; its button (Enter, Space or a click) sorts by it, or flips the
+   * direction if it already is; values start high-first. A button, like every other sortable header (Home,
+   * Compare, Peers): bare headers with click handlers sorted by mouse only (Marek 14). */
+  const th = (key: string) => ({
     "aria-sort": (sortKey === key ? (desc ? "descending" : "ascending") : "none") as
       "descending" | "ascending" | "none",
   });
-  const arrow = (key: string) => (sortKey === key ? (desc ? " ↓" : " ↑") : "");
+  const sortBy = (key: string, numeric: boolean, label: ReactNode) => (
+    <button type="button" className="th-sort" onClick={() => onSort(sortKey === key ? (desc ? key : `-${key}`) : numeric ? `-${key}` : key)}>
+      {label}{sortKey === key ? (desc ? " ↓" : " ↑") : ""}
+    </button>
+  );
 
   const toggle = (id: string, watch: boolean) => {
     setPending(id);
@@ -624,12 +631,12 @@ function Table({
         <table className={updating ? "t screen updating" : "t screen"} aria-busy={updating || undefined}>
           <thead>
             <tr>
-              <th className="first sort" {...th("name", false)}>Company{arrow("name")}</th>
-              <th className="ind sort" {...th("sic", false)}>Industry (SIC){arrow("sic")}</th>
+              <th className="first sort" {...th("name")}>{sortBy("name", false, "Company")}</th>
+              <th className="ind sort" {...th("sic")}>{sortBy("sic", false, "Industry (SIC)")}</th>
               {columns.map((c) =>
                 sortable(c.key) ? (
-                  <th key={c.key} className={c.label.length > 14 ? "n long sort" : "n sort"} {...th(c.key, true)}>
-                    {c.label}{arrow(c.key)} <span className="unit">{c.period}</span>
+                  <th key={c.key} className={c.label.length > 14 ? "n long sort" : "n sort"} {...th(c.key)}>
+                    {sortBy(c.key, true, c.label)} <span className="unit">{c.period}</span>
                   </th>
                 ) : (
                   <th key={c.key} className={c.label.length > 14 ? "n long" : "n"} title={c.long}>
@@ -637,7 +644,7 @@ function Table({
                   </th>
                 ),
               )}
-              <th className="sort" {...th("fiscal_year_end", false)}>FYE{arrow("fiscal_year_end")}</th>
+              <th className="sort" {...th("fiscal_year_end")}>{sortBy("fiscal_year_end", false, "FYE")}</th>
               <th>
                 <span className="visually-hidden">Actions</span>
               </th>
@@ -677,7 +684,7 @@ function Table({
                       </div>
                     )}
                   </td>
-                  <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>
+                  <td className="muted ind" title={`${r.sector ? `${r.sector} · ${r.sectorIndustry} (Tributary's grouping). ` : ""}SIC: ${r.industry ?? "none"}`}>
                     <span className="ind-in">
                       <span className="ind-name">
                         {r.industry ?? "—"}

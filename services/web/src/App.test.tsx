@@ -173,7 +173,8 @@ describe("Home", () => {
     await render();
     const strip = $(".status-strip")!.textContent!;
     expect(strip).toContain("2 companies");
-    expect(strip).toContain("~Nov 19NVDA 10-Q, an estimate");
+    // Nov 19 has passed and the 10-Q isn't in: late, never "about" a past day (Marek 9)
+    expect(strip).toContain("~Nov 19lateNVDA 10-Q, an estimate");
     expect(strip).toContain("+69.0%");
     expect(strip).toContain("Newest filing listed");
     expect(strip).toContain("just now");
@@ -200,7 +201,7 @@ describe("Home", () => {
   it("lists recent data notes for companies with financials, linked to their Data notes tab", async () => {
     await render();
     const card = [...container.querySelectorAll("section.card")].find((c) => c.querySelector("h2")?.textContent === "Recent data notes for your companies")!;
-    expect(card.querySelector(".note")?.textContent).toContain("Nvidia (NVDA) · Revenue restated");
+    expect(card.querySelector(".note")?.textContent).toContain("Nvidia (NVDA)\u00a0· Revenue restated");
     // the date beside the title is set apart by space, not a middle dot (Seal)
     expect(card.querySelector(".note .note-when")?.textContent).toBe("Feb 26, 2026");
     expect(card.querySelector(".note a")?.getAttribute("href")).toBe(`#/company/${NVDA}/notes`);
@@ -350,6 +351,15 @@ it("names Settings in the tab's title and the page's heading", async () => {
   await render("#/settings");
   expect(document.title).toBe("Settings · Tributary");
   expect($("h1")?.textContent).toBe("Settings");
+});
+
+it("Skip to content is the first stop and takes the focus to the page's heading (Marek 13)", async () => {
+  await render("#/settings");
+  const skip = container.querySelector<HTMLButtonElement>("button.skip-link")!;
+  const first = container.querySelector("button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+  expect(first).toBe(skip);
+  await act(async () => skip.click());
+  expect(document.activeElement).toBe($("main h1"));
 });
 
 it("#60: links Settings from the sidebar even with no data connections offered", async () => {

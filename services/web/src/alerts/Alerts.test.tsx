@@ -145,7 +145,7 @@ it("the bell counts new filing alerts; the list says what was filed, its figures
   const q = items[0]!;
   expect(q.querySelector(".alert-what")?.textContent).toBe("10-Q filed Nov 19, 2026 for the quarter ended Oct 26, 2026");
   expect(q.querySelector(".alert-figures")?.textContent).toContain("Revenue$57.01B +62.5% on a year earlier");
-  expect(q.querySelector(".alert-figures")?.textContent).toContain("Gross margin73.5% -1.0 pts on a year earlier");
+  expect(q.querySelector(".alert-figures")?.textContent).toContain("Gross margin73.5% −1.0 pts on a year earlier");
   expect(q.querySelector(".tag.crossed")?.textContent).toBe("1 red line crossed");
   expect([...q.querySelectorAll(".alert-redlines li")].map((li) => li.textContent)).toEqual([
     "Crossed Gross margin below 75% (73.5%)",

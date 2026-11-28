@@ -31,6 +31,7 @@ from query_api.sandbox import (
     SandboxConfig,
     Sandboxes,
     SandboxGone,
+    demo_analysis,
     ip_key,
     is_sandbox_user,
     sandbox_workspaces,
@@ -129,7 +130,7 @@ def add_sandbox_routes(app: FastAPI, *, store: Store, sandboxes: Sandboxes | Non
         sandbox = NewSandbox(user_id=USER_PREFIX + secrets.token_hex(8), company_ids=companies,
                              watchlist=watch, created_at=now,
                              expires_at=now + timedelta(hours=config.ttl_hours),
-                             workspaces=tuple(sandbox_workspaces(ids)))
+                             workspaces=tuple(sandbox_workspaces(ids) + demo_analysis(ids)))
         try:
             sandboxes.create(sandbox, ip_key(jwt_secret, client_ip(request)),
                              config.creations_per_ip_per_hour, config.max_live)

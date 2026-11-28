@@ -171,7 +171,7 @@ export function AssistantPanel({
       </form>
       {allowance && <Meter allowance={allowance} />}
       <div className="ai-f">
-        Enter to send · Shift+Enter new line · {variant === "drawer" && (
+        Enter to send · Shift+Enter new line · {variant === "drawer" && (
           <>
             <span className="kbd">Ctrl J</span> toggle ·{" "}
           </>

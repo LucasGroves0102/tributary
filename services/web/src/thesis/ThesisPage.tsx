@@ -451,7 +451,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
           onChange={(e) => embed(e.target.value)}>
           <option value="">{embeddable.length ? "Embed a saved item…" : "Nothing to embed yet"}</option>
           {embeddable.map((i) => (
-            <option key={i.item_id} value={i.item_id}>{KIND_LABELS[i.kind]} · {i.name}</option>
+            <option key={i.item_id} value={i.item_id}>{KIND_LABELS[i.kind]} · {i.name}</option>
           ))}
         </select>
         <span className="grow" />
@@ -569,7 +569,7 @@ function ThesisEditor({ token, item, initial, items, saved, label, readable, onO
                   <li key={v.version_id}>
                     <span className="grow">
                       Saved {when(v.saved_at)}
-                      <span className="faint"> · {v.characters?.toLocaleString("en-US") ?? "?"} characters · {v.name}</span>
+                      <span className="faint"> · {v.characters?.toLocaleString("en-US") ?? "?"} characters · {v.name}</span>
                     </span>
                     <button className="btn sm" onClick={() => void restoreVersion(v)}
                       title="Put this version in the editor; nothing is saved until you Save">

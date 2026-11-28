@@ -22,13 +22,16 @@ export function Skeleton({ lines = 4, chart = false, label = "Loading" }: { line
 
 /** A ledger's shape while it loads (spec §7.6): its real column headers and rules, each value a blank `well`
  * block, nothing shimmering; after a second the blanks pulse slowly (`data-loading="slow"`). */
-export function LedgerShape({ first, columns, rows = 8, label = "Loading" }: {
+export function LedgerShape({ first, columns, rows = 8, label = "Loading", lines = 1 }: {
   /** the first (name) column's header */
   first: string;
   /** the other columns' headers, as the table will show them */
   columns: string[];
   rows?: number;
   label?: string;
+  /** lines a row of the table holds (the watchlist's last filing is a form over its quarter): the shape's
+   * rows are as tall as the table's, so nothing under it moves when it comes */
+  lines?: 1 | 2;
 }) {
   const [slow, setSlow] = useState(false);
   useEffect(() => {
@@ -48,7 +51,7 @@ export function LedgerShape({ first, columns, rows = 8, label = "Loading" }: {
         <tbody>
           {Array.from({ length: rows }, (_, r) => (
             <tr key={r}>
-              <td className="first"><span className={`blank-v w-${[160, 120, 140, 104][r % 4]}`} /></td>
+              <td className="first"><span className={`blank-v w-${[160, 120, 140, 104][r % 4]}`} />{lines === 2 && <span className="blank-v blank-2" />}</td>
               {columns.map((_, i) => <td key={i} className="n"><span className={`blank-v w-${[56, 48, 40][(r + i) % 3]}`} /></td>)}
             </tr>
           ))}

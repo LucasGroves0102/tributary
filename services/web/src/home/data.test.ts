@@ -17,7 +17,7 @@ describe("watchRows", () => {
     expect(nvda!.cells.revenue_ttm!.text).toBe("$130.5B");
     expect(nvda!.cells.revenue_growth_ttm!.text).toBe("+69.0%");
     expect(nvda!.cells.operating_margin_ttm!.text).toBe("62.3%");
-    expect(nvda!.cells.net_debt_q!.text).toBe("-$43.21B");
+    expect(nvda!.cells.net_debt_q!.text).toBe("−$43.21B");
     expect(nvda!.cells.revenue_ttm!.title).toBe(
       `Revenue, trailing twelve months to Jul 26, 2026. Source: 10-Q filed Aug 26, 2026, ${ACC}`,
     );

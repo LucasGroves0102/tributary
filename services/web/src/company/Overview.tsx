@@ -125,7 +125,8 @@ export function Overview({
       </div>
       <div className="ov-side">
         <TodaysView.Provider value={asOf ?? null}>
-          {canFin && <RevenueBars companyId={companyId} name={name} load={quarters} rows={quarterRows} hl={asOf ? null : hl} foreign={foreign} asOf={asOf} />}
+          {canFin && <RevenueBars companyId={companyId} name={name} load={quarters} rows={quarterRows} hl={asOf ? null : hl} foreign={foreign} asOf={asOf}
+            label={isBankRow(row) ? "Net revenue" : "Revenue"} />}
           {foreign ? (
             <Folio name="Since the last report" line="Files 6-Ks, not 8-Ks" className="events-card">
               <p className="empty foreign-note">
@@ -183,7 +184,7 @@ function Lead({ row, name, companyId, stats, ttm, quarters, hl, onHl }: {
   return (
     <section className="ov-hero" aria-label={`${rev.label}, ${annual ? "the year" : "twelve months"}`}>
       <p className="ov-label">
-        {rev.label} · {annual ? "the year" : "the twelve months"} to {day(src.period_end, true)} · {currency}
+        {rev.label} · {annual ? "the year" : "the twelve months"} to {day(src.period_end, true)} · {currency}
       </p>
       <div className="hero">
         <FigureButton text={rev.text} mark={mark} hero info={() => statCard(rev, companyId)} />
@@ -248,7 +249,7 @@ function footingTerms(ttm: FinancialRow, quarters: FinancialRow[]): Term[] {
       form: r?.citation.form ?? "",
       release: !!same && !!releaseOf(r!),
       info: () => (same ? rowCard(r!, "Revenue", "") : {
-        title: `Revenue · three months to ${day(q.period_end!, true)}`,
+        title: `Revenue · three months to ${day(q.period_end!, true)}`,
         value: exactAmount(value, ttm.unit),
         mark: null,
         where: q.accession_no ? [q.accession_no] : [],
@@ -278,7 +279,7 @@ function Footing({ ttm, quarters, companyId, label, total, hl, onHl }: {
     },
   }));
   const sum: SourceInfo = {
-    title: `${label} · twelve months to ${day(ttm.period_end, true)}`,
+    title: `${label} · twelve months to ${day(ttm.period_end, true)}`,
     value: exactAmount(Number(ttm.value), ttm.unit),
     mark: "sum",
     how: `Added up from ${terms.length} quarters: ${terms.map((t) => t.text).join(" + ")} (${unit.unit}), each marked on this line.`,
@@ -405,9 +406,13 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
   }
   const bank = isBankRow(row);
   const rest = stats.filter((s) => s.key !== "revenue_ttm" && s.key !== "revenue_growth_ttm");
-  // the period most of them share goes in the section's line; the others say their own
-  const ends = rest.map((s) => s.periodEnd).filter((e): e is string => !!e);
-  const common = ends.sort((a, b) => ends.filter((x) => x === b).length - ends.filter((x) => x === a).length)[0] ?? null;
+  // one period for them all goes in the section's line; when they differ (a 20-F filer's year beside the
+  // twelve months its releases add up to) every figure says its own and the line claims none (Marek 8:
+  // "As filed, to Dec 31, 2025" over TSMC's net income to Sep 30, 2026)
+  // (an old figure says its own already: "not reported since")
+  const ends = rest.filter((s) => !s.old).map((s) => s.periodEnd).filter((e): e is string => !!e);
+  const mixed = new Set(ends).size > 1;
+  const common = mixed ? null : ends[0] ?? null;
   const flagged = [...new Map(rest.filter((s) => s.flag).map((s) => [s.flag!.short, s.flag!])).values()];
   const letters = [...new Set(rest.map((s) => readingOf(s, bank)).filter((l): l is string => !!l))];
   const marks = [...new Set(rest.map((s) => statMark(s)).filter((m): m is MarkKind => !!m))];
@@ -416,7 +421,7 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
   const rates = rest.filter((s) => !(s.kind === "usd" || s.kind === "eps"));
   return (
     <Folio name="The rest of the twelve months" className="ov-rest"
-      line={common ? `As filed, to ${day(common, true)}` : "As filed"} aside={currency ?? "USD"}>
+      line={mixed ? "As filed, each to the date under it" : common ? `As filed, to ${day(common, true)}` : "As filed"} aside={currency ?? "USD"}>
       <div className="ledger">
         <dl aria-label="Amounts">{amounts.map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} bank={bank} />)}</dl>
         <dl aria-label="Rates">{rates.map((s) => <LedgerRow key={s.key} s={s} common={common} companyId={companyId} armNote={armNote} bank={bank} />)}</dl>
@@ -442,7 +447,8 @@ function Figures({ companyId, name, row, canFin, stats, asOf, notKept = false, p
 
 function LedgerRow({ s, common, companyId, armNote, bank }: { s: Stat; common: string | null; companyId: string; armNote: string | null; bank: boolean }) {
   const letter = readingOf(s, bank);
-  const differs = s.old || (s.periodEnd && common && s.periodEnd !== common) || letter;
+  // with no period shared by them all, every figure says its own
+  const differs = s.old || (s.periodEnd && s.periodEnd !== common) || letter;
   const extra = [s.key === "net_debt_q" ? armNote : null, s.flag?.text].filter(Boolean).join("\n\n") || null;
   const mark = statMark(s);
   return (
@@ -526,7 +532,7 @@ function Recap({ token, companyId, name, accession, sixK, canFin, foreign, asOf 
               )}
               <p className="foot">
                 {data!.flags_unavailable ? `${sentence(data!.flags_unavailable)} ` : ""}
-                Each column is the figures as its own filing printed them; a restated value cites the restating filing. Margins
+                Each column's figures are read from the filing it names: a later filing's where one restated them. Margins
                 change in basis points; a change in a balance is uncoloured.
                 {fromRelease && " A 6-K's figures are read from its results release's own tables (no XBRL covers those quarters), so they carry no tick; each card names the table and row."}
               </p>
@@ -605,7 +611,9 @@ function Business({ token, companyId, name, canRead, foreign }: { token: string;
  * edge, a derived quarter hatched; hairlines at round values; the first and last bars labelled. Bars
  * appear at their value (no growing from zero). "View as table" lists the same figures, each opening
  * its card. A footing term outlines its bar. */
-function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
+function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf, label = "Revenue" }: {
+  /** what the hero calls it: a bank's is net revenue (Marek 63: "Net revenue" beside "Revenue by quarter") */
+  label?: string;
   companyId: string;
   name: string;
   load: Load<FinancialRow[]> | null;
@@ -626,8 +634,8 @@ function RevenueBars({ companyId, name, load, rows, hl, foreign, asOf }: {
   const derivedForm = bars.find((r) => r.value_source === "derived")?.citation.form;
   const derivedFrom = derivedForm === undefined ? null : /^(20-F|40-F)/.test(derivedForm) ? derivedForm.slice(0, 4) : "10-K";
   return (
-    <Folio name="Revenue by quarter" className="ov-bars"
-      line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
+    <Folio name={`${label} by quarter`} className="ov-bars"
+      line={bars.length ? `${unit.unit} · fiscal quarters` : "Fiscal quarters"}
       aside={bars.length ? (
         <button type="button" className="link view-table" aria-pressed={table} onClick={() => setTable((t) => !t)}>
           {table ? "View as chart" : "View as table"}

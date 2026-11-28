@@ -96,7 +96,16 @@ export function Palette({ token, initial, companies, watched, actions, onClose, 
   const watchMode = q.startsWith(WATCH_PREFIX);
   const text = (watchMode ? q.slice(WATCH_PREFIX.length) : q).trim();
 
-  useEffect(() => input.current?.focus(), []);
+  // closed without going anywhere (Escape, a click outside), the focus goes back to what opened it
+  const before = useRef(document.activeElement as HTMLElement | null);
+  useEffect(() => {
+    input.current?.focus();
+    return () => {
+      const back = before.current;
+      const now = document.activeElement;
+      if (back && back !== input.current && document.contains(back) && (!now || now === document.body)) back.focus();
+    };
+  }, []);
 
   // companies beyond the ones already known: identity is public, access is shown as a tag
   useEffect(() => {

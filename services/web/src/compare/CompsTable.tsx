@@ -119,7 +119,7 @@ export function CompsTable({ token, compare, label }: {
         </table>
       </TableScroll>
       <p className="faint small">
-        USD · each company's latest reported quarter (TTM to it; balances at its end) · median excludes the target · hover a value for its period and filing
+        USD · each company's latest reported quarter (TTM to it; balances at its end) · median excludes the target · hover a value for its period and filing
       </p>
     </>
   );

@@ -73,8 +73,9 @@ export function clearSession(): void {
 export function resetsIn(expiresAt: string, now: number = Date.now()): string {
   const ms = Math.max(0, Date.parse(expiresAt) - now);
   const hours = Math.floor(ms / 3_600_000);
-  if (hours >= 1) return `${hours}h`;
-  return `${Math.max(1, Math.floor(ms / 60_000))}m`;
+  // "23 h" and "12 min", as every other time on the top bar ("2 h ago"; Marek 48: "23h" beside "1 h ago")
+  if (hours >= 1) return `${hours} h`;
+  return `${Math.max(1, Math.floor(ms / 60_000))} min`;
 }
 
 /** Where the Query API's GitHub callback lands: a token, or a short error code. */

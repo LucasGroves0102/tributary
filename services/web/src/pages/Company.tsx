@@ -23,7 +23,7 @@ import { Choices } from "../components/Choices";
 import { Notice } from "../components/Notice";
 import { Why } from "../components/Why";
 import { ErrorPanel, Skeleton } from "../components/States";
-import { day } from "../format";
+import { day, lateFiling, localToday } from "../format";
 import { reduced, viaKeyboard } from "../motion";
 import { COMPANY_TABS, EARLIEST_AS_OF, asOfDay, go, href, type CompanyTab } from "../route";
 import { NEW_WORK_TITLE, NewWorkForm, newWorkOffline } from "../workspaces/NewWork";
@@ -32,6 +32,7 @@ import type { Saved } from "../workspaces/useSaved";
 import { restoreProject } from "../analysis/project";
 import { HoldingLine } from "../portfolio/HoldingLine";
 import { coRegistrantNote } from "../compare/peers";
+import { NotFound } from "./TickerPage";
 
 interface Props {
   token: string;
@@ -53,6 +54,9 @@ interface Props {
   onAsk: (question: string) => void;
   /** saved work, for "New thesis" / "New model" about this company (null: unavailable) */
   saved?: Saved | null;
+  /** the user's plan reads this company's filings (`/v1/me`): its 8-Ks are asked at once, beside the figures,
+   * so the results notice is known before the page shows and never pushes it down (Marek 12) */
+  readsFilingsHint?: boolean;
 }
 
 /** The company page (.interface-design/system.md §4 Company header, §6): who the company is (public
@@ -62,7 +66,7 @@ interface Props {
  * a tab change the header stays put and only the 2px indicator slides. While the figures load, the
  * header shows the name it already knows and the panel its own shape with the values blank. Identity,
  * the filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, statements, changes, asOf, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
+export function Company({ token, companyId, tab, statements, changes, asOf, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved, readsFilingsHint = false }: Props) {
   const meta = useLoad(`${companyId}|${asOf ?? ""}`, () =>
     // a bank's key stats need its own columns (F4); an older API refuses them (422): the standard set
     screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1, ...(asOf ? { as_of: asOf } : {}) }).catch((e) => {
@@ -81,7 +85,17 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   // the 8-Ks since the last report, asked once for the page: the header's results notice, the Overview's
   // flags and its list (a 20-F/40-F filer files none)
   const readsFilings = !!row?.access.includes("filings") && !foreignReport(row);
-  const events = useLoad(readsFilings ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  // asked beside the figures when the plan says it will be read; else once the row says so
+  const events = useLoad(readsFilings || (readsFilingsHint && !row) ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  // the page shows once the notice is known (a results day's notice arriving after the page pushed the tabs
+  // and the hero down 31px: CLS 0.176, Marek 12), waiting at most a moment for it
+  const [waited, setWaited] = useState(false);
+  const eventsPending = readsFilings && (!events || events.state === "loading");
+  useEffect(() => {
+    if (!eventsPending || meta?.state !== "ok") return;
+    const id = window.setTimeout(() => setWaited(true), 1500);
+    return () => window.clearTimeout(id);
+  }, [eventsPending, meta?.state]);
   // New thesis / New model from the More menu: its form opens under the actions
   const [newKind, setNewKind] = useState<WrittenKind | null>(null);
   const opening = useRef(false);
@@ -93,7 +107,7 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   const directory = useDirectory(token);
   const known = directory.name(companyId);
 
-  if (!meta || meta.state === "loading") {
+  if (!meta || meta.state === "loading" || (meta.state === "ok" && eventsPending && !waited)) {
     return (
       <div className="page company-page">
         <header className="co-head vt-head" data-loading="">
@@ -118,13 +132,12 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
     );
   }
   if (meta.state !== "ok" || meta.data === null) {
+    // the one not-found page (Marek 46)
     return (
-      <div className="page">
-        <p className="empty">
-          This company has no financials or filings here. Find one under{" "}
-          <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
-        </p>
-      </div>
+      <NotFound title="No company here">
+        No company with financials or filings here has the number {companyId}. Find one under{" "}
+        <a href={href({ view: "companies" })}>Companies</a>, or search with Ctrl K.
+      </NotFound>
     );
   }
   const r = meta.data;
@@ -148,8 +161,8 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
           <a href={href({ view: "companies" })}>Companies</a>
           {(h.industry || r.sector) && <span className="sep" aria-hidden="true"> / </span>}
           {r.sector && <span title="Tributary's sector, its own grouping of SIC codes">{r.sector}{r.sector_industry ? `, ${r.sector_industry}` : ""}</span>}
-          {r.sector && h.industry && <span className="sep" aria-hidden="true"> · </span>}
-          {h.industry && <span title={h.sic ? `SIC ${h.sic}, the SEC's industry code` : undefined}>{h.industry}{h.sic ? ` · SIC ${h.sic}` : ""}</span>}
+          {r.sector && h.industry && <span className="sep" aria-hidden="true"> · </span>}
+          {h.industry && <span title={h.sic ? `SIC ${h.sic}, the SEC's industry code` : undefined}>{h.industry}{h.sic ? ` · SIC ${h.sic}` : ""}</span>}
         </p>
         <div className="co-titlerow">
           <div className="co-title">
@@ -262,51 +275,126 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
             </a>}>
             {h.name} released its results on {longDay(results.filed)}. The figures below run
             {r.latest_period ? ` to ${day(r.latest_period, true)}` : " to its last report"} until its {next?.form ?? "10-Q or 10-K"} is
-            filed{next?.expected_date ? `, about ${day(next.expected_date)}` : ""}.
+            filed{next ? whenFiled(next) : ""}.
           </Notice>
         ) : null}
         <CompanyTabs companyId={companyId} tab={tab} tabs={tabs} asOf={asOf} statements={statements} />
       </header>
 
-      <div className="co-panel vt-content">
-        {asOf && !AS_OF_TABS.includes(tab) && tab !== "overview" && (
-          <p className="asof-today tab-today" role="note">
-            This tab shows today's {TODAY_WORDS[tab] ?? "data"}, not as it stood on {day(asOf, true)}: only the Overview's year and key figures,
-            Statements and Ratios follow the day. <a href={href({ view: "company", companyId, tab })}>Back to today</a>
-          </p>
-        )}
-        {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={r} access={r.access} asOf={asOf} events={events} resultsInHeader={!asOf && !!results} />}
-        {tab === "earnings" && (
-          <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")}
-            canReadFinancials={r.access.includes("financials")} />
-        )}
-        {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} view={statements} asOf={asOf}
-          canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} resultsInHeader={!asOf && !!results} />}
-        {tab === "revenue" && (
-          <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
-        )}
-        {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
-        {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} asOf={asOf} />}
-        {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} initialDiff={changes}
-          foreign={foreignReport(r)} />}
-        {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")} />}
-        {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
-        {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
-      </div>
+      <HeldPanels tab={tab} render={(t) => (
+        <>
+          {asOf && !AS_OF_TABS.includes(t) && t !== "overview" && (
+            <p className="asof-today tab-today" role="note">
+              This tab shows today's {TODAY_WORDS[t] ?? "data"}, not as it stood on {day(asOf, true)}: only the Overview's year and key figures,
+              Statements and Ratios follow the day. <a href={href({ view: "company", companyId, tab: t })}>Back to today</a>
+            </p>
+          )}
+          {t === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={r} access={r.access} asOf={asOf} events={events} resultsInHeader={!asOf && !!results} />}
+          {t === "earnings" && (
+            <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")}
+              canReadFinancials={r.access.includes("financials")} />
+          )}
+          {t === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} view={statements} asOf={asOf}
+            canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} resultsInHeader={!asOf && !!results} />}
+          {t === "revenue" && (
+            <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
+          )}
+          {t === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
+          {t === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} asOf={asOf} />}
+          {t === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} initialDiff={changes}
+            foreign={foreignReport(r)} />}
+          {t === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")} />}
+          {t === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
+          {t === "price" && <Price token={token} companyId={companyId} name={h.name} />}
+        </>
+      )} />
     </div>
   );
 }
 
+/** The tab's panel. A tab opened for the first time keeps the old one on screen until its own content is
+ * in (nothing `aria-busy` left in it) or a second has passed, so a tab change cuts from content to content,
+ * never through a 200ms flash of its loading shape (Marek 35, spec §7.6); the new one mounts at once,
+ * hidden, so its requests start at the click. */
+function HeldPanels({ tab, render }: { tab: CompanyTab; render: (t: CompanyTab) => ReactNode }) {
+  const [shown, setShown] = useState(tab);
+  const pending = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (shown === tab) return;
+    const el = pending.current;
+    const done = () => setShown(tab);
+    const ready = () => !el?.querySelector('[aria-busy="true"]');
+    if (!el || typeof MutationObserver === "undefined" || ready()) return done();
+    const seen = new MutationObserver(() => {
+      if (ready()) done();
+    });
+    seen.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-busy"] });
+    const id = window.setTimeout(done, 1000);
+    return () => {
+      seen.disconnect();
+      window.clearTimeout(id);
+    };
+  }, [tab, shown]);
+  return (
+    <>
+      {(shown === tab ? [tab] : [shown, tab]).map((t) => (
+        <div key={t} ref={t === shown ? undefined : pending} className={t === shown ? "co-panel vt-content" : "co-panel"} hidden={t !== shown}>
+          {render(t)}
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** The tabs (§4): links, one per route, 40px, the current one in ink over a 2px indicator that slides
- * 180ms to it (instant from the keyboard and under reduced motion); As of at the right. */
+ * 180ms to it (instant from the keyboard and under reduced motion); As of at the right, or on its own
+ * line above the tabs where the page is narrower than 960px (a tablet; the assistant open at 1440).
+ * Tabs that don't fit go into a "More" menu at the strip's end, never cut or hidden (Marek 7: at 768
+ * "Filings" showed as "F" and Data notes and Peers were gone with no sign of them); the current tab,
+ * if it's one of those, names the menu. */
 function CompanyTabs({ companyId, tab, tabs, asOf, statements }: {
   companyId: string; tab: CompanyTab; tabs: (typeof COMPANY_TABS)[number][]; asOf?: string; statements?: StatementView;
 }) {
   const nav = useRef<HTMLElement>(null);
   const ink = useRef<HTMLSpanElement>(null);
   const placed = useRef(false);
+  // how many tabs show in the strip; the rest are in More
+  const [fit, setFit] = useState(tabs.length);
+  const widths = useRef<number[]>([]);
   useLayoutEffect(() => {
-    const on = nav.current?.querySelector<HTMLElement>('a[aria-current="page"]');
+    const el = nav.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
+      const links = [...el.querySelectorAll<HTMLElement>(":scope > a")];
+      // a tab in More has no width now: it keeps the one it had in the strip
+      links.forEach((a, i) => {
+        if (a.offsetWidth) widths.current[i] = a.offsetWidth;
+      });
+      const gap = 2;
+      const room = el.clientWidth;
+      const each = widths.current.slice(0, tabs.length);
+      const all = each.reduce((a, w) => a + w + gap, 0);
+      if (all <= room + 1) return setFit(tabs.length);
+      const more = el.querySelector<HTMLElement>(":scope > .tab-more")?.offsetWidth || 96;
+      let used = more;
+      let n = 0;
+      for (const w of each) {
+        if (used + w + gap > room) break;
+        used += w + gap;
+        n++;
+      }
+      setFit(Math.max(1, n));
+    };
+    measure();
+    const seen = new ResizeObserver(measure);
+    seen.observe(el);
+    void document.fonts?.ready.then(measure);
+    return () => seen.disconnect();
+  }, [tabs.length]);
+  const rest = tabs.slice(fit);
+  const inMore = rest.find(([t]) => t === tab);
+  useLayoutEffect(() => {
+    const on = nav.current?.querySelector<HTMLElement>('a[aria-current="page"]:not([hidden]), .tab-more.on');
     const i = ink.current;
     if (!i || !on) return;
     const still = !placed.current || viaKeyboard() || reduced();
@@ -318,15 +406,36 @@ function CompanyTabs({ companyId, tab, tabs, asOf, statements }: {
       i.classList.remove("no-anim");
     }
     placed.current = true;
-  }, [tab, tabs.length]);
+  }, [tab, tabs.length, fit]);
+  const link = (t: CompanyTab) => href({ view: "company", companyId, tab: t, ...(asOf ? { asOf } : {}) });
   return (
     <div className="co-tabsrow">
       <nav className="tabs co-tabs" aria-label="Company sections" ref={nav}>
-        {tabs.map(([t, label]) => (
-          <a key={t} href={href({ view: "company", companyId, tab: t, ...(asOf ? { asOf } : {}) })} aria-current={t === tab ? "page" : undefined}>
+        {tabs.map(([t, label], i) => (
+          <a key={t} href={link(t)} aria-current={t === tab ? "page" : undefined} hidden={i >= fit || undefined}>
             {label}
           </a>
         ))}
+        {rest.length > 0 && (
+          <Menu.Root modal={false}>
+            <Menu.Trigger asChild>
+              <button type="button" className={inMore ? "tab-more on" : "tab-more"}
+                aria-label={inMore ? `More sections, showing ${inMore[1]}` : "More sections"}>
+                {inMore ? inMore[1] : "More"}
+                <span className="more-caret" aria-hidden="true" />
+              </button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content className="menu" align="end" sideOffset={6} collisionPadding={12}>
+                {rest.map(([t, label]) => (
+                  <Menu.Item key={t} asChild className="menu-item">
+                    <a href={link(t)} aria-current={t === tab ? "page" : undefined}>{label}</a>
+                  </Menu.Item>
+                ))}
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
+        )}
         <span className="tab-ink" ref={ink} aria-hidden="true" />
       </nav>
       <AsOfControl companyId={companyId} tab={tab} asOf={asOf} statements={statements} />
@@ -414,7 +523,7 @@ const TODAY_WORDS: Partial<Record<CompanyTab, string>> = {
  * address (`?asof=`) so it can be linked. A segmented Today | Pick a day; the day is typed in a field
  * (never the browser's own date input, §2.5). */
 function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; tab: CompanyTab; asOf?: string; statements?: StatementView }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const [picking, setPicking] = useState(!!asOf);
   const [typed, setTyped] = useState(asOf ?? "");
   useEffect(() => {
@@ -429,6 +538,12 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
     const d = asOfDay(typed);
     return !!d && d < today;
   })();
+  // a typed day that can't be shown says why (Marek 40: 2031-02-30 left Show off with no word)
+  const problem = valid || typed.length < 10 ? null
+    : !/^\d{4}-\d{2}-\d{2}$/.test(typed) ? "Type it as YYYY-MM-DD"
+      : typed < EARLIEST_AS_OF ? `From ${day(EARLIEST_AS_OF, true)}`
+        : !asOfDay(typed) ? "Not a day on the calendar"
+          : "A day before today";
   return (
     <div className={asOf ? "co-asof on" : "co-asof"}>
       <span className="co-asof-k" aria-hidden="true">As of</span>
@@ -448,19 +563,29 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
             pattern="\d{4}-\d{2}-\d{2}" value={typed} onChange={(e) => setTyped(e.target.value)}
             title="A past day: the figures as they stood at its end, from the filings filed by then" autoFocus={!asOf} />
           <button type="submit" className="btn" disabled={!valid || typed === asOf}>Show</button>
+          {problem && <span className="err small asof-problem" role="alert">{problem}</span>}
         </form>
       )}
     </div>
   );
 }
 
+/** When the next report is expected, for the results notice: ", about Nov 25" while that's ahead; once
+ * it has passed, that it's late (Marek 9), or past the SEC's deadline (the API's overdue). */
+function whenFiled(next: { expected_date: string | null; deadline?: string | null; status: string }): string {
+  if (next.status === "overdue") return `: it's past the SEC's deadline${next.deadline ? ` (${day(next.deadline)})` : ""}`;
+  if (!next.expected_date) return "";
+  return lateFiling(next) ? `: it's late, expected about ${day(next.expected_date)}` : `, about ${day(next.expected_date)}`;
+}
+
 /** The next periodic report in plain words (Riley, test 10, finding 53: "(an estimate, due)"): when it's
  * expected, and that the date is an estimate; a report past its date says so. */
 export function nextWords(next: { form: string; period_end: string; expected_date: string | null; status: string }): string {
   const when = next.expected_date ? `, expected around ${day(next.expected_date, true)}` : "";
-  const status = next.status === "due" ? ": due about now (an estimated date)"
-    : next.status === "overdue" ? ": later than its estimated date"
-      : next.expected_date ? " (an estimated date)" : "";
+  const status = next.status === "overdue" ? ": past the SEC's deadline"
+    : lateFiling(next) ? ": late, not filed yet"
+      : next.status === "due" ? ": due about now (an estimated date)"
+        : next.expected_date ? " (an estimated date)" : "";
   return `Next ${next.form}, for the period ending ${day(next.period_end, true)}${when}${status}`;
 }
 

@@ -104,7 +104,7 @@ function cellCard(cell: TableCell, row: string, column: { label: string; sub: st
   const mark = cellMark(cell);
   const n = Number(cell.raw);
   const exact = cell.raw !== "" && Number.isFinite(n) && /^-?([$€£¥₹₩]|CN¥|[A-Z]{3} )[\d,.]+[TBMK]?$/.test(cell.text.replace(/^\(|\)$/g, ""));
-  const title = `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`;
+  const title = `${row} · ${column.label}, to ${column.sub.replace(/^to /, "")}`;
   const value = exact ? exactAmount(n, currency) : paren(cell.text);
   const s = cell.source;
   if (s?.release && mark === null) {
@@ -172,7 +172,7 @@ function inputLines(row: TableRow): [string, string | undefined][] {
 
 /** A column's source line (§5.1: tables don't put marks in cells; each column names its source): the
  * filing its figures share, "10-Q Aug 26, 2026", or its form when they differ; d when they are derived. */
-function columnSource(table: MetricTable, i: number): { text: string; derived: boolean } | null {
+function columnSource(table: MetricTable, i: number): { text: string; form: string; filed: string | null; derived: boolean } | null {
   const cells = table.rows.map((r) => r.cells[i]).filter((c): c is TableCell => !!c?.source);
   if (!cells.length) return null;
   const accessions = new Set(cells.map((c) => c.source!.accessionNo));
@@ -180,8 +180,9 @@ function columnSource(table: MetricTable, i: number): { text: string; derived: b
   // derived when the column's revenue (its first line) is: a fiscal Q4 from the 10-K
   const derived = cellMark(table.rows[0]?.cells[i] ?? cells[0]!) === "d";
   const first = cells[0]!.source!;
-  const text = accessions.size === 1 ? `${first.form}${first.filed ? ` ${day(first.filed, true)}` : ""}` : forms.join(", ");
-  return { text, derived };
+  const one = accessions.size === 1;
+  const text = one ? `${first.form}${first.filed ? ` ${day(first.filed, true)}` : ""}` : forms.join(", ");
+  return { text, form: one ? first.form : forms.join(", "), filed: one && first.filed ? day(first.filed, true) : null, derived };
 }
 
 /** A metric × period ledger (§4): the unit's statement in the first header cell, each column's label,
@@ -220,7 +221,8 @@ export function MetricTableView({ table, first, companyId, open = null, onOpen }
                 <th key={c.periodEnd} className={src?.derived ? "n derived" : "n"}>
                   {c.label}
                   <span className="pe unit">{c.sub}</span>
-                  {src && <span className="src">{src.text}{src.derived && <i> d</i>}</span>}
+                  {/* the form set as a code, its filing day as words (Marek 57: some dates letter-spaced, some not) */}
+                  {src && <span className="src" title={src.text}>{src.form}{src.filed && <span className="src-day"> {src.filed}</span>}{src.derived && <i> d</i>}</span>}
                 </th>
               );
             })}
@@ -364,7 +366,7 @@ function BehindNotice({ behind, companyId, name, url }: { behind: FiguresBehind;
       period ending {day(behind.through, true)}, {behind.quarters === 1 ? "a quarter" : `${behind.quarters} quarters`} behind
       it. Until they include it (Data notes says why when it's known), read the filing:{" "}
       <a href={href({ view: "filing", companyId, accessionNo: behind.accessionNo, section: statementSection(behind.form) })}>its financial statements</a>
-      {url?.startsWith("https://www.sec.gov/") && <> · <a href={url} target="_blank" rel="noopener noreferrer">EDGAR ↗</a></>}.
+      {url?.startsWith("https://www.sec.gov/") && <> · <a href={url} target="_blank" rel="noopener noreferrer">EDGAR ↗</a></>}.
     </p>
   );
 }
@@ -489,11 +491,11 @@ export function Statements({ token, companyId, name, ticker, notApplicable = [],
           options={(Object.keys(STATEMENTS) as Statement[]).map((k) => [k, STATEMENTS[k].label])} />
         <Choices label="Period" value={period} set={(p) => set({ period: p })} options={PERIODS}
           off={kind === "bs" ? { ttm: BALANCE_NOT_TTM } : undefined} />
-        {/* the rest of the view in one menu (§6 Statements: "8 quarters · Fiscal ▾"): the range (for Quarterly and
+        {/* the rest of the view in one menu (§6 Statements: "8 quarters · Fiscal ▾"): the range (for Quarterly and
             TTM; Annual is ten years), the basis and, on the income statement, the per-share basis */}
         <MenuButton className="btn view-menu" count={false} align="start"
           title="Fiscal names each quarter by the company's own fiscal year; Calendar by the calendar quarter it ends in, so companies with different years line up. For one company the figures are the same, only the column names change."
-          label={<>{period === "a" ? "10 years" : RANGE_WORDS[range]} · {basis === "calendar" ? "Calendar" : "Fiscal"}{kind === "is" && asFiled ? " · As filed" : ""}</>}
+          label={<>{period === "a" ? "10 years" : RANGE_WORDS[range]} · {basis === "calendar" ? "Calendar" : "Fiscal"}{kind === "is" && asFiled ? " · As filed" : ""}</>}
           items={[
             ...RANGES.map(([r]) => ({ label: RANGE_WORDS[r], checked: range === r, disabled: period === "a", title: period === "a" ? ANNUAL_RANGE : undefined,
               onCheckedChange: () => set({ range: r }) })),
@@ -626,7 +628,7 @@ export function Ratios({ token, companyId, name, ticker, notApplicable = [], asO
       <div className="card-h">
         <h2>Ratios</h2>
         <span className="sub">
-          TTM to each quarter end · balance sheet at the quarter end · no price-based multiples
+          TTM to each quarter end · balance sheet at the quarter end · no price-based multiples
           (Tributary has no market prices)
         </span>
         <span className="grow" />
@@ -709,7 +711,7 @@ export function Segments({ token, companyId, name }: { token: string; companyId:
               <section key={`${t.axis}|${t.metric}`} className="card">
                 <div className="card-h">
                   <h2>{t.title}</h2>
-                  <span className="sub">quarterly · USD · as reported in the filings' XBRL</span>
+                  <span className="sub">quarterly · USD · as reported in the filings' XBRL</span>
                 </div>
                 {t.staleNote && <p className="card-b stale-note" role="note">⚠ {t.staleNote}</p>}
                 <TableScroll atEnd resetKey={t.columns.length} label={t.title}>

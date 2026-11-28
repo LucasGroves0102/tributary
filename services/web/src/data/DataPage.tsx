@@ -587,7 +587,7 @@ function NewMetric({ token, saved, datasets, count }: { token: string; saved: Sa
     <form className="pf-form pf-inline data-metric-form" onSubmit={(e) => void submit(e)} aria-label="New metric">
       <label className="pf-field">
         <span>Name</span>
-        <input className="field" value={name} onChange={(e) => edit(setName)(e.target.value)} maxLength={120} required placeholder="Revenue per share" />
+        <input className="field" value={name} onChange={(e) => edit(setName)(e.target.value)} maxLength={120} required placeholder={datasets[0]?.fields[0] ? "e.g. Revenue per store" : "e.g. Operating margin"} />
       </label>
       <label className="pf-field wide">
         <span>Formula</span>

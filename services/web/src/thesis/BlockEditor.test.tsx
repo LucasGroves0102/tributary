@@ -146,10 +146,10 @@ it("draws embeds and pinned quotes as cards, never as [[embed]] lines; comps sta
   expect(comps.querySelector("tr.agg td.first")?.textContent).toBe("Peer median");
   // a quote says what it is and the period it reports on (H13), its citation linked to EDGAR
   const quote = cards()[1]!;
-  expect(quote.querySelector(".embed-h")?.textContent).toContain("Quote 10-Q · quarter ended 2026-07-26");
+  expect(quote.querySelector(".embed-h")?.textContent).toContain("Quote 10-Q\u00a0· quarter ended 2026-07-26");
   expect(quote.querySelector("blockquote")?.textContent).toContain("Data Center revenue grew 56%.");
   expect(quote.querySelector<HTMLAnchorElement>("blockquote a")?.href).toContain("https://www.sec.gov/Archives/edgar/data/1045810/");
-  expect(cards()[3]!.querySelector(".embed-h")?.textContent).toContain("Earnings release 8-K · quarter ended 2026-07-26");
+  expect(cards()[3]!.querySelector(".embed-h")?.textContent).toContain("Earnings release 8-K\u00a0· quarter ended 2026-07-26");
   // the chart card draws the chart
   expect(cards()[0]!.querySelector("svg")).not.toBeNull();
   // nothing changed by looking

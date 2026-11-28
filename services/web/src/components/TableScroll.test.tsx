@@ -2,7 +2,22 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { columnsOff, cutColumns, headerShift, TableScroll } from "./TableScroll";
+import { columnsOff, cutColumns, decimalPads, headerShift, TableScroll } from "./TableScroll";
+
+describe("decimalPads (Marek 18: a column's decimal points line up)", () => {
+  it("adds the digits a figure has fewer of, and a point where it has none", () => {
+    expect(decimalPads(["$124.3B", "$66.03B", "$1,502M", "—", "n/m", "$2.40"])).toEqual(["0", null, ".00", null, null, "B"]);
+  });
+
+  it("hangs a negative's parenthesis: the others get an unseen one", () => {
+    expect(decimalPads(["($1.71B)", "$22.08B", "$4.0B"])).toEqual([null, ")", "0)"]);
+  });
+
+  it("reads a true minus, another currency's code and a reading's letter; leaves words and dates alone", () => {
+    expect(decimalPads(["\u22124.0%", "+12.25%", "TWD\u00a01.49T", "$266.9Bc", "Oct 28", "FY2026 Q3"]))
+      .toEqual(["0", null, null, "0", null, null]);
+  });
+});
 
 describe("columnsOff", () => {
   const cell = (left: number, right: number, frozen = false) => ({ left, right, width: right - left, frozen });

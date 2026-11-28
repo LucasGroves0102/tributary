@@ -137,9 +137,9 @@ export function ReportBody({ report, name, label, token, readable, hasTtm, onOpe
       <p className="report-meta">
         <span className={sum.ok ? "badge ok" : "badge warn"}>{sum.ok ? "✓ " : "⚠ "}{sum.text}</span>{" "}
         <span className="muted" title={`Written with ${report.model}`}>
-          Written {report.writtenAt ? `${day(report.writtenAt.slice(0, 10), true)} (${ago(report.writtenAt)})` : ""} by the
+          Written {report.writtenAt ? `${day(report.writtenAt, true)} (${ago(report.writtenAt)})` : ""} by the
           assistant from the workspace's saved items
-          {report.asOf ? ` · data as of ${day(report.asOf.slice(0, 10), true)}` : ""}
+          {report.asOf ? ` · data as of ${day(report.asOf, true)}` : ""}
         </span>
       </p>
       {parts.map((p, i) =>

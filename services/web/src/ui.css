@@ -315,13 +315,11 @@
     gap: 4px 12px;
   }
 
+  /* the whole text: a notice's caveat is the point of it, never cut to an ellipsis (Marek 9: at 390 the
+     results notice ended "until its 10-Q is filed,…") */
   .notice-text {
     flex: 1 1 100%;
     order: 2;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
   }
 }
 
@@ -515,10 +513,12 @@ html[data-motion="reduced"] .tip {
   font-family: var(--sans);
 }
 
+/* a section's line: its parts 16px apart, no dot between them, so a wrapped part never starts with one
+   (Marek 38: "· Fiscal quarters; US dollars…" at 390) */
 .rubric p {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 8px;
+  gap: 0 16px;
   margin: 0;
   color: var(--pencil);
 }
@@ -526,10 +526,6 @@ html[data-motion="reduced"] .tip {
 .rubric .aside {
   display: inline;
   color: var(--pencil);
-}
-
-.rubric .aside::before {
-  content: "· ";
 }
 
 .rubric a {

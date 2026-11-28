@@ -13,7 +13,7 @@
 
 import { formulaWords } from "../chart/model";
 import { metricLabel } from "../chart/metrics";
-import { change, day, localClock, money, pct } from "../format";
+import { change, day, localClock, money, pct, signed } from "../format";
 import { href } from "../route";
 import type { AlertFigure, AlertForm, AlertNotification, AlertSource, RedLineOp, RedLineResult, Webhook, WebhookDelivery } from "../types";
 
@@ -39,7 +39,7 @@ export function figureChange(f: AlertFigure): string | null {
   if (f.pct_change !== null) return `${change(Number(f.pct_change))} on a year earlier`;
   if (f.change !== null && f.unit === "ratio") {
     const pts = Number(f.change) * 100;
-    return `${pts >= 0 ? "+" : ""}${pts.toFixed(1)} pts on a year earlier`;
+    return `${pts >= 0 ? "+" : ""}${signed(pts.toFixed(1))} pts on a year earlier`;
   }
   return null;
 }
@@ -51,7 +51,7 @@ export function inDisplay(value: string | null, display: string | null, unit?: s
   const v = Number(value);
   if (!Number.isFinite(v)) return value;
   if (display === "percent") return pct(v);
-  if (display === "multiple") return `${v.toFixed(2)}x`;
+  if (display === "multiple") return `${signed(v.toFixed(2))}x`;
   if (Math.abs(v) >= 1e6) return money(v, unit ?? "USD");
   return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
 }

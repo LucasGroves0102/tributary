@@ -13,6 +13,7 @@ from query_api.sandbox import (
     QuotaExceeded,
     Refused,
     SandboxGone,
+    demo_analysis,
     sandbox_workspaces,
 )
 
@@ -236,12 +237,15 @@ def test_delete_expired_removes_only_expired_sandbox_users_and_their_rows(db):
 
 def test_starter_workspace_is_created_and_deleted_with_the_sandbox(db):
     s, conn = db
-    ids = {"PEP": PEP, "KO": KO, "KDP": "0001418135", "MNST": "0000865752"}
+    ids = {"PEP": PEP, "KO": KO, "KDP": "0001418135", "MNST": "0000865752", "NVDA": "0001045810"}
     starter = sandbox("demo-ws", hours=1)
-    s.create(NewSandbox(**{**starter.__dict__, "workspaces": tuple(sandbox_workspaces(ids))}),
+    s.create(NewSandbox(**{**starter.__dict__,
+                           "workspaces": tuple(sandbox_workspaces(ids) + demo_analysis(ids))}),
              "ip1", 5, 5)
-    assert rows(conn, "SELECT name FROM workspaces WHERE user_id = 'demo-ws'") == [
-        ("PepsiCo vs Coca-Cola",)]
+    assert rows(conn, "SELECT name, project IS NOT NULL FROM workspaces WHERE user_id = 'demo-ws'"
+                      " ORDER BY name DESC") == [("PepsiCo vs Coca-Cola", False), ("Nvidia", True)]
+    assert rows(conn, "SELECT project->>'companyId' FROM workspaces WHERE user_id = 'demo-ws'"
+                      " AND project IS NOT NULL") == [("0001045810",)]
     assert rows(conn, "SELECT kind, name FROM workspace_items WHERE user_id = 'demo-ws'"
                       " ORDER BY created_at") == [("chart", "Margins: PEP vs KO"),
                                                  ("comps", "PEP vs KO, KDP, MNST")]

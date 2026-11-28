@@ -279,7 +279,7 @@ it("inserts an embed at the cursor and saves name, company and text", async () =
   const picker = container.querySelector<HTMLSelectElement>('select[aria-label="Embed a saved item"]')
     ?? container.querySelector<HTMLSelectElement>(".thesis-tools select")!;
   // the thesis itself isn't offered; the chart and the model are
-  expect([...picker.options].map((o) => o.textContent)).toEqual(["Embed a saved item…", "Chart · NVDA revenue", "Model · NVDA model"]);
+  expect([...picker.options].map((o) => o.textContent)).toEqual(["Embed a saved item…", "Chart\u00a0· NVDA revenue", "Model\u00a0· NVDA model"]);
   await act(async () => type(picker, MODEL_ID));
   await settle();
   expect(textarea().value).toBe(`Intro.\n\n[[embed:${MODEL_ID}]]\n\n`);
@@ -389,7 +389,7 @@ it("lists earlier versions and restores one into the editor, unsaved, with an un
   await click(button("History"));
   await waitFor(".version-list li");
   const row = container.querySelector(".version-list li")!;
-  expect(row.textContent).toContain(`${LONG_DRAFT.length.toLocaleString("en-US")} characters · NVDA: the long one`);
+  expect(row.textContent).toContain(`${LONG_DRAFT.length.toLocaleString("en-US")} characters\u00a0· NVDA: the long one`);
   await click(button("Restore", row as HTMLElement));
   expect(textarea().value).toBe(LONG_DRAFT);
   expect(container.querySelector<HTMLInputElement>("input.title-input")?.value).toBe("NVDA: the long one");

@@ -232,7 +232,7 @@ function QuoteCard({ markdown, unit, actions }: { markdown: string; unit: Unit; 
     <figure className="card report-embed quote-card">
       <figcaption className="embed-h">
         <span className={`tag ${q.earnings ? "earnings" : "quote"}`}>{q.earnings ? "Earnings release" : "Quote"}</span>{" "}
-        <b>{q.form ?? "Filing"}{q.period ? ` · ${q.period}` : ""}</b>
+        <b>{q.form ?? "Filing"}{q.period ? ` · ${q.period}` : ""}</b>
         <span className="grow" />
         {actions}
       </figcaption>

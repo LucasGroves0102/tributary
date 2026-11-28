@@ -35,7 +35,7 @@ function FactRows({ facts, companyId, unit, all = facts }: { facts: ComponentFac
             : f.used ? (all.filter((x) => x.used).length > 1 ? "part, added" : "tag used") : "also tagged"}</td>
           <td>{f.role ? roleMark(f.role) : ""}</td>
           <td className="n">{figureText(f.value, unit)}</td>
-          <td title={factSource(f)}>{f.taxonomy}:{f.tag}<span className="co-sub-line">{factWhy(f, all)}{f.priority ? ` · rank ${f.priority}` : ""}</span></td>
+          <td title={factSource(f)}>{f.taxonomy}:{f.tag}<span className="co-sub-line">{factWhy(f, all)}{f.priority ? ` · rank ${f.priority}` : ""}</span></td>
           <td><Filing companyId={companyId} accessionNo={f.accession_no} form={f.form} filed={f.filed} url={f.filing_url} /></td>
         </tr>
       ))}

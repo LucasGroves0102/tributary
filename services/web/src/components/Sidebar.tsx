@@ -156,9 +156,9 @@ export function Sidebar({ route, me, workspace, onAdd, onExport, onShortcuts, wo
           </a>
           <span>
             Built by <a href="https://github.com/LucasGroves0102" target="_blank" rel="noreferrer">Lucas Groves</a>
-            {" · "}
+            {" · "}
             <a href="https://github.com/LucasGroves0102/tributary#architecture" target="_blank" rel="noreferrer">How it works</a>
-            {" · "}
+            {" · "}
             <a href="https://github.com/LucasGroves0102/tributary" target="_blank" rel="noreferrer">GitHub</a>
           </span>
         </p>

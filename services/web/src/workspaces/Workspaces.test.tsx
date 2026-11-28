@@ -267,6 +267,19 @@ it("saves comps into a new workspace with Save as", async () => {
   expect($(".side")?.textContent).toContain("Chips comps");
 });
 
+it("the Save form is a popover: Escape or a press outside closes it, the focus back on Save… (Marek 5)", async () => {
+  await render(`#/compare?target=${NVDA}`);
+  const opener = buttons("Save…")[0]!;
+  await click(opener);
+  expect($(".save-form")).not.toBeNull();
+  await act(async () => document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  expect($(".save-form")).toBeNull();
+  expect(document.activeElement).toBe(opener);
+  await click(opener);
+  await act(async () => document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  expect($(".save-form")).toBeNull();
+});
+
 it("refuses a bad name before calling the API", async () => {
   await render(`#/compare?target=${NVDA}`);
   await click(buttons("Save…")[0]!);

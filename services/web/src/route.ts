@@ -47,6 +47,9 @@ export type Route =
       /** a past day (YYYY-MM-DD): the figures as they stood at its end (`?asof=`, any tab) */
       asOf?: string;
     }
+  /** a company by its ticker ("#/company/NVDA", the address people type or share): found and replaced
+   * by its own address (pages/TickerPage), or said to be no company (Marek 16) */
+  | { view: "ticker"; ticker: string; tab?: CompanyTab }
   | {
       view: "filing";
       companyId: string;
@@ -111,6 +114,8 @@ export const NAV: { view: NavView; label: string; key: string }[] = [
 ];
 
 const CIK = /^\d{10}$/;
+/** a ticker as an address may name it: NVDA, BRK-B, BRK.B */
+const TICKER = /^[A-Za-z][A-Za-z0-9.-]{0,9}$/;
 /** saved-work ids (UUIDs from the Query API); anything else goes Home */
 const ID = /^[A-Za-z0-9-]{1,64}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
@@ -191,6 +196,13 @@ export function parse(hash: string): Route {
       ...(asOf ? { asOf } : {}),
     };
   }
+  // a CIK without its leading zeros is the company's own address
+  if (view === "company" && /^\d{1,9}$/.test(a ?? "") && Number(a) > 0) {
+    return parse(`#/company/${a!.padStart(10, "0")}${b ? `/${b}` : ""}${query ? `?${query}` : ""}`);
+  }
+  if (view === "company" && TICKER.test(a ?? "")) {
+    return { view: "ticker", ticker: a!.toUpperCase(), ...(b && b !== "overview" && TABS.has(b) ? { tab: b as CompanyTab } : {}) };
+  }
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
     const params = new URLSearchParams(query);
     const at = params.get("at");
@@ -221,6 +233,8 @@ export function href(route: Route): string {
       return "#/";
     case "notfound":
       return `#/${route.path}`;
+    case "ticker":
+      return `#/company/${route.ticker}${route.tab ? `/${route.tab}` : ""}`;
     case "companies": {
       const q = route.screen ? screenQuery(route.screen) : "";
       return q ? `#/companies?${q}` : "#/companies";

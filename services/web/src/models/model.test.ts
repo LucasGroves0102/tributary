@@ -147,7 +147,7 @@ describe("drafts: what the fields hold as typed", () => {
     expect(formatCell(2097429000, "USD", "EUR")).toBe("€2.10B");
     expect(formatCell(1.22, "USD/shares", "EUR")).toBe("€1.22");
     expect(formatCell(1.22, "USD/shares")).toBe("$1.22");
-    expect(formatCell(-0.5, "USD/shares")).toBe("-$0.50");
+    expect(formatCell(-0.5, "USD/shares")).toBe("−$0.50");
     expect(formatCell(996e9, "USD", "CNY")).toBe("CN¥996.0B");
     const euro = { ...vrt, currency: "EUR" } as ModelRun;
     expect(modelSeries(euro, 5, ["base"])[0]!.unit).toBe("EUR");
@@ -224,7 +224,7 @@ describe("the three-case table", () => {
 
   it("formats each unit", () => {
     expect(formatCell(13_117_100_000, "USD")).toBe("$13.12B");
-    expect(formatCell(-783_200_000, "USD")).toBe("-$783.2M");
+    expect(formatCell(-783_200_000, "USD")).toBe("−$783.2M");
     expect(formatCell(7.02, "USD/shares")).toBe("$7.02");
     expect(formatCell(145_805_000, "shares")).toBe("145.8M");
     expect(formatCell(24.3, "multiple")).toBe("24.3x");

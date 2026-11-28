@@ -113,8 +113,9 @@ export function Peers({
             <>
               {business && data?.business && (
                 <p className="peers-basis small">
-                  <span className="faint">{possessive(name)} {reportForm(data.business.section_key)} Business section{data.business.section_key === "4" ? " (Item 4)" : ""} (filed {day(data.business.filed, true)}) is most distinctive for </span>
-                  {data.business.terms.slice(0, 6).join(", ")}
+                  <span className="faint">{possessive(name)} {reportForm(data.business.section_key)} Business section{data.business.section_key === "4" ? " (Item 4)" : ""} (filed {day(data.business.filed, true)}) is most distinctive for the words </span>
+                  {/* the filing's own words as the comparison reads them, quoted (Marek 22: "usg, blackwell, gpus" read as prose) */}
+                  {data.business.terms.slice(0, 6).map((t) => `“${t}”`).join(", ")}
                   <span className="faint">. Peers are the companies whose annual reports read most alike, or that either names as a competitor; a customer, supplier, partner or owner either one names is left out.</span>
                 </p>
               )}
@@ -150,7 +151,7 @@ export function Peers({
                               {r.ticker && <span className="faint mono">{r.ticker}</span>}
                               {!r.readable && <span className="tag" title={MASKED_TITLE}>metadata only</span>}
                             </a>
-                            {why && <div className="co-sub faint small" title={why}>{alike ? `${alike} · ` : ""}{why}</div>}
+                            {why && <div className="co-sub faint small" title={why}>{alike ? `${alike} · ` : ""}{why}</div>}
                           </td>
                           {cols.map((k) => {
                             const cell = r.cells[k]!;
@@ -169,7 +170,7 @@ export function Peers({
                                 {alike && <span className="alike" title={`Business sections: cosine similarity ${p?.match.similarity?.toFixed(2)} (0 none, 1 the same words)`}>{alike}</span>}
                                 {reasons.filter((x) => x.short !== null).map((x, i) => (
                                   <Fragment key={i}>
-                                    {(i > 0 || alike) && <span className="faint"> · </span>}
+                                    {(i > 0 || alike) && <span className="faint"> · </span>}
                                     {x.cite ? (
                                       <a href={href({ view: "filing", companyId: x.cite.companyId, accessionNo: x.cite.mention.accession_no, section: x.cite.mention.section_key, at: x.cite.mention.char_start })}
                                         title={`${x.text}: open the sentence in the filing reader`}>

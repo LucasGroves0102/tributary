@@ -103,7 +103,7 @@ export function TopBar(props: Props) {
           <span className="who">
             <MenuButton className="tb who-chip" count={false}
               title={`A temporary demo sandbox (${props.sandbox.covers}): it and what you save in it are deleted when it resets, in ${props.sandbox.resetsIn}`}
-              label={<>Demo sandbox<span className="who-sub"> · resets in {props.sandbox.resetsIn}</span></>}
+              label={<>Demo sandbox<span className="who-sub"> · resets in {props.sandbox.resetsIn}</span></>}
               items={[{ label: "End demo", onSelect: props.sandbox.onEnd, title: "Leave the demo and go back to the front door; the sandbox is deleted when it resets" }]} />
           </span>
         ) : user ? (
@@ -146,7 +146,8 @@ function Freshness({ listed, lastIngested, valuesAsOf, me }: { listed: string | 
     <details className="fresh" ref={ref} title={FRESHNESS_EXPLAINED}>
       <summary className="tb">
         <span className={listed && open ? "live" : "live quiet"} aria-hidden="true" />
-        {listed ? <>Listed <span className="fresh-ago">{ago(listed)}</span></> : "Data freshness"}
+        {/* what was listed, said (Marek 48: a bare "Listed 1 h ago" read as nothing) */}
+        {listed ? <><span className="fresh-long">Newest filing listed</span><span className="fresh-short">Listed</span> <span className="fresh-ago">{ago(listed)}</span></> : "Data freshness"}
       </summary>
       <div className="pop fresh-pop">
         <p>

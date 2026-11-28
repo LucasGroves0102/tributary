@@ -44,7 +44,7 @@ export function Recent({ recent, onOpen }: { recent: RecentWork | null; onOpen: 
               <td>
                 <button className="link" onClick={(e) => { e.stopPropagation(); onOpen(r.item.item_id); }}>
                   <b>{r.item.name}</b>
-                </button>{" "}
+                </button>{" "}
                 <span className="muted">· in workspace “{r.item.workspace_name}”</span>
               </td>
               <td className="faint n">opened {ago(r.at)}</td>
@@ -66,10 +66,10 @@ export function Recent({ recent, onOpen }: { recent: RecentWork | null; onOpen: 
                   <b>
                     {r.filing.name ?? UNNAMED} {r.filing.form ?? "filing"}
                   </b>
-                </a>{" "}
+                </a>{" "}
                 <span className="muted">
                   {r.filing.period_end && `· ${periodPhrase(r.filing.form, r.filing.period_end)}`}
-                  {r.filing.section_key && ` · last read: ${sectionName(r.filing.section_key)}`}
+                  {r.filing.section_key && ` · last read: ${sectionName(r.filing.section_key)}`}
                 </span>
               </td>
               <td className="faint n">read {ago(r.at)}</td>

@@ -421,6 +421,13 @@ li.event:first-child {
   animation: pop-in 180ms var(--ease-enter);
 }
 
+/* Delete is the ink filled, Keep the quiet outline: the two answers never look alike (Marek 64) */
+.ws-confirm .btn.danger {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
 .ws-confirm .ws-confirm-q {
   font-size: var(--fs-lg);
   font-weight: 650;

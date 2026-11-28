@@ -6,6 +6,8 @@ import { AssistantPanel } from "./assistant/AssistantPanel";
 import { metricLabel } from "./chart/metrics";
 import { chartTitle, companiesChart, companyChart, emptyChart, MAX_COMPANY_LINES, type ChartState, type Transform } from "./chart/model";
 import { useChart } from "./chart/useChart";
+import { localToday } from "./format";
+import { rememberScroll, restoreScroll, savedScroll } from "./scrollMemory";
 import { directoryFor, DirectoryContext, UNNAMED } from "./companies/directory";
 import { uiContext } from "./assistant/actions";
 import { pageContext } from "./assistant/context";
@@ -26,6 +28,7 @@ import { StartCard } from "./home/StartCard";
 import { useFeedStatus } from "./home/useFeedStatus";
 import { useWorkspace } from "./home/useWorkspace";
 import { Home } from "./pages/Home";
+import { NotFound, TickerPage } from "./pages/TickerPage";
 import {
   About,
   AlertsPage,
@@ -111,6 +114,16 @@ interface Props {
   picker?: boolean;
 }
 
+/** Skip to content: the focus on the page's h1 (no ring: a heading given the focus shows none), else on
+ * the page itself, so the next Tab is the page's first control. */
+function skipToContent(): void {
+  const main = document.querySelector<HTMLElement>("main.content");
+  const to = main?.querySelector<HTMLElement>("h1") ?? main;
+  if (!to) return;
+  if (!to.hasAttribute("tabindex")) to.setAttribute("tabindex", "-1");
+  to.focus();
+}
+
 export function App(props: Props = {}) {
   const [picker] = useState(() => props.picker ?? pickerEnabled());
   const [users, setUsers] = useState<string[]>([]);
@@ -148,14 +161,18 @@ export function App(props: Props = {}) {
   useEffect(() => setNavOpen(false), [route]);
   // a new page starts at its top (route.ts pageOf); a layout effect, so a page's own scroll to a passage
   // (the reader's ?at=, its passive effect) still wins
+  // Back or Forward to a page goes back to where it was left (scrollMemory.ts)
   const page = pageOf(route);
   const firstPage = useRef(true);
+  useEffect(() => rememberScroll(), []);
   useLayoutEffect(() => {
     if (firstPage.current) {
       firstPage.current = false;
       return;
     }
-    window.scrollTo(0, 0);
+    const back = savedScroll();
+    if (back !== null) restoreScroll(back);
+    else window.scrollTo(0, 0);
   }, [page]);
   // the other screens' code, once signed in and idle (pages/lazy.ts)
   const signedIn = token !== null;
@@ -477,8 +494,9 @@ export function App(props: Props = {}) {
     if (!token) return;
     watchlistCsv(token, views.watchlistColumns)
       .then((blob) => {
-        download("watchlist.csv", blob);
-        toast({ text: "Exported your watchlist to watchlist.csv.", topic: "watchlist-csv" });
+        const file = `watchlist-${localToday()}.csv`;
+        download(file, blob);
+        toast({ text: `Exported your watchlist to ${file}.`, topic: "watchlist-csv" });
       })
       .catch(() => setError("Couldn't export the watchlist. Try again."));
   }, [token, views.watchlistColumns]);
@@ -777,6 +795,9 @@ export function App(props: Props = {}) {
       <DirectoryContext.Provider value={directory}>
       <AllowanceContext.Provider value={allowanceState}>
       <div className={showDrawer ? "app with-ai" : "app"}>
+        {/* the first Tab stop: past the top bar and the rail to the page's heading (Marek 13: a company page's
+            content was the 38th stop). A button: an in-page link would change the hash route. */}
+        <button type="button" className="skip-link" onClick={skipToContent}>Skip to content</button>
         <TopBar
           menuOpen={navOpen}
           onMenu={() => setNavOpen((o) => !o)}
@@ -844,7 +865,8 @@ export function App(props: Props = {}) {
             ) : route.view === "api" ? (
               <ApiDocs />
             ) : !token ? (
-              <p className="page muted">Signing in…</p>
+              // a div: a paragraph's margin moved the page 14px when it came (Marek 12)
+              <div className="page muted">Signing in…</div>
             ) : route.view === "home" ? (
               <Home
                 workspace={workspace}
@@ -948,6 +970,7 @@ export function App(props: Props = {}) {
                 }}
                 onAsk={askAbout}
                 saved={saved.list.state === "ok" ? saved : null}
+                readsFilingsHint={filingsFor.has(route.companyId)}
               />
             ) : route.view === "filing" ? (
               <FilingReader
@@ -1074,13 +1097,12 @@ export function App(props: Props = {}) {
                 }}
               />
             ) : route.view === "connect" ? null /* drawn without the shell, above */ : route.view === "notfound" ? (
-              <div className="page not-found">
-                <h1>No page here</h1>
-                <p className="empty">
-                  Tributary has no page at <code>#/{route.path}</code>. Find one from the menu on the left, search with Ctrl K,
-                  or go <a href={href({ view: "home" })}>Home</a>.
-                </p>
-              </div>
+              <NotFound title="No page here">
+                Tributary has no page at <code>#/{route.path}</code>. Find one from the menu on the left, search with Ctrl K,
+                or go <a href={href({ view: "home" })}>Home</a>.
+              </NotFound>
+            ) : route.view === "ticker" ? (
+              <TickerPage token={token} ticker={route.ticker} tab={route.tab} />
             ) : (
               <Compare
                 key={user}

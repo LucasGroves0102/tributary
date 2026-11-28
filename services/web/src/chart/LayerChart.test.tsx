@@ -65,7 +65,7 @@ describe("axes and bars", () => {
     expect(formatValue(400e9, "USD", true)).toBe("$400B");
     expect(formatValue(2.5e9, "USD", true)).toBe("$2.5B");
     expect(formatValue(100e6, "USD", true)).toBe("$100M");
-    expect(formatValue(-50e9, "USD", true)).toBe("-$50B");
+    expect(formatValue(-50e9, "USD", true)).toBe("−$50B");
     expect(formatValue(0, "USD", true)).toBe("$0");
     expect(formatValue(400e9, "USD")).toBe("$400.0B");
   });
@@ -152,5 +152,23 @@ describe("LayerChart", () => {
     const exported = read();
     expect(exported.getAttribute("viewBox")).toContain(`0 0 ${WIDTH} `);
     expect(exported.closest("[hidden]")).not.toBeNull();
+  });
+
+  it("on a page: no title or notes in the drawing, the notes as text under it, exports keep both (Marek 11)", () => {
+    function Page() {
+      const svg = useRef<SVGSVGElement>(null);
+      return <LayerChart series={[series()]} title="NVDA: revenue" footnote={["Source: SEC filings."]} svgRef={svg} onPage />;
+    }
+    act(() => root.render(<Page />));
+    expect(container.querySelector(".lchart.on-page")).not.toBeNull();
+    const shown = container.querySelector<SVGSVGElement>("svg.lchart-svg")!;
+    expect(shown.querySelector(".ch-title")).toBeNull();
+    expect(shown.querySelector(".ch-foot")).toBeNull();
+    expect(shown.getAttribute("aria-label")).toBe("NVDA: revenue");
+    expect(container.querySelector(".lchart-notes")?.textContent).toContain("Source: SEC filings.");
+    // the drawing exports take still has them
+    const exported = container.querySelector(".lchart-export svg")!;
+    expect(exported.querySelector(".ch-title")?.textContent).toBe("NVDA: revenue");
+    expect(exported.querySelector(".ch-foot")?.textContent).toContain("Source: SEC filings.");
   });
 });

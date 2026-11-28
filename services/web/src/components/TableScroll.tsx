@@ -33,6 +33,33 @@ export function cutColumns(
   });
 }
 
+/** A figure as a table prints it: "($1.71B)", "$124.3B", "−4.0%", "TWD 2.53T", "0.71x", "1,502", with a
+ * reading's letter at most after it. Anything else (a dash, n/m, a date, words) isn't aligned. */
+const FIGURE = /^(\()?[+\-\u2212]?(?:[$€£¥₹₩]|CN¥|[A-Z]{3}[\s\u00a0])?\d[\d,]*(?:\.(\d+))?([TBMK%x])?(\))?[a-z]?$/;
+
+/** What each figure of a column needs after it, unseen, so the column's decimal points line up: the
+ * digits it has fewer of than the column's most ("$124.3B" over "$66.03B"), a point where it has none
+ * ("$1,502M" over "$22.08B"), a scale letter's room where it has none ("$2.40" EPS among billions), and a
+ * closing parenthesis where others have one (a negative's hangs). Null
+ * for a cell that isn't a figure or needs nothing. The pad is drawn hidden after the text (CSS
+ * `td[data-pad]::after`), so the cell's text stays the figure. Digits are tabular, so a "0" is a digit's
+ * width (Marek 18: decimal points 7px apart in one column). Pure. */
+export function decimalPads(texts: string[]): (string | null)[] {
+  const parsed = texts.map((t) => {
+    const m = FIGURE.exec(t.trim());
+    return m ? { dp: m[2]?.length ?? 0, point: m[2] !== undefined, scale: m[3] ?? "", paren: !!m[4] } : null;
+  });
+  const most = Math.max(0, ...parsed.map((p) => p?.dp ?? 0));
+  const anyParen = parsed.some((p) => p?.paren);
+  // a per-share figure ("$2.40") in a column of billions takes a scale letter's room
+  const scale = parsed.find((p) => p && /[TBMK]/.test(p.scale))?.scale ?? "";
+  return parsed.map((p) => {
+    if (!p) return null;
+    const pad = (most > 0 && !p.point ? "." : "") + "0".repeat(most - p.dp) + (scale && !p.scale ? scale : "") + (anyParen && !p.paren ? ")" : "");
+    return pad || null;
+  });
+}
+
 /** How far a table's header moves down so it stays in view while the page scrolls past the table:
  * from 0 (the table's top is below `viewTop`, the sticky top bar's bottom) up to the table's height
  * less the header's, so the header never leaves its own table. Pure. */
@@ -101,9 +128,22 @@ export function TableScroll({ children, atEnd = false, resetKey, label = "Table"
     const next = { ...columnsOff(cells, view), scrolls };
     setOff((o) => (o.left === next.left && o.right === next.right && o.scrolls === next.scrolls ? o : next));
     const cut = new Set(cutColumns(cells, view));
+    const rows = [...(el.querySelector("table")?.tBodies[0]?.rows ?? [])];
     for (const row of el.querySelector("table")?.rows ?? []) {
       if (row.cells.length !== header.length) continue; // a heading across the table
       for (let i = 0; i < row.cells.length; i++) row.cells[i]!.classList.toggle("tw-cut", cut.has(i));
+    }
+    // each column's figures on one decimal point (decimalPads)
+    const width = Math.max(0, ...rows.map((r) => r.cells.length));
+    for (let i = 0; i < width; i++) {
+      const column = rows.map((r) => (r.cells.length === width ? r.cells[i] : undefined)).filter((c): c is HTMLTableCellElement => !!c && c.classList.contains("n"));
+      const pads = decimalPads(column.map((c) => c.textContent ?? ""));
+      column.forEach((c, j) => {
+        const pad = pads[j];
+        if (pad) {
+          if (c.dataset.pad !== pad) c.dataset.pad = pad;
+        } else if (c.dataset.pad !== undefined) delete c.dataset.pad;
+      });
     }
   }, []);
 

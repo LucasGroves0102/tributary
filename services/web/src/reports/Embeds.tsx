@@ -99,13 +99,15 @@ function EmbeddedChart({ token, item, label, hasTtm, compact = false }: Common &
 /** A chart state drawn read-only (embeds, the company Revenue view): each layer's data read
  * now as the viewer (chart/fetch.ts), drawn by LayerChart with its source footnote. `compact`:
  * LayerChart's small-multiple drawing (a thesis card's preview); the data asked is the same. */
-export function ChartView({ token, chart, name, label, hasTtm, compact = false }: {
+export function ChartView({ token, chart, name, label, hasTtm, compact = false, onPage = false }: {
   token: string;
   chart: ChartState;
   name: string;
   label: (companyId: string) => string;
   hasTtm: TtmCatalog;
   compact?: boolean;
+  /** in a page's section, in the page's chart language (LayerChart `onPage`) */
+  onPage?: boolean;
 }) {
   const visible = chart.layers.filter((l) => !l.hidden);
   const requests = visible.flatMap((layer) => {
@@ -185,6 +187,7 @@ export function ChartView({ token, chart, name, label, hasTtm, compact = false }
         from={rangeDates(chart).from}
         through={chartEnd(chart, asOf)}
         compact={compact}
+        onPage={onPage}
       />
       {errors.length > 0 && <p className="faint small">{errors.length} line{errors.length === 1 ? "" : "s"} couldn't be drawn: {[...new Set(errors)].join("; ")}.</p>}
     </>
@@ -218,8 +221,8 @@ function EmbeddedScreen({ item }: Common) {
   ].filter(Boolean);
   return (
     <p className="embed-screen">
-      Screen: {parts.length ? parts.join(" · ") : "all companies"}
-      {f.sort && <span className="muted"> · sorted by {f.sort.replace(/^-/, "").replace(/_/g, " ")}{f.sort.startsWith("-") ? ", highest first" : ""}</span>}
+      Screen: {parts.length ? parts.join(" · ") : "all companies"}
+      {f.sort && <span className="muted"> · sorted by {f.sort.replace(/^-/, "").replace(/_/g, " ")}{f.sort.startsWith("-") ? ", highest first" : ""}</span>}
     </p>
   );
 }

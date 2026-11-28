@@ -1,8 +1,9 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 
 import { failureReason } from "../api";
 import { MenuButton } from "../components/MenuButton";
 import { toast } from "../components/Toasts";
+import { useDismiss } from "../components/useDismiss";
 import { ConfirmDelete } from "./Actions";
 import {
   canSave,
@@ -43,6 +44,9 @@ export function SaveBar({ current, saved, label }: Props) {
   const [error, setError] = useState<string | null>(null);
   // Close with unsaved changes asks first (Riley 61): the page keeps them, the saved item doesn't
   const [closing, setClosing] = useState(false);
+  const bar = useRef<HTMLDivElement>(null);
+  // where the focus goes back to when the form closes: Save…, or More (its Save as…)
+  const opener = () => bar.current?.querySelector<HTMLElement>(":scope > .btn.primary, :scope > .more-btn") ?? null;
   const ready = canSave(current);
   const offline = saved.list.state === "unavailable" || saved.list.state === "error";
   const why = offline
@@ -67,7 +71,7 @@ export function SaveBar({ current, saved, label }: Props) {
   };
 
   return (
-    <div className="savebar">
+    <div className="savebar" ref={bar}>
       {open && (
         <span className="saved-as" title={`Saved in workspace “${open.workspaceName}”`}>
           <span className="faint">{KIND_LABELS[current.kind]} in {open.workspaceName}:</span> <b>{open.name}</b>{" "}
@@ -129,6 +133,7 @@ export function SaveBar({ current, saved, label }: Props) {
           initial={open ? `${open.name}` : suggestName(current, label)}
           defaultWorkspace={open?.workspaceId}
           label={label}
+          opener={opener}
           onDone={() => setForm(false)}
         />
       )}
@@ -142,6 +147,7 @@ function SaveForm({
   initial,
   defaultWorkspace: openIn,
   label,
+  opener,
   onDone,
 }: {
   current: Current;
@@ -149,9 +155,19 @@ function SaveForm({
   initial: string;
   defaultWorkspace?: string;
   label: (companyId: string) => string;
+  /** the button that opened the form: the focus goes back to it when the form closes */
+  opener: () => HTMLElement | null;
   onDone: () => void;
 }) {
   const id = useId();
+  const box = useRef<HTMLFormElement>(null);
+  // a popover (Marek 5): Escape or a press outside closes it, the focus back on its button
+  useDismiss(true, onDone, box, opener);
+  const done = () => {
+    const to = opener();
+    onDone();
+    to?.focus();
+  };
   const list = saved.list.state === "ok" ? saved.list.workspaces : [];
   const [name, setName] = useState(initial);
   // #119: the open item's workspace, else the company's project or folder, else a new workspace
@@ -176,7 +192,7 @@ function SaveForm({
       if (item.madeWorkspace) {
         toast({ text: `Saved “${item.name}” in a new workspace, ${item.workspace_name}: it's in the sidebar.`, topic: `saved-${current.kind}` });
       }
-      onDone();
+      done();
     } catch (err) {
       setError(`Couldn't save: ${message(err)}.`);
     } finally {
@@ -185,7 +201,7 @@ function SaveForm({
   };
 
   return (
-    <form className="save-form card" onSubmit={(e) => void submit(e)} aria-label={`Save ${KIND_LABELS[current.kind].toLowerCase()}`}>
+    <form ref={box} className="save-form card" onSubmit={(e) => void submit(e)} aria-label={`Save ${KIND_LABELS[current.kind].toLowerCase()}`}>
       <label htmlFor={`${id}-name`}>Name</label>
       {/* the suggestion is selected, so typing replaces it (Riley, test 10, finding 45) */}
       <input id={`${id}-name`} className="field" value={name} maxLength={ITEM_NAME_MAX} onChange={(e) => setName(e.target.value)} autoFocus
@@ -219,7 +235,7 @@ function SaveForm({
       )}
       <div className="row">
         <span className="grow" />
-        <button type="button" className="btn ghost" onClick={onDone}>
+        <button type="button" className="btn ghost" onClick={done}>
           Cancel
         </button>
         <button type="submit" className="btn primary" disabled={busy}>

@@ -64,7 +64,7 @@ Hash routes (`src/route.ts`; an address naming no page shows "No page here", a m
 |---|---|---|
 | `#/` | Home: Start an analysis, the watchlist, new filings, data notes; Customize for more cards | [Home](DESIGN.md#home) |
 | `#/companies?<filters>` | the screener (`/v1/screener`): filters in the URL, sectors, columns, CSV through the API | [Screens](DESIGN.md#screens-hash-routes) |
-| `#/company/<id>[/<tab>][?asof=<day>]` | a company: Overview, Earnings, Statements, Revenue, Segments, Ratios, Filings, Data notes, Peers, Price (only with Connect your data); `asof`: its figures as they stood at the end of a past day | [Company page](DESIGN.md#company-page), [As of](DESIGN.md#as-of-a-past-day) |
+| `#/company/<id>[/<tab>][?asof=<day>]` | a company: Overview, Earnings, Statements, Revenue, Segments, Ratios, Filings, Data notes, Peers, Price (only with Connect your data); `asof`: its figures as they stood at the end of a past day. `<id>` may be a ticker (`#/company/NVDA`), found and replaced by the company's own address | [Company page](DESIGN.md#company-page), [As of](DESIGN.md#as-of-a-past-day) |
 | `#/filing/<id>/<accession>[/<section>][?view=changes]` | the filing reader: whole sections as paragraphs and tables, search, side by side; `view=changes` its What changed mode (a 10-K or 10-Q's changes as a blackline) | [Filing reader](DESIGN.md#filing-reader) |
 | `#/search` | full-text search across filings | [Search](DESIGN.md#search) |
 | `#/chart` | the chart builder (formula layers, CSV, SVG and PNG export) | [Chart builder](DESIGN.md#chart-builder) |
@@ -98,7 +98,11 @@ front door, keeps the request in the tab while you sign in, and opens again afte
 - **Money** has four significant figures at most, thousands grouped, negatives in parentheses on every
   table and the lists under them (display only: CSV and hovers keep the sign), one unit per row
   (`format.ts` `moneyRow`: the next smaller unit when a figure would read under one, so $119M ... $3,955M,
-  not $0.12B), and another currency shown in it, never converted.
+  not $0.12B), and another currency shown in it, never converted. A column's decimal points line up
+  (`components/TableScroll` `decimalPads`: unseen digits, a point or a hanging parenthesis after a figure).
+  A negative is written with the true minus (U+2212), and a change's fall is rust (`.neg` = `.loss`), a
+  level uncoloured; a figure never parts from its currency code or scale word at a line's end (no-break
+  spaces), and a " · " never starts a wrapped line.
 - **One sign convention**: outflows (capex, dividends, buybacks) are negative on statements, their CSV
   and the Numbers charts; the chart builder and screener keep the API's metric, the amount paid.
 - **Times** are the viewer's local date and clock with the zone (`format.ts` `localTime`).

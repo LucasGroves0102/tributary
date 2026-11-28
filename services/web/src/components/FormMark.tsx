@@ -1,6 +1,7 @@
 /** A filing's form, marked the same way everywhere (Riley 109: 10-K red, 10-Q black, 8-K grey, with no
- * legend). An annual report is filled ink, a quarterly report outlined, anything else a step quieter,
- * an expected filing dashed; the hover names the form. A red-letter day colours its own 8-K (seal.css
+ * legend). An annual report is outlined in ink on the well's tint (a filled ink badge was the heaviest mark
+ * on Home, Marek 58), a quarterly report outlined, anything else a step quieter, an expected filing dashed;
+ * the hover names the form. A red-letter day colours its own 8-K (seal.css
  * `.event.red`), nothing else here is red. */
 
 const NAMES: [RegExp, string][] = [

@@ -39,7 +39,9 @@ it("falls back to Home for anything malformed", () => {
   expect(parse("#/notebook?q=1")).toEqual({ view: "notfound", path: "notebook" });
   expect(parse("#/signed-in?error=denied")).toEqual({ view: "home" });
   expect(parse("#/<script>")).toEqual({ view: "home" });
-  expect(parse("#/company/NVDA")).toEqual({ view: "home" });
+  // a ticker is the company's (TickerPage finds it, Marek 16); anything else under company/ is malformed
+  expect(parse("#/company/NVDA")).toEqual({ view: "ticker", ticker: "NVDA" });
+  expect(parse("#/company/%3Cscript%3E")).toEqual({ view: "home" });
   expect(parse("#/filing/0001045810/not-an-accession")).toEqual({ view: "home" });
   expect(parse("#/filing/0001045810/0001045810-26-000075/..%2Fadmin?at=-1&q=")).toEqual({
     view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null,
@@ -167,4 +169,13 @@ it("a page is its view and ids, not its filters: a new page starts at the top, a
   expect(pageOf(parse("#/company/0001045810/statements?period=a"))).toBe(pageOf(parse("#/company/0001045810/statements")));
   expect(pageOf(parse("#/company/0001045810/statements"))).not.toBe(pageOf(parse("#/company/0001045810/ratios")));
   expect(pageOf(parse("#/chart"))).not.toBe(pageOf(parse("#/companies")));
+});
+
+it("a ticker's address finds its company; a CIK without its zeros is the company's own (Marek 16)", () => {
+  expect(parse("#/company/nvda")).toEqual({ view: "ticker", ticker: "NVDA" });
+  expect(parse("#/company/BRK-B/statements")).toEqual({ view: "ticker", ticker: "BRK-B", tab: "statements" });
+  expect(href({ view: "ticker", ticker: "NVDA", tab: "ratios" })).toBe("#/company/NVDA/ratios");
+  expect(parse(href({ view: "ticker", ticker: "NVDA" }))).toEqual({ view: "ticker", ticker: "NVDA" });
+  expect(parse("#/company/1045810/ratios")).toEqual({ view: "company", companyId: "0001045810", tab: "ratios" });
+  expect(parse("#/company/0001045810")).toEqual({ view: "company", companyId: "0001045810" });
 });

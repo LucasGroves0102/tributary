@@ -162,6 +162,9 @@
   --sans: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
   --font: var(--sans);
   --mono: var(--sans);
+  /* code a person types or copies (curl lines, environment variables, a key's start): the system's own
+     monospace, no font loaded, so lines and names line up (Marek 32); figures and codes stay Archivo */
+  --code: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --fs-micro: 11px;
   --fs-meta-12: 12px;
   --fs-ui: 13px;

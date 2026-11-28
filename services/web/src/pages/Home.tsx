@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { Choices } from "../components/Choices";
 import { FigureText } from "../components/FigureText";
@@ -6,12 +6,13 @@ import { FormMark } from "../components/FormMark";
 import { toast } from "../components/Toasts";
 import { ErrorPanel, LedgerShape } from "../components/States";
 import { navRow, onTableKey } from "../components/tableNav";
-import { ago, change, day, periodPhrase, UNNAMED } from "../format";
+import { ago, change, day, lateFiling, periodPhrase, UNNAMED } from "../format";
 import { sinceLabel, status, type ExpectedItem, type FilingItem, type WatchRow } from "../home/data";
 import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
 import { edgarOpen } from "../components/Sidebar";
 import { go, href } from "../route";
+import { load, save } from "../storage";
 import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
 import { TableScroll } from "../components/TableScroll";
 
@@ -67,7 +68,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
       case "status":
         return watchlist.state === "ok" ? (
           <StatusStrip rows={rows} fresh={workspace.filings === null ? null : workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} listed={listed} />
-        ) : null;
+        ) : watchlist.state === "loading" ? <StatusShape /> : null;
       case "recent":
         return recent ? (
           <section className="card">
@@ -88,10 +89,11 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
               </span>
               <span className="grow" />
               {columnPicker}
-              <button className="btn sm" onClick={onAdd}>
+              {/* the same 32px as Statements' Export CSV (Marek 31) */}
+              <button className="btn" onClick={onAdd}>
                 + Add
               </button>
-              <button className="btn sm" onClick={onExport} disabled={watchlist.state !== "ok"}>
+              <button className="btn" onClick={onExport} disabled={watchlist.state !== "ok"}>
                 Export CSV
               </button>
             </div>
@@ -122,7 +124,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
           <section className="card">
             <div className="card-h">
               <h2>Expected filings</h2>
-              <span className="sub">next {EXPECTED_DAYS} days · estimated from each company's history</span>
+              <span className="sub">next {EXPECTED_DAYS} days · estimated from each company's history</span>
             </div>
             <ExpectedTable expected={expected} />
             <div className="foot">
@@ -238,7 +240,7 @@ function StatusStrip({
         {s.next ? (
           <>
             {/* the date is the figure; whose and which form under it, so it never wraps (Riley 128) */}
-            <div className="v">~{day(s.next.expected.expected_date!)}</div>
+            <div className="v">~{day(s.next.expected.expected_date!)}{lateFiling(s.next.expected) && <span className="tag warn">late</span>}</div>
             <div className="p">
               {s.next.row.ticker ?? s.next.row.name} {s.next.expected.form}, an estimate for the period ending {day(s.next.expected.period_end)}
               {s.next.expected.typical_lag_days !== null &&
@@ -284,6 +286,26 @@ function StatusStrip({
   );
 }
 
+/** How many rows the watchlist had (a per-browser convenience: its loading shape's height). */
+const SIZE_KEY = "tributary.watchlist.size";
+
+/** The status strip's shape while the watchlist loads: its labels, the values blank, so the page under it
+ * doesn't drop when it comes (Marek 12: Home's lead and side moved 166px, CLS 0.171). */
+function StatusShape() {
+  const labels = ["Watchlist", "New filings", "Next expected", "Median revenue growth", "Newest filing listed"];
+  return (
+    <div className="status-strip shape" aria-busy="true">
+      {labels.map((k) => (
+        <div key={k}>
+          <div className="k">{k}</div>
+          <div className="v"><span className="blank-v w-64" /></div>
+          <div className="p"><span className="blank-v w-160" /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => void }) {
   const { watchlist, rows } = workspace;
   const [removing, setRemoving] = useState<string | null>(null);
@@ -299,6 +321,12 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
       {unit && <> <span className="unit">{unit}</span></>}
     </button>
   );
+  // the shape while it loads has as many rows as the list had last time, so the page under it stays put
+  // when it comes (Marek 12: the watchlist grew 166px and pushed the filings down)
+  const [shapeRows] = useState(() => Math.min(20, Math.max(1, Number(load(SIZE_KEY)) || 6)));
+  useEffect(() => {
+    if (watchlist.state === "ok") save(SIZE_KEY, String(Math.max(1, rows.length)));
+  }, [watchlist.state, rows.length]);
   const ariaSort = (key: string) => (sort?.key === key ? (sort.desc ? "descending" as const : "ascending" as const) : undefined);
   // a removal is a toast with Undo (components/Toasts), like every other confirmation
   const removedToast = (id: string, name: string) => toast({
@@ -307,7 +335,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   });
 
   if (watchlist.state === "loading") {
-    return <LedgerShape label="Loading your watchlist" first="Company" rows={4}
+    return <LedgerShape label="Loading your watchlist" first="Company" rows={shapeRows} lines={2}
       columns={["Last filing", ...workspace.columns.map((c) => c.label), "Next filing"]} />;
   }
   if (watchlist.state === "unavailable") {
@@ -409,6 +437,8 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
                       <span className="tag e">{r.next.form}</span>{" "}
                       <span className="muted">~{day(r.next.expected_date)}</span>
                       {r.next.status === "overdue" && <span className="tag warn">overdue</span>}
+                      {/* its estimated date has passed: late, not "about" a past day (Marek 9) */}
+                      {lateFiling(r.next) && <span className="tag warn">late</span>}
                     </>
                   ) : (
                     <span className="faint">no estimate</span>
@@ -539,6 +569,7 @@ function ExpectedTable({ expected }: { expected: ExpectedItem[] | null }) {
               <td className="muted">
                 ~{e.expected_date ? day(e.expected_date) : "—"}
                 {e.status === "overdue" && <span className="tag warn">overdue</span>}
+                {lateFiling(e) && <span className="tag warn">late</span>}
               </td>
               <td>{e.watched ? <b>{e.name ?? UNNAMED}</b> : (e.name ?? UNNAMED)}</td>
               <td>

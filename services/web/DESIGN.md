@@ -152,6 +152,35 @@ were searched, names sections ("Risk Factors") instead of their keys, offers Ope
 accession number, and never doubles a phrase's quotes; Peers' shared terms appear once each, three at most;
 Business paragraphs rejoin a sentence a line break cut.
 
+### The design-QA pass (Marek's review, 2026-11-27, batch A)
+
+Fixes by finding number (his `docs/test-people/reports/marek/review.md`); batch B (citations to the line,
+the reader's filing tables, JPMorgan-style 10-Qs) is the parser's. The rules they leave:
+
+- **Rows of stats** (Data status, Home's strip, the front door's proof): each cell's label, figure and note on
+  rows shared across the row (CSS subgrid), so a wrapped label never drops its figure (25); each cell sits
+  under the strip's clip by its rule and inset, so the first cell of a wrapped row starts on the edge (28).
+- **Edges**: everything in `main` starts at the content edge: quiet buttons on a phone's page bar hang their
+  padding out (43), a watched row's notch sits 8px out in the scroller's own inset (30), Peers' line, Data
+  notes and the Revenue breakdowns have no side inset (29). A card list's items read from their top (26).
+- **Controls**: 32px beside a 32px field (Home's Export CSV, What changed's Filter, Compare's Chart these: 31);
+  a date range's two ends stay on one line (39); a label stays with its select (54); Mark done is one outline
+  (53); a confirm's destructive answer is the ink filled (64); Earnings' release actions are a secondary and a
+  quiet button (51); Customize Home's arrows sit by their label (59). An annual report's badge is outlined on
+  the well, never filled ink (58).
+- **Words**: placeholders take curly quotes and a search snippet's " ... " is "…" (49); a filing's contents keep
+  their item numbers apart from the titles (21); a statement's column names its filing day as words beside
+  the code (57); Peers quotes the Business section's distinctive words (22); a bank's quarter chart is "Net
+  revenue by quarter" (63); exports carry the day in their name (60); a typed As of day that can't be shown
+  says why (40).
+- **Behaviour**: `/v1/allowance` is asked once per token per few seconds (`askAllowance`; a page load asked
+  twice and drew a 429: 67); Back and Forward return to where a page was left (`scrollMemory.ts`, the place
+  kept on the history entry: 68); code a person types or copies is in the system monospace (`--code`; figures
+  and codes stay Archivo: 32).
+- **Front door**: the specimen (§6) fills the first screen's right half, drawn with blank values (no figure it
+  doesn't read live); `index.html` carries a description, Open Graph and Twitter tags and `public/og.png`
+  (1200x630, made from the same drawing) for a shared link (69).
+
 ### The restraint pass (Riley's audit, test 10, findings 37-107)
 
 History: the build spec now gives the seal red to the tick and the logo only, and a change its green or rust. Red is only the seal, the margin rubrics, red-letter days and the "may have changed" `*`: the Home badge,
@@ -179,10 +208,10 @@ page that fails to render shows "This page didn't load" with Reload and Home, ke
 
 The frame (spec §3): a 48px **top bar** across the window over a 232px **rail**, both on the paper and still on
 every page change. The top bar (`components/TopBar.tsx`): the logo (Home), the search button (Ctrl/Cmd-K
-opens the palette), the feed's freshness as a status point ("Listed 2 min ago", green in EDGAR's hours; it
+opens the palette), the feed's freshness as a status point ("Newest filing listed 2 min ago", green in EDGAR's hours; it
 opens a popover with the newest text parsed, the watchlist's values' time, who is signed in, the readable
 count and Data status, in the freshness words: never "live"), Alerts with its count, the Assistant
-(Ctrl/Cmd-J) and the account chip (a sandbox's "Demo sandbox · resets in 23h" with End demo; a GitHub or
+(Ctrl/Cmd-J) and the account chip (a sandbox's "Demo sandbox · resets in 23 h" with End demo; a GitHub or
 password account's name with Sign out; the named demo users' picker). The rail (`components/Sidebar.tsx`):
 Home, Companies (its count), Compare, Charts, Analysis, Portfolio, Your data (Ask stays a g-key and a palette
 entry); then **Watching** (code, name and "new" for a filing since the last visit, no figures: those are on
@@ -199,7 +228,8 @@ by the room they have (`.main` is the `main` container): the Overview stacks its
 its content box is under 900px, so the open panel at 1440 collapses it as a narrow window does. Content has
 32px sides (16 on a phone) and is at most 1144px wide. No page scrolls sideways; tables scroll inside
 `components/TableScroll`, which opens a statement at its newest periods, moves its real header row under the
-top bar through the CSSOM (`headerShift`), and blanks a column showing only in part. The palette is 560px at
+top bar through the CSSOM (`headerShift`), and blanks a column showing only in part; the frozen column's
+header cell is sticky and opaque too, so a scrolled column's header never shows through the corner (Marek 17). The palette is 560px at
 12vh over a scrim, never animated.
 
 ### Motion
@@ -221,12 +251,22 @@ content; transform and opacity only, nothing over 280ms, exits faster than entra
   `markKeyboard`), the palette itself, sorting and moving through a table, and the figures (a value swaps;
   bars appear at their value).
 - **Popovers**: a source card or menu scales from 0.97 at its trigger with opacity (140ms in, 90ms out);
-  instant by keyboard or within 400ms of another closing. The assistant panel slides in 240ms and away 180ms
+  instant by keyboard or within 400ms of another closing. A form that floats under its button (Save…,
+  Columns, Save to workspace) is a popover too: the sheet, 6px corners and `--float`, and
+  `components/useDismiss` closes it on Escape (the focus back on its button) or a press outside (Marek 5, 50). The assistant panel slides in 240ms and away 180ms
   (it stays mounted for its exit; `App` returns the focus to the Assistant button), instantly by Ctrl J; the
   rail drawer slides 240/180.
 - **Loading**: the company page shows its own shape while its figures load (the header with the name the
   directory knows, the tabs, the Overview's section titles and row labels, a statement's row labels), each
   blank value a `well` block; after 1s the blanks pulse slowly; values fade in over 120ms in place (`.landed`).
+  Nothing that has arrived moves when something else does (Marek 12, CLS 0.176 on a company page and 0.171
+  on Home, now 0.021 and 0.011): the 8-Ks behind the results notice are asked beside the figures when the
+  plan reads the company's filings (App's `readsFilingsHint`), and the page shows once the notice is known
+  (or after 1.5s); Home's watchlist shape has as many two-line rows as the list had last time (a per-browser
+  number, `tributary.watchlist.size`); "Signing in…" is a div (a paragraph's margin moved the page 14px).
+  A tab opened for the first time keeps the old tab on screen until its own content is in, at most a second
+  (`HeldPanels`: the new panel mounts hidden at the click), so a tab change never flashes its loading shape
+  (Marek 35).
 - **Reduced motion** (`html[data-motion="reduced"]`, from `prefers-reduced-motion`): nothing travels or
   overlaps; the old view goes at once and the new fades in 120ms; indicators jump; popovers and panels fade;
   no press scale or pulse.
@@ -241,6 +281,16 @@ a 2px ink ring with a 2px offset on every control; a hover tints at once and cle
 only; a button presses to 0.97. `?` opens the shortcut sheet (`components/ShortcutSheet.tsx`, also from the
 rail's foot). The screener, watchlist and comps rows are a roving tab stop (`components/tableNav.ts`); the
 company page's ledgers are one tab stop each (`components/ledgerGrid.ts`).
+
+Keyboard and targets (Marek 13, 14, 27, 41, 45): "Skip to content" is the first Tab stop on every page in the
+shell (a button: an in-page link would change the hash route); it gives the focus to the page's h1, so the
+next Tab is the page's first control (a company page's content was the 38th stop). Every sortable header is a
+`th` with `aria-sort` holding a `.th-sort` button (the screener's were bare headers sorted by mouse only),
+a 24px target that lays out as its line. Checkboxes are 16px and their label is the target (24px, 44 on a
+coarse pointer); the alert matrix centres each form's header over its boxes and makes the cell the target.
+Compare's target and peers are applied chips (ink outline) with a 28px remove (40 on touch). Every hand-made
+popover closes on Escape with the focus back on its opener; the palette, closed without going anywhere,
+gives the focus back too.
 
 ## Screens (hash routes)
 
@@ -391,6 +441,14 @@ watchlist's "as of", and the assistant's daily reset (midnight UTC, the service'
 viewer's own time: "resets at 5:00 PM MST"). No UTC clock beside a local one and no numeric
 `toLocaleString` dates; a moment's date alone is `localDay`.
 
+
+Dates of moments are the viewer's (Marek 15): `format.ts` `day` reads a timestamp as `localDay` (a plain
+date stays as written), so "since your last visit", an alert's "since", a report's "data as of" and a
+recorded suite's day never show tomorrow's UTC date in the evening; As of's "today" is `localToday`. A
+company's address can name its ticker (`#/company/NVDA`, `route.ts` `ticker`): `pages/TickerPage` finds the
+company with that current ticker and replaces the address with its own (same tab), or says no company has
+it on the not-found page every missing thing uses (`NotFound`: a heading and one line; an unknown company
+id says "No company here"); a CIK without its leading zeros is the company's own address.
 ## Home
 
 Home: the sidebar badge and the status tile count the same filings (`Workspace.fresh`: the
@@ -468,7 +526,13 @@ most one notice: on results day (an 8-K with item 2.02 after the latest 10-Q or 
 figures and the statements don't repeat it: `ResultsPending`'s line under them shows only when the header
 says nothing, from `/earnings`); then the tabs (links with
 `aria-current`, a 2px indicator) with As of as Today | Pick a day (a typed day, never the browser's date
-input). The header asks the 8-Ks since the last report once (`/events`) for the notice and the Overview.
+input). Under 960px of page (a tablet, or 1440 with the assistant open) As of moves to its own line above the
+tabs, and tabs that don't fit the strip go into a "More" menu at its end, named after the current tab when it
+is one of them (Marek 7: at 768 "Filings" read "F" and Data notes and Peers were gone). The results notice
+words the next report's date for today (`format.ts` `lateFiling`): "about Nov 25" while that's ahead, "it's
+late, expected about Nov 25" once it has passed, "past the SEC's deadline" for the API's `overdue`; Home's
+watchlist and Coming up, and Portfolio, tag it "late" (Marek 9). A notice is never cut to an ellipsis on a
+phone. The header asks the 8-Ks since the last report once (`/events`) for the notice and the Overview.
 
 The Overview (`company/Overview.tsx`, spec §6), lead column then side column, stacked under 900px of room:
 
@@ -482,7 +546,10 @@ The Overview (`company/Overview.tsx`, spec §6), lead column then side column, s
   its bar. The terms are rounded to two decimals, so they can differ from the total by a cent of a billion:
   the total is never re-added here. Then the legend of the marks used, and the year as a sentence
   (`data.ts` `yearStory`, API values only).
-- **The rest of the twelve months**: the other key figures as a two-column ledger (amounts, then rates), each
+- **The rest of the twelve months**: the other key figures as a two-column ledger (amounts, then rates), under
+  the one period they share ("As filed, to Jul 26, 2026"); when they don't share one (a 20-F filer's year
+  beside the twelve months its releases add up to) the line says "each to the date under it" and every
+  figure says its own (Marek 8: TSMC's net income to Sep 30, 2026 sat under "to Dec 31, 2025"). Each is
   a figure button with its mark and card (`company/sources.ts` `statCard`: how a figure no filing states is
   worked out, from `COMPUTED_FROM` and `epsStat`); EPS is `/per-share`'s TTM (Σ). A figure that isn't a plain
   one reads "—" with a reading letter (a not reported, b none filed since a date, k a bank's line) explained
@@ -556,6 +623,15 @@ Statements since F5 (migration 049; `company/data.ts` `STATEMENTS`, `cashBridges
   LongTermDebtNoncurrent comes first"). Ratios open the same way.
 
 ### Blanks, readings, currencies and per-share figures
+
+Number format (Marek 18, 19, 37, 38): Statements keep each row's own unit (`moneyRow`: the owner's call, not one
+unit per statement), and every table lines its column's decimal points up: `TableScroll` reads each numeric
+cell's text after render and `decimalPads` gives it the unseen digits, point, scale letter or closing
+parenthesis it lacks against the column (drawn by `td[data-pad]::after`, hidden, so the cell's text stays the
+figure): AAPL's "$124.3B" over "$66.03B", 7px apart before, now on one point. `format.ts` writes every negative
+with U+2212 (`MINUS`, `signed`; CSVs keep the API's numbers), a currency code and a scale word with a no-break
+space ("TWD 1.49T", "$303.0 billion"), and the space before a " · " in on-screen text is a no-break one; a
+section's line separates its parts by a 16px gap instead of a dot.
 
 What a table shows where there's no usable figure is one vocabulary, in `src/blanks.ts`: **—** not
 reported, **·** no data in this period, **n/a** not applicable, **n/m** not meaningful, **$0** a real
@@ -749,6 +825,13 @@ Revenue view (the company page's Revenue tab, `src/company/Revenue.tsx`; rules i
 to workspace" (`workspaces/SaveChart.tsx`: name and workspace, through the same item route and
 state cleaner as the chart builder's Save as, without becoming the chart builder's open item)
 makes it a chart item a thesis there can embed, and "Open in Chart builder" opens it there.
+
+Its charts and the analysis's Numbers step draw in the page's chart language, not the chart builder's plot
+panel (Marek 11): `ChartView`/`LayerChart` `onPage` leaves the title and notes out of the drawing (the
+section's heading, or the Numbers chart's own h3, names it; the notes are pencil text under it), the paper
+shows through, and the series take the palette's greys (`--bar-edge`, the ink, then the pencil and ink-2
+dashed) with 11px pencil labels; the drawing exports take keeps its title and notes. A right-axis layer's
+legend says it inside its own brackets ("Revenue growth (YoY, right axis)").
 Values need financials access, like Statements.
 Revenue and Segments each do one job (#115) and say so in a line at the top with a link to the other:
 Revenue is three years of trends (trailing twelve months), what drove growth and revenue quality;
@@ -810,6 +893,10 @@ where the segments plus it come to the consolidated revenue, gross profit or ope
 is All Other in FY2025 (−$1.71B in Q3: $22.08B + $1.50B − $1.71B = the statement's $21.87B) but carries
 the segments' total from FY2026 ($66.6B beside segments of $66.6B), which never ties, so only the
 first is shown. It has no share or YoY and is in no sum.
+
+The tables keep fixed columns (200px for the member, 136 on a phone; 88 per period), so periods line up from
+one table to the next and a table wider than its box scrolls like a statement instead of squeezing its
+cells (Marek 4: at 768 the figures printed over each other).
 
 Segment layers (`chart/segments.ts`, `chart/fetch.ts`): the Revenue view's segment charts are
 chart builder layers of kind `segment` (company, segment metric, axis, 1-20 members), read from

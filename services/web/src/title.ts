@@ -37,6 +37,8 @@ function what(route: Route, k: Known): string {
       return "What Tributary covers";
     case "notfound":
       return "Page not found";
+    case "ticker":
+      return route.ticker;
     case "status":
       return "Data status";
     case "api":

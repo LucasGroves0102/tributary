@@ -70,6 +70,16 @@
   padding: 0;
 }
 
+/* a form that floats under its button is a popover, not a section: the sheet, popover corners and the
+   one shadow (§2.4; Marek 5: the screener's Save was see-through, its labels printed over the chips) */
+.page .card.save-form,
+.page .card.col-pop {
+  background: var(--sheet);
+  border: 0;
+  border-radius: var(--r-pop);
+  box-shadow: var(--float);
+}
+
 .page .card > .card-h,
 .page .card-h {
   display: flex;
@@ -150,6 +160,13 @@
 .t:not(.led) td.first {
   padding-left: 0;
   background: var(--paper);
+}
+
+/* the frozen name column keeps 12px from its rule, so a long name never runs into it (Marek 42: "Costco
+   Wholesale COST" touched the rule on Home at 768 and Compare at 1280) */
+.tw-port.scrolls .t:not(.led) th.first,
+.tw-port.scrolls .t:not(.led) td.first {
+  padding-right: 12px;
 }
 
 .t:not(.led) th.first {
@@ -236,6 +253,28 @@
   padding-left: 8px;
 }
 
+/* the screener's watched rows keep the column's edge: the notch sits 8px out, in the scroller's own
+   inset (Marek 30: their names were pushed 8px right, x=272 against 264) */
+.screen-results .tw {
+  margin-left: -8px;
+  padding-left: 8px;
+}
+
+.t.screen tr.watched td.first {
+  padding-left: 0;
+  box-shadow: none;
+}
+
+.t.screen tr.watched td.first::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: -8px;
+  width: 2px;
+  background: var(--ink);
+}
+
 /* row actions: a fixed slot at the row's end, quiet; shown on hover on a fine pointer, always on a coarse one */
 .t td.actions {
   text-align: right;
@@ -305,6 +344,13 @@
 }
 
 .blank-v.w-40 { width: 40px; }
+
+/* a two-line row's second line in a loading shape (LedgerShape `lines`) */
+.ledger-shape .blank-v.blank-2 {
+  display: block;
+  width: 64px;
+  margin-top: 8px;
+}
 .blank-v.w-56 { width: 56px; }
 .blank-v.w-104 { width: 104px; }
 .blank-v.w-120 { width: 120px; }
@@ -350,6 +396,51 @@ textarea.field {
 
 /* a chip: 32px, a rule-2 outline; an applied filter (or a chosen option) gets an ink outline */
 button.chip,
+/* a company held in a set (Compare's target and peers): an applied chip, the ink outline, its remove a 28px
+   target inside it (Marek 41: 17px chips with 10x17px "×"s; 44 on touch) */
+.chip.held {
+  gap: 2px;
+  padding: 0 2px 0 12px;
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chip-x:hover {
+    background: var(--well);
+    color: var(--ink);
+  }
+}
+
+@media (pointer: coarse) {
+  .chip.held {
+    min-height: 44px;
+  }
+
+  .chip-x {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.col-checks {
+  column-gap: 20px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -869,10 +960,14 @@ button.chip.on,
   transition: background-color var(--t-hover-out) linear;
 }
 
+/* an item's number takes the room it needs and keeps 8px from its title (Marek 21: "2.02Results of
+   Operations", "EX-" over "99.1") */
 .toc .key {
   flex: none;
-  width: 30px;
-  min-width: 0;
+  width: auto;
+  min-width: 30px;
+  margin-right: 8px;
+  white-space: nowrap;
   padding-left: 8px;
   font-size: 12px;
   font-stretch: 82%;
@@ -1850,9 +1945,26 @@ html[data-motion="reduced"] .release-table-box summary::before {
   margin-top: 4px;
 }
 
-/* a section's chart and its ledger: the chart 7 columns, the ledger 5 (Revenue / Segments, §6) */
+/* a section's chart and its ledger: the chart 7 columns, the ledger 5 (Revenue / Segments, §6). The
+   segment tables keep fixed columns so periods line up from one table to the next; each column has a
+   width, so a table with more columns than room is wider than its box and scrolls, never squeezes
+   (Marek 4: at 768 cells 46px wide held 60px of figures and printed over each other) */
 .co-panel .t.aligned {
   min-width: 0;
+}
+
+.co-panel .t.aligned th.first {
+  width: 200px;
+}
+
+.co-panel .t.aligned th:not(.first) {
+  width: 88px;
+}
+
+@container tw (max-width: 600px) {
+  .co-panel .t.aligned th.first {
+    width: 136px;
+  }
 }
 
 /* --- the assistant's insides (§4 Assistant panel): the question 14/600, the answer in Archivo 14/22 with its
@@ -2077,12 +2189,13 @@ html[data-motion="reduced"] .release-table-box summary::before {
   margin: 0 auto;
   padding: 24px 32px 64px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 440px);
+  column-gap: 64px;
   grid-template-areas:
-    "head"
-    "card"
-    "proof"
-    "more";
+    "head spec"
+    "card spec"
+    "proof proof"
+    "more more";
   grid-template-rows: none;
   background: transparent;
   border: 0;
@@ -2173,22 +2286,23 @@ html[data-motion="reduced"] .release-table-box summary::before {
   border: 0;
 }
 
+/* each cell 25px left, under the clip: the first of every wrapped row loses its rule and inset, so row two
+   starts where row one does (Marek 28: "128 of 128" 26px right of "6,670" at 768) */
 .welcome .proof {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   border-top: 1px solid var(--ink);
   border-bottom: 1px solid var(--rule);
 }
 
-.welcome .proof > div {
-  padding: 16px 24px 16px 0;
-}
-
+.welcome .proof > div,
 .welcome .proof > div + div {
-  padding-left: 24px;
+  padding: 16px 24px;
+  margin-left: -25px;
   border-left: 1px solid var(--rule);
 }
 
@@ -2280,6 +2394,7 @@ html[data-motion="reduced"] .release-table-box summary::before {
   .welcome .proof > div,
   .welcome .proof > div + div {
     padding: 12px 12px 12px 0;
+    margin-left: 0;
     border-left: 0;
     border-bottom: 1px solid var(--rule);
   }
@@ -2417,9 +2532,11 @@ html[data-motion="reduced"] .release-table-box summary::before {
   line-height: 22px;
 }
 
+/* one outline (Marek 53: a border inside a ring drew a double, focus-like box on every step) */
 .step-done {
   min-height: var(--control-h);
   padding: 0 12px;
+  border: 0;
   border-radius: var(--r-control);
   box-shadow: inset 0 0 0 1px var(--rule-2);
   font-size: 13px;
@@ -2581,4 +2698,307 @@ html[data-motion="reduced"] .release-table-box summary::before {
   font-size: 15px;
   line-height: 24px;
   font-weight: 600;
+}
+
+/* --- a chart on a page (Revenue, an analysis's Numbers; LayerChart `onPage`): the Overview's chart language
+   (§4 Chart), not a plot panel dropped on the paper (Marek 11): the paper behind it, no title in it (the
+   section's heading names it), the palette's ink and greys (a line in a second grey is dashed, so two never
+   differ by colour alone), 11px labels in pencil, its notes as the page's own text under it ---------- */
+.lchart.on-page .ch-bg {
+  fill: transparent;
+}
+
+/* the history bars' grey (3:1 on the paper as a line too), then the ink; the two after them dashed */
+.lchart.on-page .lchart-svg {
+  --series-0: var(--bar-edge);
+  --series-1: var(--ink);
+  --series-2: var(--pencil);
+  --series-3: var(--ink-2);
+  --series-4: var(--bar-edge);
+  --series-5: var(--ink);
+  --series-6: var(--pencil);
+  --series-7: var(--ink-2);
+}
+
+.lchart.on-page :is(.c2, .c3, .c6, .c7) > path[fill="none"],
+.lchart.on-page .ch-legend :is(.c2, .c3, .c6, .c7) line {
+  stroke-dasharray: 6 3;
+}
+
+/* stacked bars part by a hairline of paper */
+.lchart.on-page g[class^="c"] > rect {
+  stroke: var(--paper);
+  stroke-width: 1px;
+}
+
+.lchart.on-page .ch-legend text {
+  fill: var(--ink-2);
+  font-size: 12px;
+}
+
+.lchart.on-page .ch-grid line {
+  stroke: var(--rule);
+}
+
+.lchart.on-page .ch-grid text,
+.lchart.on-page .ch-axis text {
+  fill: var(--pencil);
+  font-size: 11px;
+}
+
+.lchart.on-page .ch-unit {
+  fill: var(--pencil);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.lchart-notes {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--pencil);
+}
+
+.lchart-notes p {
+  margin: 0;
+}
+
+.numbers-h {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* a date range keeps its two ends together on one line (Marek 39) */
+.date-range {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+/* a label and its control wrap together (Marek 54) */
+.nowrap-pair {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+/* Customize Home: each card's name in a column wide enough for the longest, its arrows right after */
+.view-editor .view-card {
+  min-width: 240px;
+}
+
+/* --- the front door's specimen (§6): a statement's lines, the first figure framed in seal and ticked, the
+   filing's own line under it in the serif; drawn with blank values (no figure it doesn't read live) ---- */
+.welcome-specimen {
+  grid-area: spec;
+  align-self: center;
+  margin: 0;
+  padding: 24px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pop);
+}
+
+.welcome-layout > .welcome-head { grid-area: head; }
+.welcome-layout > .welcome-card { grid-area: card; }
+.welcome-layout > .welcome-proof { grid-area: proof; }
+.welcome-layout > .welcome-more { grid-area: more; }
+
+.spec-ledger {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.spec-h,
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 32px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.spec-h {
+  border-bottom-color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.spec-h .spec-col {
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.spec-row {
+  color: var(--ink-2);
+}
+
+.spec-row.total {
+  font-weight: 650;
+  color: var(--ink);
+  border-top: 1px solid var(--ink);
+  border-bottom: 3px double var(--ink);
+}
+
+.spec-fig {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.spec-fig.framed,
+.spec-quote .framed {
+  box-shadow: 0 0 0 2px var(--seal);
+}
+
+.blank-v.w-72 { width: 72px; }
+.blank-v.w-80 { width: 80px; }
+.blank-v.w-88 { width: 88px; }
+.blank-v.w-96 { width: 96px; }
+
+.spec-line {
+  display: grid;
+  gap: 4px;
+  margin: 24px 0 0;
+  padding: 12px 16px;
+  background: var(--paper);
+  border-left: 2px solid var(--ink-2);
+}
+
+.spec-form {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  font-stretch: 82%;
+  letter-spacing: 0.02em;
+  color: var(--pencil);
+}
+
+.spec-quote {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 24px;
+  color: var(--ink);
+}
+
+.welcome-specimen figcaption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink-2);
+}
+
+/* narrower than the two columns: the specimen goes, the first screen keeps the way in */
+@container welcome (max-width: 1000px) {
+  .welcome-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "head"
+      "card"
+      "proof"
+      "more";
+  }
+
+  .welcome-specimen {
+    display: none;
+  }
+}
+
+/* a note's filing links start on its text's edge: the quiet buttons' own inset hangs out (Marek 29: +10px) */
+.notes .note .note-f > .btn.ghost:first-child {
+  margin-left: -10px;
+}
+
+/* a phone's page bar (Marek 43): the title its own line, the quiet actions under it from the content edge
+   (their text, not their padding, on the edge), so a wrapped row never starts 12px in */
+@container main (max-width: 600px) {
+  .page-bar > h1,
+  .page-bar > h1.grow {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  .page-bar > .btn.ghost {
+    padding-left: 0;
+    padding-right: 16px;
+  }
+}
+
+/* the previous and next sections at the foot of a section: on one baseline, each its half (Marek 70) */
+.section-text .section-nav {
+  align-items: baseline;
+  gap: 24px;
+}
+
+.section-text .section-nav > span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.section-text .section-nav > span:last-child {
+  text-align: right;
+}
+
+/* a blank chart's starting points: the templates, each its name and what it draws (Marek 34) */
+.chart-starts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart-start {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--sheet);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.chart-start b {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.chart-start span {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink-2);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .chart-start:hover {
+    box-shadow: inset 0 0 0 1px var(--rule-2);
+  }
+}
+
+/* a phone: the search field its own row, Search and Exact phrase under it (nothing past the edge) */
+@container main (max-width: 600px) {
+  .reader-search {
+    flex-wrap: wrap;
+  }
+
+  .reader-search .field {
+    flex-basis: 100%;
+    max-width: none;
+  }
 }

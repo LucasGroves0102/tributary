@@ -7,6 +7,22 @@ import type { Allowance } from "../types";
 /** The rolling hour moves on by itself: look again now and then. */
 const REFRESH_MS = 5 * 60_000;
 
+/** One ask at a time per token, and an answer reused for a few seconds: a page load asked twice and
+ * agent-api's limit answered the second with a 429 (Marek 67). A spent question asks again at once. */
+const FRESH_MS = 10_000;
+let shared: { token: string; at: number; ask: Promise<Allowance | null> } | null = null;
+
+export function askAllowance(token: string, force = false, now = Date.now()): Promise<Allowance | null> {
+  if (!force && shared && shared.token === token && now - shared.at < FRESH_MS) return shared.ask;
+  const ask = fetchAllowance(token);
+  shared = { token, at: now, ask };
+  // a failed ask isn't kept: the next one tries again
+  ask.catch(() => {
+    if (shared?.ask === ask) shared = null;
+  });
+  return ask;
+}
+
 const count = (n: number) => n.toLocaleString("en-US");
 
 /** When the daily counts start again: the service's day ends at midnight UTC, said in the viewer's
@@ -22,24 +38,25 @@ export function useAllowance(token: string | null, busy: boolean): { allowance: 
   const [allowance, setAllowance] = useState<Allowance | null>(null);
   const live = useRef(token);
   live.current = token;
-  const refresh = useCallback(() => {
+  const ask = useCallback((force: boolean) => {
     if (!token) return;
-    fetchAllowance(token)
+    askAllowance(token, force)
       .then((a) => {
         if (live.current === token) setAllowance(a);
       })
       .catch(() => undefined);
   }, [token]);
+  const refresh = useCallback(() => ask(true), [ask]);
 
   useEffect(() => {
     if (!token) {
       setAllowance(null);
       return;
     }
-    refresh();
-    const id = window.setInterval(refresh, REFRESH_MS);
+    ask(false);
+    const id = window.setInterval(() => ask(true), REFRESH_MS);
     return () => window.clearInterval(id);
-  }, [token, refresh]);
+  }, [token, ask]);
 
   // an answer just finished: it counted
   const wasBusy = useRef(busy);

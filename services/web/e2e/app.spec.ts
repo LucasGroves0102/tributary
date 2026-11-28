@@ -13,7 +13,7 @@ test("try the demo lands on Home with the sandbox and its watchlist", async ({ p
   await expect(page.getByRole("heading", { name: "Tributary" })).toBeVisible();
   await page.getByRole("button", { name: "Try the demo" }).click();
   // the sandbox is the top bar's account chip (spec §4): what it covers in its title
-  await expect(page.locator(".top .who")).toContainText("Demo sandbox · resets in");
+  await expect(page.locator(".top .who")).toContainText(/Demo sandbox\s· resets in/);
   await expect(page.locator(".top .who button")).toHaveAttribute("title", /\(4 companies\)/);
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   const rows = page.locator("table.watchlist tbody tr");
@@ -36,7 +36,8 @@ test("screener: filter, sort and watch", async ({ page }) => {
   // (a company_id list is the name directory asking for identity, not this screen)
   expect(fake.calls.find((c) => c.includes("/v1/screener?") && !c.includes("company_id="))).toContain("access=financials");
 
-  await page.getByRole("columnheader", { name: /Op mgn/ }).click();
+  // the header's button sorts (Marek 14: a keyboard reaches it)
+  await page.getByRole("columnheader", { name: /Op mgn/ }).getByRole("button").click();
   await expect(page).toHaveURL(/sort=-operating_margin_ttm/);
   await expect(rows.first()).toContainText("Nvidia");
 
@@ -76,7 +77,7 @@ test("chart builder: two metric layers and a formula, exported as CSV", async ({
 
   const legend = page.locator(".lchart-svg .ch-legend text");
   // the first layer starts from the watchlist's first company
-  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net income ÷ revenue (TTM) (right axis)"]);
+  await expect(legend).toHaveText(["NVDA revenue (TTM)", "MSFT revenue (TTM)", "net income ÷ revenue (TTM, right axis)"]);
   await expect(page.locator(".ch-foot").first()).toContainText("Source: SEC filings");
 
   // the bar's exports are one menu (Riley 101: three buttons wrapped the toolbar)
@@ -709,7 +710,7 @@ test("your data: a CSV checked, then stored, and its rows on the company page", 
 
   // a metric over it, saved into "Your metrics", then a screener column
   await page.goto("/#/data");
-  await page.getByPlaceholder("Revenue per share").fill("Revenue per store");
+  await page.getByPlaceholder("e.g. Revenue per store").fill("Revenue per store");
   await page.locator("form.data-metric-form input.field").nth(1).fill("revenue / mine.store_counts.stores");
   await page.getByRole("button", { name: "Save metric" }).click();
   await expect(page.locator(".data-table").nth(1)).toContainText("revenue / mine.store_counts.stores");

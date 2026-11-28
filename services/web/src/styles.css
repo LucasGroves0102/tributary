@@ -121,7 +121,7 @@ p {
 }
 
 code {
-  font-family: var(--mono);
+  font-family: var(--code);
   font-size: 13px;
 }
 
@@ -150,13 +150,15 @@ th.n {
   color: var(--ink-3);
 }
 
-/* a rise is green; a fall keeps its minus sign and the ink: red is never a loss */
+/* a change's direction (§2.3): a rise green, a fall rust with the true minus, the same token as `.loss`
+   (Marek 19: a fall was rust in one column and ink in the next); a level is never coloured, and red is
+   never a loss */
 .pos {
-  color: var(--up);
+  color: var(--gain);
 }
 
 .neg {
-  color: var(--ink);
+  color: var(--loss);
 }
 
 .small {
@@ -327,9 +329,10 @@ html[data-motion="reduced"] .btn:active:not(:disabled) {
   white-space: nowrap;
 }
 
+/* an annual report: a step louder than a 10-Q, never the heaviest mark on the page (Marek 58) */
 .tag.k {
-  color: var(--page);
-  background: var(--ink);
+  color: var(--ink);
+  background: var(--well);
   border-color: var(--ink);
 }
 
@@ -754,6 +757,12 @@ html[data-motion="reduced"] .btn:active:not(:disabled) {
   background: linear-gradient(to left, var(--edge-shadow), transparent);
 }
 
+/* the unseen digits, point or parenthesis that line a column's decimal points up (TableScroll decimalPads) */
+.t td[data-pad]::after {
+  content: attr(data-pad);
+  visibility: hidden;
+}
+
 /* part of a column at an edge: blank, not a number with digits missing (TableScroll cutColumns) */
 .t .tw-cut {
   color: transparent !important;
@@ -962,24 +971,29 @@ table.t {
 
 /* Tiles wrap and the last row fills its width: a grid left a dead grey cell there. */
 /* the figures that answer "how fresh": large serif figures between ink rules, each after a red rule */
+/* a strip of stats: each cell's label, figure and note on rows shared across the strip (subgrid), so a
+   label that wraps doesn't drop its figure below its neighbours' (Marek 25: "0" at y=581 beside "83,864"
+   at 603); each cell sits 17px left, under the clip, so the first cell of every wrapped row loses its rule
+   and inset (Marek 28: row 2 at x=35 under row 1 at x=16) */
 .status-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 0;
+  overflow: hidden;
   border-top: 2px solid var(--ink);
   border-bottom: 1px solid var(--rule);
 }
 
 .status-strip > div {
-  flex: 1 1 170px;
-  padding: 14px 18px 16px;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  row-gap: 0;
+  padding: 14px 16px 16px;
+  margin-left: -17px;
   min-width: 0;
   border-left: 1px solid var(--col-rule);
-}
-
-.status-strip > div:first-child {
-  border-left: 0;
-  padding-left: 0;
 }
 
 .status-strip .k,
@@ -1117,13 +1131,32 @@ progress {
   accent-color: var(--action);
 }
 
+/* a box 16px, not the browser's 13; its label is the target (Marek 41: 13px boxes) */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}
+
 .chk {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  min-height: 24px;
   font-family: var(--sans);
   font-size: var(--fs-base);
   color: var(--ink);
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .chk,
+  .cell-check {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 .chip.removable {
@@ -2313,9 +2346,12 @@ button.chip:disabled {
   color: var(--neg);
 }
 
+/* a sortable header's button: a 24px target that lays out as its 16px line (Marek, controls: 16px) */
 .th-sort {
+  display: inline-block;
   border: 0;
-  padding: 0;
+  padding: 4px 0;
+  margin: -4px 0;
   background: none;
   color: inherit;
   font: inherit;
@@ -3345,10 +3381,11 @@ mark {
   right: auto;
 }
 
+/* a breakdown's chart and table on the page's left edge (Marek 29: the heading and chart sat 8px in) */
 .rev-axis {
   display: grid;
   gap: var(--sp-3);
-  padding: var(--sp-4);
+  padding: var(--sp-4) 0;
   border-top: 1px solid var(--line);
 }
 
@@ -3561,8 +3598,9 @@ button.link.num {
 
 /* Data notes (tearsheet tab, Home) */
 
+/* on the content edge, as the heading over it (Marek 29: the body sat 12px in) */
 .notes-group {
-  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  padding: var(--sp-5) 0 var(--sp-4);
   border-bottom: 1px solid var(--line);
 }
 
@@ -3737,8 +3775,10 @@ button.link.num {
   padding: 0;
 }
 
+/* each item's words from its top, whatever its neighbours' height (Marek 26: bodies centred, 11-42px apart) */
 .cover-list li {
   display: grid;
+  align-content: start;
   gap: var(--sp-2);
   padding: var(--sp-5) var(--sp-6);
   border-bottom: 1px solid var(--line);
@@ -4330,6 +4370,21 @@ button.link.num {
 
 .status-grid > .card > .kv > div {
   flex-basis: 170px;
+}
+
+/* each section's figures on one line across its cells, whatever their labels wrap to (subgrid rows:
+   Marek 25, "667,034" at y=617 beside "3,862,990" at 595) */
+.status-grid > .card > .kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.status-grid > .card > .kv > div {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  align-content: start;
+  row-gap: 0;
 }
 
 @container main (max-width: 1000px) {
@@ -6255,7 +6310,7 @@ table.t.release-grid {
 /* Peers: what the company's own 10-K Business section is most distinctive for */
 .peers-basis {
   margin: 0;
-  padding: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-3) 0 0;
 }
 
 .t.peers td.why {
@@ -6692,8 +6747,20 @@ table.t.release-grid {
   user-select: all;
 }
 
+/* each form's header over its boxes, both centred (Marek 27: headers right, boxes left, 20-64px apart);
+   the whole cell is the box's target */
+.t.alert-forms th.n,
 .t.alert-forms td.n {
   text-align: center;
+}
+
+.cell-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  cursor: pointer;
 }
 
 /* Home's first step (F6, #127) */
@@ -8059,9 +8126,20 @@ label.check {
   flex-basis: 100%;
 }
 
+/* beside the name where there's room, so a row keeps the ledger's 32px (Marek 30: 49px rows); under it
+   where the table is narrow (below) */
 .t.screen .co-conf {
+  display: inline-block;
+  margin-left: 8px;
   color: var(--ink-3);
   white-space: normal;
+}
+
+@container tw (max-width: 1080px) {
+  .t.screen .co-conf {
+    display: block;
+    margin-left: 0;
+  }
 }
 
 /* the Filings tab's filters: a row of their own under its heading, in one place whatever is chosen

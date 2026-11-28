@@ -607,8 +607,12 @@ first) and `PUT /v1/recent/filings` (the reader records what you open; the newes
   app reads through the permission-checked routes as usual, so a chart saved for a company you
   have since lost shows the same "no access" state as anywhere else.
 - **Demo sandboxes** start with the workspace "PepsiCo vs Coca-Cola" (`sandbox.py`
-  `sandbox_workspaces`: a margins chart for PEP vs KO, comps for PEP vs KO, KDP, MNST), written
-  in the sandbox's creation transaction; it is deleted with the sandbox user (ON DELETE CASCADE).
+  `sandbox_workspaces`: a margins chart for PEP vs KO, comps for PEP vs KO, KDP, MNST) and an
+  example analysis, "Nvidia" (`demo_analysis`: an analysis project on NVDA, nothing written in its
+  steps, so the web's Analysis opens on a project rather than "No analyses yet"; sandboxes only,
+  a GitHub or password account starts without it), written in the sandbox's creation
+  transaction; they are deleted with the sandbox user (ON DELETE CASCADE). `starter` takes a
+  `project` (validated like the API's), which `seed` writes to `workspaces.project`.
 - **Not streamed, no OpenFGA type.** Nothing is shared: a workspace is its owner's alone. Sharing
   would need a `workspace` type in `authz/model.fga` (`owner`, `viewer`) with model tests,
   `workspaces` (+ a shares table) in Debezium's `table.include.list` with REPLICA IDENTITY FULL,
