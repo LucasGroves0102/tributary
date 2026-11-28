@@ -48,7 +48,7 @@ with the Flux release's overrides:
 
 | Deployment | Image (command) | Replicas | Does |
 |---|---|---|---|
-| `poller` | poller | 1 | EDGAR's latest-filings feed every 30 s → `filings.raw` |
+| `poller` | poller | 1 | EDGAR's latest-filings feed every 30 s, paged back to the last poll (up to 20 pages) → `filings.raw` |
 | `bronze-loader` | bronze-loader | 1 | `filings.raw` → `bronze.filings` |
 | `doc-fetcher` | doc-fetcher | 1 | tracked companies' 10-K/10-Q/8-K, every operating company's new 10-K, 10-Q and material 8-K, and Forms 3/4/5 → bronze, `documents.fetched` |
 | `parser` | parser-rs | 1 | `documents.fetched` → `silver.filing_sections` |
@@ -66,6 +66,7 @@ CronJob schedules are New York time (`timeZone`). Every job has `concurrencyPoli
 | CronJob | Image (command) | Schedule | On hermes | Does |
 |---|---|---|---|---|
 | `backfill` | poller (`poller-backfill --days 30`) | daily 02:00 | on | completeness check against 30 days of EDGAR's daily indexes; republishes missing filings (027) |
+| `filings-recheck` | poller (`poller-recheck`) | weekdays hourly 06:05-23:05 | on | the latest-filings feed back to the previous filing day against bronze; republishes what the poller missed as `recheck`, records `ops.filing_rechecks` (169) |
 | `companies` | company-loader | daily 03:00 | on | company identity: CIKs, tickers, former names |
 | `financials` | facts-fetcher | daily 04:00 | on | tracked companies' XBRL companyfacts → bronze, silver, gold |
 | `financials-bulk` | facts-fetcher (`facts-fetcher-bulk`) | daily 05:00 | on | every filer's XBRL facts from `companyfacts.zip`, in batches of 500 changed companies; then the extremes report (072, `ops.extremes`) and the coverage report (076, `ops.coverage`) |

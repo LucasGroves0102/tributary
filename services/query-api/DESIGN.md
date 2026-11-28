@@ -854,7 +854,7 @@ route. The result is cached per process for 60 s (`max_age_seconds`).
 | Field | Source |
 |---|---|
 | `freshness` | `ops.feed_status()` (026): newest EDGAR acceptance and ingest time in `bronze.filings` |
-| `ingest` | `ops.public_ingest()`: filings accepted in the last 7 days, how many the live feed caught (`live_pct`), and p50/p95 seconds from EDGAR acceptance to bronze for those (feed rows only, as `ops.filing_latency`) |
+| `ingest` | `ops.public_ingest()`: filings accepted in the last 7 days, how many the live feed caught (`live_pct`), and p50/p95 seconds from EDGAR acceptance to bronze for those (feed rows only, as `ops.filing_latency`). `ops.public_catch()` (169) splits the rest: `via_recheck` (found by the hourly recheck, later the same hour or day; `recheck_p50_seconds`/`recheck_p95_seconds` exact, from the feed's acceptance time; `last_recheck_at`) and `via_index` (only the nightly daily-index check, the next day); all null on an older database |
 | `completeness` | `ops.public_completeness()`: the nightly completeness check (`ops.filing_completeness`, 027) over the last 30 days: days checked, accessions in EDGAR's daily indexes, missing at each day's latest check (then republished), rows republished. `days_checked` is 0 until the first run |
 | `coverage` | `ops.public_coverage()`: companies with `gold.quarterly_financials` rows, `bronze.filing_documents` rows, search-indexed filings and their sections (`ops.section_index`) |
 | `quality` | `ops.public_quality()`: `ops.quality_tiers`, one row per check and severity (072: a check can have two) with its `tier` (`error` a figure shown that can't be right, `warning` one to double-check, `kept_out` one the data leaves out, `coverage` one missing, `info`; an older database: the severity), findings, companies, `per_1000` (findings per 1,000 gold figures of the companies checked), companies checked, `figures`, last run |
@@ -866,7 +866,8 @@ route. The result is cached per process for 60 s (`max_age_seconds`).
 {"as_of": "2026-11-02T15:00:00+00:00", "max_age_seconds": 60,
  "freshness": {"last_accepted_at": "…", "last_ingested_at": "…"},
  "ingest": {"window_days": 7, "window_start": "…", "filings": 0, "via_feed": 0, "live_pct": null,
-            "p50_seconds": null, "p95_seconds": null},
+            "p50_seconds": null, "p95_seconds": null, "via_recheck": 0, "via_index": 0,
+            "recheck_p50_seconds": null, "recheck_p95_seconds": null, "last_recheck_at": null},
  "completeness": {"window_days": 30, "window_start": "2026-10-03", "days_checked": 0, "indexed": null,
                   "missing": null, "republished": null, "days_with_missing": 0, "last_checked_at": null},
  "coverage": {"companies_with_financials": 0, "documents": 0, "indexed_filings": 0, "sections": 0,

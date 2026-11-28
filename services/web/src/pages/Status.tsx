@@ -27,6 +27,19 @@ const count = (n: number | null | undefined) => (n === null || n === undefined ?
 
 export { duration };
 
+/** How the window's filings arrived: the live feed's as EDGAR listed them, the hourly check's
+ * later the same hour or day (with its typical lag), the nightly check's only the next day. An
+ * API without the split says what it always did. */
+export function caughtNote(i: DataStatus["ingest"]): string {
+  const live = `${count(i.via_feed)} of ${count(i.filings)} filings`;
+  if (i.via_recheck === undefined || i.via_recheck === null) {
+    return `${live}; the rest came from EDGAR's daily index`;
+  }
+  const lag = i.recheck_p50_seconds == null ? "" : ` (typically ${duration(i.recheck_p50_seconds)} after EDGAR)`;
+  return `${live} as EDGAR listed them; ${count(i.via_recheck)} later the same hour or day, by the hourly check${lag}; ` +
+    `${count(i.via_index)} only the next day, from EDGAR's daily index`;
+}
+
 /** "Nov 6, 2026, 3:30 PM PST": the app's one way to write a moment (format.ts `localTime`). */
 const stamp = (iso: string): string => localTime(iso, true);
 
@@ -108,9 +121,7 @@ function Body({ data, now, signedIn, readable }: { data: DataStatus; now: number
         <div>
           <div className="k">Caught by the live feed</div>
           <div className="v">{i.live_pct === null ? "—" : `${i.live_pct}%`}</div>
-          <div className="p">
-            {count(i.via_feed)} of {count(i.filings)} filings; the rest came from EDGAR's daily index
-          </div>
+          <div className="p">{caughtNote(i)}</div>
         </div>
         {c.catalog_companies ? (
           // one count everywhere (finding 36): the catalog's, as the front door and the sidebar say

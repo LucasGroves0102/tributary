@@ -32,12 +32,23 @@ def conn():
 
 def test_insert_is_idempotent(conn):
     rows = [to_row(event("test-1", "1"), 0, 0), to_row(event("test-1", "2"), 0, 1)]
-    assert insert_filings(conn, rows) == 2
-    assert insert_filings(conn, rows) == 0  # replay after a crash: no duplicates
+    assert [r for r, _ in insert_filings(conn, rows)] == rows
+    assert insert_filings(conn, rows) == []  # replay after a crash: no duplicates
     count = conn.execute(
         "SELECT count(*) FROM bronze.filings WHERE accession_no = 'test-1'"
     ).fetchone()[0]
     assert count == 2
+
+
+def test_only_new_rows_come_back_with_their_ingest_time(conn):
+    old = to_row(event("test-3", "1"), 0, 0)
+    insert_filings(conn, [old])
+    new = to_row(event("test-3", "2"), 0, 1)
+    got = insert_filings(conn, [old, new, new])  # a batch can repeat an event
+    assert [r for r, _ in got] == [new]
+    stored = conn.execute("SELECT ingested_at FROM bronze.filings WHERE accession_no = 'test-3'"
+                          " AND cik = '2'").fetchone()[0]
+    assert got[0][1] == stored
 
 
 def test_payload_round_trips(conn):

@@ -26,7 +26,8 @@ Which filings (`main.py` `Coverage`):
 
 - **tracked companies**: every 10-K, 10-Q and 8-K event, from any source (feed, daily index, seed);
 - **every other operating company** (gold financials, the document crawl's ~6,000): new filings
-  from the live feed (`source: feed`), so their documents and sections arrive within minutes. 8-Ks
+  from the live feed (`source: feed`, or `recheck`: one the poller missed, found by the hourly
+  recheck within the hour), so their documents and sections arrive within minutes. 8-Ks
   only when one of their items, read from the filing index (the first request anyway), is in
   `FETCH_8K_ITEMS` (default the material items: 1.01-1.03, 1.05, 2.01-2.06, 3.01-3.03, 4.01, 4.02,
   5.01-5.03, 7.01, 8.01; kept in step with the crawl's `CRAWL_8K_ITEMS`); an index that lists no
@@ -91,8 +92,9 @@ A Form 3/4/5 is the SEC's structured ownershipDocument XML, so it's read, not gu
 direct/indirect). Idempotent on the accession; a paper filing without the XML is logged and
 skipped. No new Kafka client or topic: the live doc-fetcher already reads `filings.raw`.
 
-- **Live** (`FETCH_INSIDERS`): every Form 3/4/5 in the feed under a tracked or operating company's
-  CIK, other than the reporting owner's own line (the feed lists a Form 4 once per filer). The
+- **Live** (`FETCH_INSIDERS`): every Form 3/4/5 in the feed (`source` feed or recheck) under a
+  tracked or operating company's CIK, other than the reporting owner's own line (the feed lists a
+  Form 4 once per filer). The
   consumer only queues it (`ops.insider_queue`, migration 059) and fetches the queue, oldest first,
   when Kafka has nothing for it (up to 10 s per idle second), or for 5 s after 5 minutes of
   continuous traffic: 10-Ks, 10-Qs and 8-Ks never wait behind Form 4s (3,268 of them on

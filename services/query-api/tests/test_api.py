@@ -90,6 +90,11 @@ class FakeStore:
             "parser": [{"check_name": "invalid_key", "severity": "error", "documents": 6,
                         "documents_checked": 4000, "last_checked_at": "2026-11-02T09:00:00Z",
                         "accession_no": "0001045810-26-000075"}],
+            "catch": {"window_start": "2026-10-26T15:00:00Z", "filings": 40000,
+                      "via_feed": 39000, "via_recheck": 800, "via_index": 150,
+                      "recheck_p50_seconds": 1712.04, "recheck_p95_seconds": 3301.5,
+                      "last_recheck_at": "2026-11-02T11:05:00Z",
+                      "accession_no": "0001045810-26-000075"},
             "gaps": [{"kind": "history_short", "reason": "fixable", "companies": 81,
                       "listed": 6068, "refreshed_at": "2026-11-17T10:05:00Z",
                       "company_id": NVDA},
@@ -477,7 +482,11 @@ def test_status_data_is_public_and_aggregate_only(client):
                          "coverage", "quality", "parser", "gaps", "recorded"}
     assert body["ingest"] == {"window_days": 7, "window_start": "2026-10-26T15:00:00Z",
                               "filings": 40000, "via_feed": 39000, "live_pct": 97.5,
-                              "p50_seconds": 41.2, "p95_seconds": 170.0}
+                              "p50_seconds": 41.2, "p95_seconds": 170.0,
+                              # 169: the rest by how they were caught
+                              "via_recheck": 800, "via_index": 150,
+                              "recheck_p50_seconds": 1712.0, "recheck_p95_seconds": 3301.5,
+                              "last_recheck_at": "2026-11-02T11:05:00Z"}
     assert body["coverage"]["companies_with_financials"] == 6025
     # the catalog's size (141): the sidebar's count, so every page says one number (Riley, test 10)
     assert body["coverage"]["catalog_companies"] == 6030

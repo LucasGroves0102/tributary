@@ -1,7 +1,9 @@
 from datetime import datetime
 from pathlib import Path
 
-from poller.edgar import parse_feed
+import httpx
+
+from poller.edgar import fetch_feed, parse_feed, parse_page
 
 FIXTURE = (Path(__file__).parent / "fixtures" / "feed.xml").read_bytes()
 
@@ -42,3 +44,33 @@ def test_skips_malformed_entry():
 def test_to_dict_is_json_ready():
     d = parse_feed(FIXTURE)[0].to_dict()
     assert isinstance(d["filed_at"], str)
+
+
+def test_page_keeps_feed_order_and_the_feed_time():
+    page = parse_page(FIXTURE)
+    assert page.updated == datetime.fromisoformat("2026-10-16T21:48:40-04:00")
+    assert page.filings == list(reversed(parse_feed(FIXTURE)))  # newest first
+    assert page.entries == 40
+
+
+def test_page_counts_malformed_entries():
+    # the feed's end is a page with fewer entries than asked, whether or not each one parses
+    xml = b"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+    <entry><title>garbage</title></entry></feed>"""
+    page = parse_page(xml)
+    assert (page.filings, page.entries, page.updated) == ([], 1, None)
+
+
+def test_fetch_feed_pages_with_start_and_count():
+    urls = []
+
+    def handle(request):
+        urls.append(request.url)
+        return httpx.Response(200, content=FIXTURE)
+
+    client = httpx.Client(transport=httpx.MockTransport(handle))
+    fetch_feed(client)
+    fetch_feed(client, start=200)
+    first, third = (dict(u.params) for u in urls)
+    assert first == {"action": "getcurrent", "output": "atom", "count": "100"}  # as before
+    assert third == {**first, "start": "200"}

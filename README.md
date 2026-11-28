@@ -185,8 +185,10 @@ flowchart LR
   alerts --> hooks
 ```
 
-The poller reads EDGAR's latest-filings feed into Kafka; a nightly check compares 30 days of
-EDGAR's daily indexes with what arrived and republishes anything missing. The doc fetcher stores
+The poller reads EDGAR's latest-filings feed into Kafka, paging back to what its last poll saw;
+an hourly recheck walks the same feed back a day and republishes what the poller missed, and a
+nightly check compares 30 days of EDGAR's daily indexes with what arrived and republishes
+anything still missing. The doc fetcher stores
 every operating company's new 10-K, 10-Q and material 8-K, and insiders' Forms 3, 4 and 5; a
 crawler takes the rest on its own topic. The Rust parser writes sections and tables; nightly loads
 keep identity, submissions and XBRL facts current; hourly and weekly jobs build search, diffs,

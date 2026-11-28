@@ -2,7 +2,7 @@
 
 | Topic | Key | Producer | Consumers | Value |
 |---|---|---|---|---|
-| `filings.raw` | CIK | poller, poller-backfill, doc-fetcher-seed | bronze-loader, doc-fetcher | `{accession_no, cik, company_name, role, form_type, filed_at, url, source}` |
+| `filings.raw` | CIK | poller, poller-recheck, poller-backfill, doc-fetcher-seed | bronze-loader, doc-fetcher | `{accession_no, cik, company_name, role, form_type, filed_at, url, source}` |
 | `documents.fetched` | CIK | doc-fetcher | parser: Python or parser-rs, group `parser-python` | `{accession_no, cik, form, document_name, url, content_sha256, size_bytes}` |
 | `documents.backfill` | CIK | doc-crawler (document crawl) | parser-backfill: same image as parser, group `parser-backfill` | `documents.fetched`'s shape plus `source: "crawl"` |
 
@@ -14,12 +14,15 @@ filing in `ops.insider_queue` (059) and fetches it when the consumer is idle, so
 the message path. The daily `doc-fetcher-insiders` catch-up reads the submissions index, not Kafka.
 The shape is unchanged.
 
-`source` is `feed` (live poller; `filed_at` is the exact acceptance time), `daily-index`
-(backfill; `filed_at` is midnight US Eastern and `role` is `Unknown`) or `seed`
-(doc-fetcher-seed history load; `filed_at` is the exact acceptance time, corrected from the
-submissions API, and `role` is `Filer`). Only `feed` events count in freshness and live-coverage
-metrics. Events from before the field existed have no `source` and came from the feed; earlier
-seed events without it were marked `seed` in bronze by `db/migrations/016_seed_source.sql`.
+`source` is `feed` (live poller; `filed_at` is the exact acceptance time), `recheck` (the hourly
+`poller-recheck`, migration 169: a feed entry the poller missed, found further down the same feed;
+`filed_at` and `role` as the feed gives them), `daily-index` (backfill; `filed_at` is midnight US
+Eastern and `role` is `Unknown`) or `seed` (doc-fetcher-seed history load; `filed_at` is the
+exact acceptance time, corrected from the submissions API, and `role` is `Filer`). Only `feed`
+events count in freshness and live-coverage metrics; `recheck` ones are counted apart (caught
+later the same hour or day). doc-fetcher takes `feed` and `recheck` events as live. Events from
+before the field existed have no `source` and came from the feed; earlier seed events without it
+were marked `seed` in bronze by `db/migrations/016_seed_source.sql`.
 
 `documents.fetched` references the document in `bronze.filing_documents` instead of
 embedding it: a 10-K is ~2 MB of HTML, over Kafka's default 1 MB message limit.
@@ -39,8 +42,9 @@ same shape and `source`; the live side never re-sends one.
 
 Each producer and consumer above is a Kafka principal with ACLs for exactly these topics and its
 group (Kafka SASL is on in production; `deploy/helm/platform/files/kafka-acls.yaml`: `poller`,
-`poller-backfill`, `doc-fetcher-seed`, `bronze-loader`, `doc-fetcher`, `doc-crawler`, `parser`,
-`parser-backfill`). A new producer or consumer of a topic needs its ACL there in the same change.
+`poller-backfill` (also the `filings-recheck` job's: the same image writing the same topic),
+`doc-fetcher-seed`, `bronze-loader`, `doc-fetcher`, `doc-crawler`, `parser`, `parser-backfill`).
+A new producer or consumer of a topic needs its ACL there in the same change.
 
 ## CDC topics (Debezium, from the `app` database)
 

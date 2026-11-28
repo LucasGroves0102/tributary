@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../App";
 import type { DataStatus } from "../types";
-import { companiesNote, duration, meaning, perThousand, share, Status, tierOf } from "./Status";
+import { caughtNote, companiesNote, duration, meaning, perThousand, share, Status, tierOf } from "./Status";
 
 const NOW = Date.parse("2026-11-02T15:00:00Z");
 
@@ -176,6 +176,24 @@ describe("Status", () => {
     await mount(<Status load={async () => quiet} now={() => NOW} />);
     expect(text()).toContain("95% within —");
     expect(text()).not.toContain("NaN");
+  });
+
+  it("says how the filings the live feed missed were caught, and when", async () => {
+    const split = status({
+      ingest: {
+        ...status().ingest, via_recheck: 800, via_index: 200, recheck_p50_seconds: 1500,
+        recheck_p95_seconds: 3300, last_recheck_at: "2026-11-02T14:05:00Z",
+      },
+    });
+    await mount(<Status load={async () => split} now={() => NOW} />);
+    expect(text()).toContain(
+      "39,000 of 40,000 filings as EDGAR listed them; 800 later the same hour or day, by the hourly check " +
+        "(typically 25.0 min after EDGAR); 200 only the next day, from EDGAR's daily index");
+    // a database before the recheck (nulls) or an older API (absent): the old words
+    expect(caughtNote(status().ingest)).toBe("39,000 of 40,000 filings; the rest came from EDGAR's daily index");
+    expect(caughtNote({ ...status().ingest, via_recheck: null, via_index: null }))
+      .toBe("39,000 of 40,000 filings; the rest came from EDGAR's daily index");
+    expect(caughtNote({ ...split.ingest, recheck_p50_seconds: null })).not.toContain("typically");
   });
 
   it("reconciles companies checked with companies shown as having financials", async () => {

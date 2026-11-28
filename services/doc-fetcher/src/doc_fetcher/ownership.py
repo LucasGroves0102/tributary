@@ -46,6 +46,10 @@ from tributary_sec.client import is_throttle
 from tributary_telemetry import configure_logging
 
 INSIDER_FORMS = frozenset({"3", "4", "5", "3/A", "4/A", "5/A"})
+# filings.raw sources that are the feed's own entries (exact time and role): the live poller's,
+# and the hourly recheck's for what it missed (streaming/topics.md). An event without one is
+# the feed's.
+LIVE_SOURCES = frozenset({"feed", "recheck"})
 # The root as filed: bare, with attributes (xmlns:xsi ...), or namespaced (a prefix, default xmlns)
 _DOCUMENT = re.compile(
     rb"<(?:([A-Za-z_][\w.-]*):)?ownershipDocument(?=[\s>/])[^>]*>.*?</(?:\1:)?ownershipDocument\s*>",
@@ -179,10 +183,10 @@ def fetch(conn: psycopg.Connection, client: httpx.Client, accession: str, cik: s
 
 
 def wanted(event: dict, ciks: Iterable[str] | frozenset[str]) -> bool:
-    """A live feed event the doc-fetcher stores: a Form 3/4/5 under its issuer's CIK (not the
-    reporting owner's line), for a company in `ciks`."""
+    """A live feed event (the poller's or the hourly recheck's) the doc-fetcher stores: a Form
+    3/4/5 under its issuer's CIK (not the reporting owner's line), for a company in `ciks`."""
     return (event["form_type"] in INSIDER_FORMS and event.get("role") != "Reporting"
-            and event.get("source", "feed") == "feed" and event["cik"] in ciks)
+            and event.get("source", "feed") in LIVE_SOURCES and event["cik"] in ciks)
 
 
 def enqueue(conn: psycopg.Connection, event: dict) -> None:

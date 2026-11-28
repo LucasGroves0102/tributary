@@ -8,7 +8,8 @@ from datetime import datetime
 import httpx
 
 FEED_URL = "https://www.sec.gov/cgi-bin/browse-edgar"
-FEED_PARAMS = {"action": "getcurrent", "output": "atom", "count": "100"}  # 100 is the max
+PAGE_SIZE = 100  # the feed's largest page (`count`)
+FEED_PARAMS = {"action": "getcurrent", "output": "atom", "count": str(PAGE_SIZE)}
 
 _NS = {"a": "http://www.w3.org/2005/Atom"}
 # "4 - WhiteFiber, Inc. (0002042022) (Issuer)" -> name, cik, role
@@ -28,7 +29,9 @@ class Filing:
     form_type: str
     filed_at: datetime  # SEC acceptance time, with timezone (midnight ET from daily-index)
     url: str  # filing index page
-    source: str = "feed"  # feed: live poller; daily-index: backfill
+    # feed: live poller; recheck: the hourly recheck, further down the same feed (exact time);
+    # daily-index: backfill (midnight ET)
+    source: str = "feed"
 
     @property
     def key(self) -> tuple[str, str]:
@@ -40,24 +43,41 @@ class Filing:
         return d
 
 
-def fetch_feed(client: httpx.Client) -> bytes:
-    """Return the raw Atom XML as bytes (the feed is ISO-8859-1; ElementTree reads the
-    declaration). Pass a client from tributary_sec.sec_client."""
-    resp = client.get(FEED_URL, params=FEED_PARAMS)
+@dataclass(frozen=True)
+class FeedPage:
+    """One page of the feed: its entries newest first, as the feed lists them."""
+
+    updated: datetime | None  # when EDGAR generated the page (its own clock)
+    filings: list[Filing]
+    entries: int  # <entry> elements, malformed ones included: fewer than asked = the feed's end
+
+
+def fetch_feed(client: httpx.Client, start: int = 0, count: int = PAGE_SIZE) -> bytes:
+    """Return one page of the raw Atom XML as bytes (the feed is ISO-8859-1; ElementTree reads
+    the declaration): `count` entries from the `start`-th newest. Pass a client from
+    tributary_sec.sec_client."""
+    params = {**FEED_PARAMS, "count": str(count)}
+    if start:
+        params["start"] = str(start)
+    resp = client.get(FEED_URL, params=params)
     resp.raise_for_status()
     return resp.content
 
 
+def parse_page(xml: bytes) -> FeedPage:
+    """Atom entries as Filing records in feed order (newest first). Malformed entries are
+    skipped but counted in `entries`."""
+    root = ET.fromstring(xml)
+    entries = root.findall("a:entry", _NS)
+    filings = [f for f in (_parse_entry(e) for e in entries) if f is not None]
+    updated = root.findtext("a:updated", "", _NS).strip()
+    return FeedPage(updated=datetime.fromisoformat(updated) if updated else None,
+                    filings=filings, entries=len(entries))
+
+
 def parse_feed(xml: bytes) -> list[Filing]:
     """Turn Atom entries into Filing records, oldest first. Malformed entries are skipped."""
-    root = ET.fromstring(xml)
-    filings = []
-    for entry in root.findall("a:entry", _NS):
-        filing = _parse_entry(entry)
-        if filing is not None:
-            filings.append(filing)
-    filings.reverse()  # feed is newest first; publish in filing order
-    return filings
+    return list(reversed(parse_page(xml).filings))  # feed is newest first; publish in order
 
 
 def _parse_entry(entry: ET.Element) -> Filing | None:

@@ -13,6 +13,10 @@ restated years). An older database without them reads every check by its severit
 `gaps` (076): the coverage sweep's open gaps per kind and reason over the listed companies it
 measured (`ops.public_coverage_gaps`): counts only, never a company.
 
+`ingest.via_recheck` / `via_index` (169, `ops.public_catch`): of the window's filings the live
+feed didn't catch, those the hourly recheck found (with its acceptance-to-bronze lag) and those
+only the nightly daily-index check did.
+
 `shape` copies named fields only, so a function that started returning more columns still
 couldn't put them on a public route. Results are cached for CACHE_SECONDS per process."""
 
@@ -92,6 +96,7 @@ def _gaps(rows: list[dict]) -> dict:
 
 def shape(raw: dict, recorded: dict) -> dict:
     ingest, completeness = raw.get("ingest") or {}, raw.get("completeness") or {}
+    catch = raw.get("catch") or {}
     filings, via_feed = ingest.get("filings") or 0, ingest.get("via_feed") or 0
     return {
         "freshness": _pick(raw.get("freshness") or {}, "last_accepted_at", "last_ingested_at"),
@@ -103,6 +108,13 @@ def shape(raw: dict, recorded: dict) -> dict:
             "live_pct": round(100 * via_feed / filings, 1) if filings else None,
             "p50_seconds": _round(ingest.get("p50_seconds")),
             "p95_seconds": _round(ingest.get("p95_seconds")),
+            # 169: the rest by how they were caught: the hourly recheck (later the same hour or
+            # day, its lag exact) or only the nightly daily-index check (None: older database)
+            "via_recheck": catch.get("via_recheck"),
+            "via_index": catch.get("via_index"),
+            "recheck_p50_seconds": _round(catch.get("recheck_p50_seconds")),
+            "recheck_p95_seconds": _round(catch.get("recheck_p95_seconds")),
+            "last_recheck_at": catch.get("last_recheck_at"),
         },
         "completeness": {
             "window_days": COMPLETENESS_DAYS,

@@ -941,7 +941,7 @@ class Store:
         """The public status page's aggregates (migration 028's SECURITY DEFINER functions):
         counts and timestamps only, no user. {freshness, ingest, completeness, coverage,
         quality: [one row per check and severity], parser: [one row per parser check] (072),
-        gaps: [one row per coverage kind and reason] (076)}."""
+        gaps: [one row per coverage kind and reason] (076), catch (169)}."""
         with self._session("") as cur:
             out = {}
             cur.execute("SELECT * FROM ops.feed_status()")
@@ -970,6 +970,13 @@ class Store:
             if row and row["ok"]:
                 cur.execute("SELECT * FROM ops.public_coverage_gaps()")
                 out["gaps"] = cur.fetchall()
+            # 169: how each filing was caught: live, by the hourly recheck or the nightly check
+            cur.execute("SELECT to_regprocedure('ops.public_catch()') IS NOT NULL AS ok")
+            row = cur.fetchone()
+            out["catch"] = {}
+            if row and row["ok"]:
+                cur.execute("SELECT * FROM ops.public_catch()")
+                out["catch"] = cur.fetchone() or {}
             return out
 
     def segment_metric_names(self) -> list[str]:
