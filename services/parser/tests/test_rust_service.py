@@ -1,6 +1,6 @@
 """The Python and Rust parser services (`parser --reparse-all`) on the same stored documents:
-identical silver rows (sections and rule 11's tables) apart from parser and parser_version, and
-the same log fields.
+identical silver rows (sections, rule 11's tables and rule 14's printed facts) apart from parser
+and parser_version, and the same log fields.
 
 Needs TEST_DATABASE_URL and PARSER_RS_BIN (the Rust `parser` binary, cargo build --bin parser).
 The services commit, so this test inserts its own documents into an empty bronze and deletes
@@ -38,6 +38,8 @@ ROWS = ("SELECT accession_no, section_key, parser, parser_version, part, item, t
 NO_HEADINGS = "9999999999-26-000000"
 TABLES = ("SELECT accession_no, section_key, parser, table_no, char_start, char_end, rows"
           " FROM silver.filing_tables ORDER BY accession_no, section_key, table_no")
+PRINTED = ("SELECT accession_no, parser, parser_version, facts FROM silver.printed_facts"
+           " ORDER BY accession_no")
 
 
 @pytest.fixture
@@ -68,8 +70,9 @@ def conn():
                 " %s, 'x', %s)", (DOCS[2][0], gzip.compress(EXHIBIT), len(EXHIBIT)))
             yield c
         finally:
-            for table in ("silver.filing_tables", "silver.filing_sections",
-                          "bronze.filing_exhibits", "bronze.filing_documents"):
+            for table in ("silver.printed_facts", "silver.filing_tables",
+                          "silver.filing_sections", "bronze.filing_exhibits",
+                          "bronze.filing_documents"):
                 c.execute(f"DELETE FROM {table} WHERE accession_no = ANY(%s)", (accessions,))
 
 
@@ -106,6 +109,10 @@ def test_rust_service_writes_what_the_python_service_writes(conn):
     py_tables = conn.execute(TABLES).fetchall()
     assert {r[2] for r in py_tables} == {"python"} and len(py_tables) > 100
     assert ("9999999999-26-000003", "EX-99.1") in {r[:2] for r in py_tables}
+    py_printed = conn.execute(PRINTED).fetchall()  # the 10-K and 10-Q, not the 8-K (rule 14)
+    assert [r[:3] for r in py_printed] == [("9999999999-26-000001", "python", PARSER_VERSION),
+                                           ("9999999999-26-000002", "python", PARSER_VERSION)]
+    assert [len(r[3]) for r in py_printed] == [671, 513]
 
     rs_logs = reparse_all([RUST or ""])
     rs_rows = conn.execute(ROWS).fetchall()
@@ -115,16 +122,22 @@ def test_rust_service_writes_what_the_python_service_writes(conn):
     rs_tables = conn.execute(TABLES).fetchall()
     assert {r[2] for r in rs_tables} == {"rust"}
     assert comparable_tables(rs_tables) == comparable_tables(py_tables)
+    rs_printed = conn.execute(PRINTED).fetchall()
+    assert {r[1:3] for r in rs_printed} == {("rust", PARSER_VERSION.replace("python", "rust"))}
+    assert [(r[0], r[3]) for r in rs_printed] == [(r[0], r[3]) for r in py_printed]
 
     # the same text again: the Rust service keeps the rows and their parsed_at, rewrites tables
     conn.execute("UPDATE silver.filing_sections SET parsed_at = '2020-01-01',"
                  " parser_version = 'rust-6'")
     conn.execute("DELETE FROM silver.filing_tables")
+    conn.execute("DELETE FROM silver.printed_facts")
     reparse_all([RUST or ""])
     assert conn.execute("SELECT DISTINCT parsed_at::date::text, parser_version"
                         " FROM silver.filing_sections").fetchall() == [
         ("2020-01-01", PARSER_VERSION.replace("python", "rust"))]
     assert comparable_tables(conn.execute(TABLES).fetchall()) == comparable_tables(py_tables)
+    assert [(r[0], r[3]) for r in conn.execute(PRINTED).fetchall()] == [
+        (r[0], r[3]) for r in py_printed]
 
     assert [comparable_log(x) for x in rs_logs] == [comparable_log(x) for x in py_logs]
     assert [list(x) for x in rs_logs] == [list(x) for x in py_logs]

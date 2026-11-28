@@ -78,6 +78,49 @@ stored filing before TOAST compression. The walk rebuilt `text_content()` exactl
 document and on 20,000 fuzzed ones. Python parse time went from 46 ms to 100 ms on NVIDIA's 10-K
 (parser-rs does the same walk in the pass that already builds the text).
 
+## Printed facts and contents-placed items (parser v9)
+
+Why (the owner, 2026-11-27): every audit's top finding was trust; the numbers were right (12 of 12
+traced) but unprovable, because figures (XBRL facts) and documents (sections) were never linked at
+the line. Inline XBRL already holds the link in bronze: rule 14 records it at parse time, in the same
+walk that builds the text, so its offsets are the text's by construction (both parsers, compared by
+`test_rust_service.py`, `scripts/fuzz.py` and `tests/sections.rs`).
+
+- What is kept: undimensioned `ix:nonFraction` facts with a period (62-71% of printed facts are
+  dimensioned: segments, members; gold reads undimensioned facts). Keeping them all would cost ~8 GB
+  instead of ~2.6 GB (budget in docs/test-people/reports/proof-layer/budget.md). `ix:nonNumeric`
+  holds text blocks, not figures: not kept.
+- Contexts and units are read on the tree before rule 1's drops (`ix:header` sits in a
+  display:none `div`); a fact whose context is unknown, dimensioned or without a period isn't kept.
+  Values are not computed here: the attributes are stored as written and SQL reads them (167), so a
+  format rule changes without a re-parse.
+- One row per document (not per section): a fact outside every section (a cover page's shares, a
+  10-Q whose statements no rule finds) is kept with no section, so the gate can tell "printed, not in
+  the reader" from "not printed".
+- Measured on 173 stored documents (md5-sampled per form and year, 2019-2026): 1,245 `ix:nonFraction`
+  a 10-Q (437 kept), 1,737 a 10-K (654), 2,351 a 20-F (679); 13% of a 10-Q's kept facts sat outside
+  every section before rule 15 (statements outside I-1). Prototype gate on the same sample: 13,721 of
+  13,738 matched silver facts agree with their printed value, 17 disagreed, all a reading problem
+  (`ixt-sec:numwordsen` "no"/"zero"/"nil", ".00"), which 167's reader handles.
+
+Rule 15 (contents-placed Part I items): a contents heading's entries are the lines after its title up
+to the next contents heading, page numbers and "Page" left out; the gap is the text between the
+contents and the body's first heading. Matching by rule 9's core and fold keeps "Consolidated
+financial highlights (unaudited)" equal to the entry "Consolidated Financial Highlights"; a line of
+two words or more may start an entry ("CONSOLIDATED BALANCE SHEETS" starts "Consolidated Balance
+Sheets as of March 31, 2025 and December 31, 2024"; three words missed AEI's statements). The rule
+runs only when the body lacks I-1 or I-2, so every other document parses as before: on the sample,
+167 of 174 byte for byte, 7 gain I-1 (6 BRT-style, JPMorgan also I-2). On hermes 13,600 10-Qs miss
+I-1 or I-2 (`ops.section_findings`), all inside 166's re-parse scope; their sections change, so
+section-index re-indexes them (hours).
+
+Scoped re-parse (migration 166): a document below 9 is due only when version 9 changes it: inline
+XBRL (`bronze.filing_xbrl` ok), a 20-F (no extract says which carry it), a 10-Q with a
+`missing_core_item` finding. Every other stored document (8-K, 6-K, 40-F, pre-iXBRL 10-K/10-Q) keeps
+`rust-8`: its v9 output is v8's. 135,135 documents, 335 GB of HTML; parser-backfill's measured peak
+(192-224 documents, 500-900 MB a minute) makes ~8 hours parser-bound, ~45 hours at the catch-up's
+3,000 an hour. A version after 9 scopes nothing unless it adds its own rule.
+
 ## Page furniture: left out where the text is read, not stripped (parser v7 decision)
 
 The printed filing's page furniture stays in the stored text: page numbers, "Table of Contents"

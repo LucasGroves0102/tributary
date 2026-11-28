@@ -57,10 +57,18 @@ pub fn html_to_text(raw: &[u8]) -> Result<String, Error> {
 
 /// Rule 1's text and rule 11's tables of the whole document, row offsets into that text.
 pub fn extract(raw: &[u8]) -> Result<(String, Vec<Table>), Error> {
+    let (text, tables, _) = extract_with(raw, true)?;
+    Ok((text, tables))
+}
+
+/// Rule 1's text, rule 11's tables and rule 14's printed facts (sections not yet assigned).
+pub fn extract_all(raw: &[u8]) -> Result<(String, Vec<Table>, Vec<PrintedFact>), Error> {
     extract_with(raw, true)
 }
 
-fn extract_with(raw: &[u8], tables: bool) -> Result<(String, Vec<Table>), Error> {
+type Extracted = (String, Vec<Table>, Vec<PrintedFact>);
+
+fn extract_with(raw: &[u8], tables: bool) -> Result<Extracted, Error> {
     let raw = strip_envelope(raw);
     let full = looks_like_full_html(raw);
     let mut dom = Parser::new(raw).parse();
@@ -68,6 +76,11 @@ fn extract_with(raw: &[u8], tables: bool) -> Result<(String, Vec<Table>), Error>
     if !matches!(dom.node(root).kind, Kind::Element(..)) {
         return Err(Error::NotAnElement);
     }
+    let header = if tables {
+        read_header(&dom, root)
+    } else {
+        Header::default()
+    };
     drop_hidden(&mut dom)?;
     let mut walk = Walk::default();
     let (content, exact) = dom.text_content(root, root_tail, tables.then_some(&mut walk))?;
@@ -105,11 +118,256 @@ fn extract_with(raw: &[u8], tables: bool) -> Result<(String, Vec<Table>), Error>
             lines.push(info);
         }
     }
-    if !tables || !exact || walk.tables.is_empty() {
-        return Ok((out, Vec::new()));
+    if !tables || !exact {
+        return Ok((out, Vec::new(), Vec::new()));
+    }
+    let facts = if walk.facts.is_empty() {
+        Vec::new()
+    } else {
+        printed_facts(&content, &lines, &out, &walk.facts, &dom, &header)
+    };
+    if walk.tables.is_empty() {
+        return Ok((out, Vec::new(), facts));
     }
     let found = rows_and_cells(&content, &lines, &out, walk.tables);
-    Ok((out, found))
+    Ok((out, found, facts))
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rule 14: printed facts beside the text
+
+/// An inline XBRL numeric fact (ix:nonFraction) where the text prints it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PrintedFact {
+    pub section: Option<String>, // the key of the section whose text holds it
+    pub concept: String,         // its name attribute: "us-gaap:Revenues"
+    pub context: String,         // contextref
+    pub unit_ref: Option<String>,
+    pub unit: Option<String>,  // the unit's measure: "USD", "USD/shares"
+    pub start: Option<String>, // the period's start (a duration), none for an instant
+    pub end: String,           // the period's end, or the instant
+    pub scale: Option<String>, // attributes as written
+    pub sign: Option<String>,
+    pub decimals: Option<String>,
+    pub format: Option<String>,
+    pub text: String,      // its characters in the text, '\n' read as ' '
+    pub char_start: usize, // [char_start, char_end) in characters of the document's text
+    pub char_end: usize,
+}
+
+/// What a name is to rule 14 (by rule 1's reading of it, ending in ":<this>").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ix {
+    None,
+    Fact,
+    Context,
+    Unit,
+    Measure,
+    Divide,
+    StartDate,
+    EndDate,
+    Instant,
+    Member,
+}
+
+impl Ix {
+    fn of(local: &str) -> Ix {
+        let Some((_, last)) = local.rsplit_once(':') else {
+            return Ix::None;
+        };
+        match last {
+            "nonfraction" => Ix::Fact,
+            "context" => Ix::Context,
+            "unit" => Ix::Unit,
+            "measure" => Ix::Measure,
+            "divide" => Ix::Divide,
+            "startdate" => Ix::StartDate,
+            "enddate" => Ix::EndDate,
+            "instant" => Ix::Instant,
+            "explicitmember" | "typedmember" => Ix::Member,
+            _ => Ix::None,
+        }
+    }
+
+    /// Elements whose attributes rule 14 reads.
+    fn keeps_attributes(self) -> bool {
+        matches!(self, Ix::Fact | Ix::Context | Ix::Unit)
+    }
+}
+
+/// The attributes rule 14 reads.
+const IX_ATTRIBUTES: &[&[u8]] = &[
+    b"id",
+    b"name",
+    b"contextref",
+    b"unitref",
+    b"scale",
+    b"sign",
+    b"decimals",
+    b"format",
+];
+
+/// A context (rule 14a): start, end, instant, and whether it is dimensioned.
+#[derive(Default)]
+struct Context {
+    start: Option<String>,
+    end: Option<String>,
+    instant: Option<String>,
+    dimensioned: bool,
+}
+
+/// Rule 14a's contexts and units, by id.
+#[derive(Default)]
+struct Header {
+    contexts: HashMap<String, Context>,
+    units: HashMap<String, Option<String>>,
+}
+
+/// A "*:nonfraction" element's [start, end) byte range in the content.
+struct RawFact {
+    node: u32,
+    start: usize,
+    end: usize,
+}
+
+/// Rule 14a on `root` and its descendants, before the drops.
+fn read_header(dom: &Dom, root: u32) -> Header {
+    let mut header = Header::default();
+    for id in dom.subtree(root) {
+        let ix = dom.ix(id);
+        if !matches!(ix, Ix::Context | Ix::Unit) {
+            continue;
+        }
+        let Some(key) = dom.attr(id, b"id") else {
+            continue;
+        };
+        if ix == Ix::Context {
+            header
+                .contexts
+                .entry(key)
+                .or_insert_with(|| read_context(dom, id));
+        } else {
+            header
+                .units
+                .entry(key)
+                .or_insert_with(|| read_unit(dom, id));
+        }
+    }
+    header
+}
+
+fn read_context(dom: &Dom, id: u32) -> Context {
+    let mut c = Context::default();
+    for d in dom.subtree(id).skip(1) {
+        let slot = match dom.ix(d) {
+            Ix::StartDate => &mut c.start,
+            Ix::EndDate => &mut c.end,
+            Ix::Instant => &mut c.instant,
+            Ix::Member => {
+                c.dimensioned = true;
+                continue;
+            }
+            _ => continue,
+        };
+        if slot.is_none() {
+            *slot = Some(py_strip(&dom.subtree_text(d)).to_string());
+        }
+    }
+    c
+}
+
+fn read_unit(dom: &Dom, id: u32) -> Option<String> {
+    let mut measures: Vec<String> = Vec::new();
+    let mut divide = false;
+    for d in dom.subtree(id).skip(1) {
+        match dom.ix(d) {
+            Ix::Measure => {
+                let text = dom.subtree_text(d);
+                let m = py_strip(&text);
+                measures.push(m.rsplit(':').next().unwrap_or("").to_string());
+            }
+            Ix::Divide => divide = true,
+            _ => {}
+        }
+    }
+    if divide && measures.len() == 2 {
+        return Some(format!("{}/{}", measures[0], measures[1]));
+    }
+    if measures.len() == 1 {
+        return measures.pop();
+    }
+    None
+}
+
+/// Rule 14b: the facts printed in the text, offsets into the whole text.
+fn printed_facts(
+    content: &str,
+    lines: &[Line],
+    text: &str,
+    raw: &[RawFact],
+    dom: &Dom,
+    header: &Header,
+) -> Vec<PrintedFact> {
+    let mut positions: Vec<usize> = raw.iter().flat_map(|f| [f.start, f.end]).collect();
+    positions.sort_unstable();
+    positions.dedup();
+    let landed = land(content, lines, text, &positions);
+    let spot = |p: usize| landed[positions.binary_search(&p).unwrap_or(0)];
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    for f in raw {
+        let Some(concept) = dom.attr(f.node, b"name").filter(|n| !n.is_empty()) else {
+            continue;
+        };
+        let Some(reference) = dom.attr(f.node, b"contextref") else {
+            continue;
+        };
+        let Some(context) = header.contexts.get(&reference) else {
+            continue;
+        };
+        if context.dimensioned {
+            continue;
+        }
+        let (start, end) = match (&context.end, &context.instant) {
+            (Some(e), _) if !e.is_empty() => (context.start.clone(), e.clone()),
+            (_, Some(i)) if !i.is_empty() => (None, i.clone()),
+            _ => continue,
+        };
+        let (mut a, _) = spot(f.start);
+        let (_, mut b) = spot(f.end);
+        while a.0 < b.0 && bytes[a.1] == b' ' {
+            a = (a.0 + 1, a.1 + 1);
+        }
+        while b.0 > a.0 && bytes[b.1 - 1] == b' ' {
+            b = (b.0 - 1, b.1 - 1);
+        }
+        if a.0 >= b.0 {
+            continue;
+        }
+        let unit_ref = dom.attr(f.node, b"unitref");
+        let unit = unit_ref
+            .as_ref()
+            .and_then(|u| header.units.get(u))
+            .cloned()
+            .flatten();
+        out.push(PrintedFact {
+            section: None,
+            concept,
+            context: reference,
+            unit_ref,
+            unit,
+            start,
+            end,
+            scale: dom.attr(f.node, b"scale"),
+            sign: dom.attr(f.node, b"sign"),
+            decimals: dom.attr(f.node, b"decimals"),
+            format: dom.attr(f.node, b"format"),
+            text: text[a.1..b.1].replace('\n', " "),
+            char_start: a.0,
+            char_end: b.0,
+        });
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -177,18 +435,30 @@ enum Frame {
     Thead(usize),
     Tr(usize, Option<usize>),
     Cell(usize, usize, usize),
+    Fact(usize),
 }
 
-/// Rule 11a while text_content() walks the tree: tables in document order, each its rows.
+/// Rule 11a while text_content() walks the tree: tables in document order, each its rows;
+/// and rule 14b's "*:nonfraction" elements in document order.
 #[derive(Default)]
 struct Walk {
     tables: Vec<Vec<RawRow>>,
     open: Vec<OpenTable>,
     frames: Vec<Frame>,
+    facts: Vec<RawFact>,
 }
 
 impl Walk {
-    fn enter(&mut self, part: TablePart, span: u32, at: usize) {
+    fn enter(&mut self, part: TablePart, span: u32, at: usize, fact: Option<u32>) {
+        if let Some(node) = fact {
+            self.facts.push(RawFact {
+                node,
+                start: at,
+                end: at,
+            });
+            self.frames.push(Frame::Fact(self.facts.len() - 1));
+            return;
+        }
         let frame = match part {
             TablePart::Table => {
                 self.tables.push(Vec::new());
@@ -245,6 +515,7 @@ impl Walk {
             Some(Frame::Thead(o)) => self.open[o].theads -= 1,
             Some(Frame::Tr(o, saved)) => self.open[o].row = saved,
             Some(Frame::Cell(t, r, c)) => self.tables[t][r].cells[c].end = at,
+            Some(Frame::Fact(i)) => self.facts[i].end = at,
             Some(Frame::Other) | None => {}
         }
     }
@@ -499,6 +770,9 @@ struct Dom {
     names: Names,
     /// Cells' colspans other than 1 (rule 11a), by node.
     spans: HashMap<u32, u32, BuildHasherDefault<Fnv>>,
+    /// Rule 14's attributes (IX_ATTRIBUTES) of facts, contexts and units, by node: the first of
+    /// each name, a valueless one as "".
+    attrs: HashMap<u32, Vec<(Box<[u8]>, Box<[u8]>)>, BuildHasherDefault<Fnv>>,
 }
 
 impl Dom {
@@ -516,6 +790,7 @@ impl Dom {
             text: Vec::new(),
             names: Names::new(),
             spans: HashMap::default(),
+            attrs: HashMap::default(),
         }
     }
 
@@ -702,7 +977,7 @@ impl Dom {
         }
         let mut out: Vec<u8> = Vec::with_capacity(self.text.len());
         if let Some(w) = walk.as_deref_mut() {
-            w.enter(self.table_part(root), self.span(root), 0);
+            w.enter(self.table_part(root), self.span(root), 0, self.fact(root));
         }
         let mut id = self.node(root).first;
         while id != NIL {
@@ -711,7 +986,7 @@ impl Dom {
                 Kind::Text(a, b) => out.extend_from_slice(&self.text[a as usize..b as usize]),
                 Kind::Element(..) => {
                     if let Some(w) = walk.as_deref_mut() {
-                        w.enter(self.table_part(id), self.span(id), out.len());
+                        w.enter(self.table_part(id), self.span(id), out.len(), self.fact(id));
                     }
                     if n.first != NIL {
                         id = n.first;
@@ -768,6 +1043,36 @@ impl Dom {
     /// A cell's colspan (rule 11a): 1 unless recorded.
     fn span(&self, id: u32) -> u32 {
         self.spans.get(&id).copied().unwrap_or(1)
+    }
+
+    /// What an element is to rule 14.
+    fn ix(&self, id: u32) -> Ix {
+        match self.node(id).kind {
+            Kind::Element(name, _) => self.names.info(name).ix,
+            _ => Ix::None,
+        }
+    }
+
+    /// The node itself when it is a "*:nonfraction" element (rule 14b).
+    fn fact(&self, id: u32) -> Option<u32> {
+        (self.ix(id) == Ix::Fact).then_some(id)
+    }
+
+    /// lxml `el.get(name)` for rule 14's attributes.
+    fn attr(&self, id: u32, name: &[u8]) -> Option<String> {
+        let (_, v) = self.attrs.get(&id)?.iter().find(|(n, _)| &**n == name)?;
+        Some(String::from_utf8_lossy(v).into_owned())
+    }
+
+    /// lxml `el.text_content()` before the tails rule 1 adds: the subtree's text nodes.
+    fn subtree_text(&self, id: u32) -> String {
+        let mut out = Vec::new();
+        for d in self.subtree(id) {
+            if let Kind::Text(a, b) = self.node(d).kind {
+                out.extend_from_slice(&self.text[a as usize..b as usize]);
+            }
+        }
+        String::from_utf8_lossy(&out).into_owned()
     }
 }
 
@@ -953,6 +1258,7 @@ struct NameInfo {
     tail: Tail,
     drop: bool,
     table_part: TablePart,
+    ix: Ix,
 }
 
 struct Names {
@@ -1016,6 +1322,7 @@ impl Names {
             tail,
             drop: DROP.contains(&&*s),
             table_part,
+            ix: Ix::of(&local),
             name: s,
         };
         self.infos.push(info);
@@ -2124,7 +2431,8 @@ impl<'a> Parser<'a> {
             self.tree.dom.names.info(name).table_part,
             TablePart::Td | TablePart::Th
         );
-        let atts = self.attributes(meta || cell);
+        let ix = self.tree.dom.names.info(name).ix.keeps_attributes();
+        let atts = self.attributes(meta || cell || ix);
         if self.at_end() {
             return false;
         }
@@ -2152,6 +2460,16 @@ impl<'a> Parser<'a> {
             let span = colspan(value);
             if span != 1 {
                 self.tree.dom.spans.insert(node, span);
+            }
+        }
+        if let Some(node) = node.filter(|_| ix) {
+            let kept: Vec<(Box<[u8]>, Box<[u8]>)> = atts
+                .iter()
+                .filter(|(n, _)| IX_ATTRIBUTES.contains(&n.as_slice()))
+                .map(|(n, v)| (n.as_slice().into(), v.as_deref().unwrap_or_default().into()))
+                .collect();
+            if !kept.is_empty() {
+                self.tree.dom.attrs.insert(node, kept);
             }
         }
         true

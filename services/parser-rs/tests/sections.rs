@@ -3,11 +3,17 @@
 use std::io::Read;
 use std::path::Path;
 
-use filing_parser::{Section, exhibit_section, find_sections, html_to_text, parse};
+use filing_parser::{
+    PrintedFact, Section, exhibit_section, find_sections, html_to_text, parse, parse_document,
+};
 
 fn fixture(form: &str) -> Vec<u8> {
+    named_fixture(&format!("nvda-{form}"))
+}
+
+fn named_fixture(name: &str) -> Vec<u8> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../parser/tests/fixtures/nvda-{form}.htm.gz"));
+        .join(format!("../parser/tests/fixtures/{name}.htm.gz"));
     let mut out = Vec::new();
     flate2::read::GzDecoder::new(std::fs::File::open(path).unwrap())
         .read_to_end(&mut out)
@@ -811,4 +817,386 @@ fn twenty_f_items_and_whole_documents() {
     assert!(found[2].text.ends_with("Item 16L. y\nz"));
     let plain = "Annual Report and Form 20-F 2025\nRisk factors\nOur risks.";
     assert_eq!(keys(&find_sections(plain, "20-F/A").unwrap()), ["20-F"]);
+}
+
+// Rule 14: printed facts (test_sections.py's test_printed_facts_*)
+
+const IX_HEADER: &str = concat!(
+    "<div style=\"display:none\"><ix:header><ix:resources>",
+    "<xbrli:context id=\"q\"><xbrli:entity><xbrli:identifier>1</xbrli:identifier></xbrli:entity>",
+    "<xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate>",
+    "<xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>",
+    "<xbrli:context id=\"i\"><xbrli:period><xbrli:instant> 2026-07-26 </xbrli:instant>",
+    "</xbrli:period></xbrli:context>",
+    "<xbrli:context id=\"d\"><xbrli:entity><xbrli:segment><xbrldi:explicitMember dimension=\"a\">",
+    "x:M</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period>",
+    "<xbrli:instant>2026-07-26</xbrli:instant></xbrli:period></xbrli:context>",
+    "<xbrli:context id=\"q\"><xbrli:period><xbrli:instant>1999-01-01</xbrli:instant>",
+    "</xbrli:period></xbrli:context>",
+    "<xbrli:context id=\"f\"><xbrli:period><xbrli:forever/></xbrli:period></xbrli:context>",
+    "<xbrli:unit id=\"usd\"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>",
+    "<xbrli:unit id=\"eps\"><xbrli:divide><xbrli:unitNumerator><xbrli:measure>iso4217:USD",
+    "</xbrli:measure></xbrli:unitNumerator><xbrli:unitDenominator><xbrli:measure>xbrli:shares",
+    "</xbrli:measure></xbrli:unitDenominator></xbrli:divide></xbrli:unit>",
+    "</ix:resources><ix:hidden>",
+    "<ix:nonFraction name=\"dei:Hidden\" contextRef=\"i\" unitRef=\"usd\">5</ix:nonFraction>",
+    "</ix:hidden></ix:header></div>",
+);
+
+const IX_BODY: &str = concat!(
+    "<p>Shares outstanding: <ix:nonFraction name=\"dei:Shares\" contextRef=\"i\" unitRef=\"sh\">",
+    "24.1</ix:nonFraction> billion</p>",
+    "<p>Item 1. Financial Statements</p>",
+    "<table><tr><td>Revenue</td><td>$</td><td>",
+    "<ix:nonFraction name=\"us-gaap:Revenues\" contextRef=\"q\" unitRef=\"usd\" scale=\"6\"",
+    " decimals=\"-6\" format=\"ixt:num-dot-decimal\">96,221</ix:nonFraction></td></tr>",
+    "<tr><td>EPS</td><td><ix:nonFraction name=\"us-gaap:EarningsPerShareDiluted\" contextRef=\"q\"",
+    " unitRef=\"eps\" decimals=\"2\">3.91</ix:nonFraction></td></tr>",
+    "<tr><td>Cash</td><td>(<ix:nonFraction name=\"us-gaap:Cash\" contextRef=\"i\" unitRef=\"usd\"",
+    " sign=\"-\" scale Decimals=\"-3\" decimals=\"-6\">1,2 34</ix:nonFraction>)</td></tr>",
+    "<tr><td>Segment</td><td><ix:nonFraction name=\"us-gaap:Revenues\" contextRef=\"d\"",
+    " unitRef=\"usd\">7</ix:nonFraction></td></tr>",
+    "<tr><td>Unknown</td><td><ix:nonFraction name=\"us-gaap:Revenues\" contextRef=\"zz\"",
+    " unitRef=\"usd\">8</ix:nonFraction><ix:nonFraction name=\"us-gaap:Revenues\" contextRef=\"f\"",
+    " unitRef=\"usd\">9</ix:nonFraction><ix:nonFraction name=\"\" contextRef=\"q\">10",
+    "</ix:nonFraction></td></tr>",
+    "<tr><td>Nil</td><td><ix:nonFraction name=\"us-gaap:Revenues\" contextRef=\"q\" unitRef=\"usd\"",
+    " xsi:nil=\"true\"></ix:nonFraction></td></tr></table>",
+    "<p>Item 2. Management's Discussion</p><p>Revenue was $",
+    "<ix:nonFraction name=\"us-gaap:Revenues\" contextRef=\"q\" unitRef=\"usd\" scale=\"9\"",
+    " decimals=\"-8\">96.2</ix:nonFraction> billion.</p>",
+);
+
+fn fact_row(f: &PrintedFact) -> [Option<&str>; 12] {
+    [
+        f.section.as_deref(),
+        Some(f.concept.as_str()),
+        Some(f.context.as_str()),
+        f.unit_ref.as_deref(),
+        f.unit.as_deref(),
+        f.start.as_deref(),
+        Some(f.end.as_str()),
+        f.scale.as_deref(),
+        f.sign.as_deref(),
+        f.decimals.as_deref(),
+        f.format.as_deref(),
+        Some(f.text.as_str()),
+    ]
+}
+
+#[test]
+fn printed_facts_with_their_contexts_units_and_sections() {
+    let raw = format!("<html><body>{IX_HEADER}{IX_BODY}</body></html>");
+    let (sections, facts) = parse_document(raw.as_bytes(), "10-Q").unwrap();
+    let text = html_to_text(raw.as_bytes()).unwrap();
+    assert_eq!(keys(&sections), ["I-1", "I-2"]);
+    let rows: Vec<[Option<&str>; 12]> = facts.iter().map(fact_row).collect();
+    let q = (Some("2026-04-27"), Some("2026-07-26"));
+    assert_eq!(
+        rows,
+        [
+            [
+                None,
+                Some("dei:Shares"),
+                Some("i"),
+                Some("sh"),
+                None,
+                None,
+                Some("2026-07-26"),
+                None,
+                None,
+                None,
+                None,
+                Some("24.1")
+            ],
+            [
+                Some("I-1"),
+                Some("us-gaap:Revenues"),
+                Some("q"),
+                Some("usd"),
+                Some("USD"),
+                q.0,
+                q.1,
+                Some("6"),
+                None,
+                Some("-6"),
+                Some("ixt:num-dot-decimal"),
+                Some("96,221")
+            ],
+            [
+                Some("I-1"),
+                Some("us-gaap:EarningsPerShareDiluted"),
+                Some("q"),
+                Some("eps"),
+                Some("USD/shares"),
+                q.0,
+                q.1,
+                None,
+                None,
+                Some("2"),
+                None,
+                Some("3.91")
+            ],
+            [
+                Some("I-1"),
+                Some("us-gaap:Cash"),
+                Some("i"),
+                Some("usd"),
+                Some("USD"),
+                None,
+                Some("2026-07-26"),
+                Some(""),
+                Some("-"),
+                Some("-3"),
+                None,
+                Some("1,2 34")
+            ],
+            [
+                Some("I-2"),
+                Some("us-gaap:Revenues"),
+                Some("q"),
+                Some("usd"),
+                Some("USD"),
+                q.0,
+                q.1,
+                Some("9"),
+                None,
+                Some("-8"),
+                None,
+                Some("96.2")
+            ],
+        ]
+    );
+    for f in &facts {
+        assert_eq!(chars(&text, f.char_start, f.char_end), f.text);
+    }
+    assert_eq!(parse(raw.as_bytes(), "10-Q").unwrap(), sections);
+    let exhibit = exhibit_section("EX-99.1", None, raw.as_bytes()).unwrap();
+    assert_eq!(exhibit.text, text);
+    assert!(parse_document(&fixture("8-K"), "8-K").unwrap().1.is_empty());
+}
+
+#[test]
+fn printed_facts_on_real_filings() {
+    for (name, form, count, key) in [
+        ("nvda-10-Q", "10-Q", 513, "I-1"),
+        ("nvda-10-K", "10-K", 671, "15"),
+        ("jpm-10-Q", "10-Q", 241, "I-1"),
+    ] {
+        let raw = named_fixture(name);
+        let (sections, found) = parse_document(&raw, form).unwrap();
+        let text = html_to_text(&raw).unwrap();
+        assert_eq!(found.len(), count, "{name}");
+        let in_key = found
+            .iter()
+            .filter(|f| f.section.as_deref() == Some(key))
+            .count();
+        assert!(in_key > count / 2, "{name}");
+        for f in &found {
+            assert_eq!(
+                chars(&text, f.char_start, f.char_end).replace('\n', " "),
+                f.text
+            );
+            if let Some(k) = &f.section {
+                let s = section(&sections, k);
+                let at = f.char_start - s.char_start;
+                assert_eq!(chars(&s.text, at, at + f.char_end - f.char_start), f.text);
+            }
+        }
+    }
+    let (_, found) = parse_document(&fixture("10-Q"), "10-Q").unwrap();
+    let revenue = found
+        .iter()
+        .find(|f| f.concept == "us-gaap:Revenues")
+        .unwrap();
+    assert_eq!(revenue.section.as_deref(), Some("I-1"));
+    assert_eq!(revenue.text, "96,221");
+    assert_eq!(revenue.start.as_deref(), Some("2026-04-27"));
+    assert_eq!(revenue.unit.as_deref(), Some("USD"));
+}
+
+// Rule 15: a 10-Q's Part I items 1 and 2 placed by its contents
+
+const CONTENTS_10Q: &str = concat!(
+    "FORM 10-Q\nTABLE OF CONTENTS\nPart I - Financial information\nPage\nItem 1.\n",
+    "Financial Statements\n",
+    "Consolidated statements of income (unaudited) for the three months ended June 30\n92\n",
+    "Notes to Consolidated Financial Statements (unaudited)\n97\nPage\nItem 2.\n",
+    "Management's Discussion and Analysis of Financial Condition and Results of Operations.\n",
+    "Consolidated Financial Highlights\n3\nIntroduction\n4\nItem 3.\n",
+    "Quantitative and Qualitative Disclosures About Market Risk.\n202\n",
+    "Part II - Other information\nItem 1. Legal Proceedings.\n202\n",
+    "Item 3. Defaults Upon Senior Securities.\n203\n2",
+);
+
+fn body() -> String {
+    "Words of the body. ".repeat(30)
+}
+
+#[test]
+fn contents_place_items_1_and_2_jpmorgan_style() {
+    let body = body();
+    let b = body.as_str();
+    let text = [
+        CONTENTS_10Q,
+        "JPMorgan Chase & Co.",
+        "Consolidated financial highlights (unaudited)",
+        b,
+        "Introduction",
+        b,
+        "91",
+        "Consolidated statements of income (unaudited)",
+        b,
+        "NOTES TO CONSOLIDATED FINANCIAL STATEMENTS (unaudited)",
+        b,
+        "Item 3. Quantitative and Qualitative Disclosures About Market Risk.",
+        b,
+        "Part II - Other Information",
+        "Item 1. Legal Proceedings.",
+        b,
+    ]
+    .join("\n");
+    let sections = find_sections(&text, "10-Q").unwrap();
+    let found: Vec<(&str, Option<&str>, &str, &str)> = sections
+        .iter()
+        .map(|s| {
+            (
+                s.key.as_str(),
+                s.part.as_deref(),
+                s.item.as_str(),
+                s.title.as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (
+                "I-2",
+                Some("I"),
+                "2",
+                "Management's Discussion and Analysis of Financial Condition and Results of \
+                 Operations."
+            ),
+            ("I-1", Some("I"), "1", "Financial Statements"),
+            (
+                "I-3",
+                Some("I"),
+                "3",
+                "Quantitative and Qualitative Disclosures About Market Risk."
+            ),
+            ("II-1", Some("II"), "1", "Legal Proceedings."),
+        ]
+    );
+    assert!(
+        sections[0]
+            .text
+            .starts_with("Consolidated financial highlights (unaudited)")
+    );
+    assert!(
+        sections[1]
+            .text
+            .starts_with("Consolidated statements of income (unaudited)")
+    );
+    assert!(sections[1].text.contains("NOTES TO"));
+    for s in &sections {
+        assert_eq!(chars(&text, s.char_start, s.char_end).trim(), s.text);
+    }
+    let ten_k = find_sections(&text, "10-K").unwrap();
+    assert!(!ten_k.iter().any(|s| {
+        s.text.starts_with("Consolidated statements")
+            || s.text.starts_with("Consolidated financial")
+    }));
+}
+
+#[test]
+fn contents_place_item_1_the_body_keys_under_the_last_part() {
+    let body = body();
+    let b = body.as_str();
+    let mdna = "Item 2. Management's Discussion and Analysis of Financial Condition and Results of \
+                Operations";
+    let text = [
+        "Part I - Financial Information",
+        "Item 1. Financial Statements",
+        "Consolidated Balance Sheets - June 30, 2026 (unaudited) and December 31, 2025",
+        "3",
+        mdna,
+        "20",
+        "Part II - Other Information",
+        "Item 2. Unregistered Sales of Equity Securities and Use of Proceeds",
+        "34",
+        "Item 6. Exhibits",
+        "35",
+        "Item 1. Financial Statements",
+        "BRT APARTMENTS CORP.",
+        "CONSOLIDATED BALANCE SHEETS",
+        "(Unaudited)",
+        b,
+        mdna,
+        b,
+        "Part II - Other Information",
+        "Item 2. Unregistered Sales of Equity Securities and Use of Proceeds",
+        b,
+        "Item 6. Exhibits",
+        b,
+    ]
+    .join("\n");
+    let sections = find_sections(&text, "10-Q").unwrap();
+    assert_eq!(keys(&sections), ["I-1", "I-2", "II-2", "II-6"]);
+    assert!(sections[0].text.starts_with("CONSOLIDATED BALANCE SHEETS"));
+    assert_eq!(sections[0].title, "Financial Statements");
+}
+
+#[test]
+fn contents_entries_page_numbers_and_short_lines() {
+    let body = body();
+    let b = body.as_str();
+    let contents = concat!(
+        "Part I\nItem 1.\nFinancial Statements\nPage\n12 \nOperations\nItem 2.\n",
+        "Management's Discussion\nOperations\nItem 3. Market Risk\n4\nItem 4. Controls\n5",
+    );
+    let text = [
+        contents,
+        "Page",
+        "12",
+        "operations.",
+        b,
+        "Item 3. Market Risk",
+        b,
+        "Item 4. Controls",
+        b,
+    ]
+    .join("\n");
+    let sections = find_sections(&text, "10-Q").unwrap();
+    assert_eq!(keys(&sections), ["I-1", "I-3", "I-4"]);
+    let at = text[..text.find("operations.").unwrap()].chars().count();
+    assert_eq!(sections[0].char_start, at);
+    let one_word = text.replace("operations.", "Statements");
+    assert_eq!(
+        keys(&find_sections(&one_word, "10-Q").unwrap()),
+        ["I-3", "I-4"]
+    );
+}
+
+#[test]
+fn contents_items_on_jpmorgans_10q() {
+    let sections = parse(&named_fixture("jpm-10-Q"), "10-Q").unwrap();
+    assert_eq!(
+        keys(&sections),
+        [
+            "I-2", "I-1", "I-3", "I-4", "II-1", "II-1A", "II-2", "II-3", "II-4", "II-5", "II-6"
+        ]
+    );
+    let mdna = section(&sections, "I-2");
+    assert!(
+        mdna.text
+            .starts_with("Consolidated financial highlights (unaudited)")
+    );
+    let statements = section(&sections, "I-1");
+    assert!(
+        statements
+            .text
+            .starts_with("Consolidated statements of income (unaudited)")
+    );
+    assert!(statements.text.contains("Total net revenue"));
 }

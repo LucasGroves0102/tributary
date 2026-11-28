@@ -9,7 +9,7 @@ citations from the `gold.filing_sections` view.
 | | |
 |---|---|
 | Input | `documents.fetched` (consumer group `parser-python`), `bronze.filing_documents`, `bronze.filing_exhibits` |
-| Output | `silver.filing_sections`: key, part, item, title, text, character offsets into the document text; `silver.filing_tables`: each section's HTML tables, rows and cells with offsets into its text (rule 11, migration 067) |
+| Output | `silver.filing_sections`: key, part, item, title, text, character offsets into the document text; `silver.filing_tables`: each section's HTML tables, rows and cells with offsets into its text (rule 11, migration 067); `silver.printed_facts`: where each inline XBRL fact is printed (rule 14, migration 166) |
 | Metrics | `tributary_documents_parsed_total{form}`, `tributary_parse_failures_total{form}`, `tributary_parse_duration_seconds{form}` |
 
 Section keys: 10-K `1A`, 10-Q `II-1A`, 8-K `2.02`, 20-F `3.D` (its items 1-19 like a 10-K's),
@@ -39,6 +39,7 @@ runbooks: [DESIGN.md](DESIGN.md).
 | `python-6` / `rust-6` | a decimal item run into its title ("Item 7.01Regulation") keeps its number (rule 2); [DESIGN.md](DESIGN.md#a-decimal-item-run-into-its-title-rule-2-python-6--rust-6) |
 | `python-7` / `rust-7` | tables recorded beside the text (rule 11, migration 067); text, keys, titles and offsets unchanged |
 | `python-8` / `rust-8` | Form 20-F items and 3.D (rule 12), 6-K and 40-F documents whole (rule 13); 10-K, 10-Q and 8-K output unchanged |
+| `python-9` / `rust-9` | printed facts beside the text (rule 14, migration 166; text, keys and offsets unchanged); a 10-Q's Part I items 1 and 2 placed by its contents when the body heads neither (rule 15: JPMorgan, BRT); [below](#printed-facts-rule-14-python-9--rust-9) |
 
 ## Run
 
@@ -82,6 +83,35 @@ The checks (072, replaced in 095) know their keys; an original 20-F's core items
 after Item 19 (the statements then sit in section 19), What changed for 20-Fs, peers by business
 from Item 4. The test documents are shaped like real 20-Fs, 6-Ks and 40-Fs, not copied: none was
 stored on hermes when the rules were written; replace them with stored ones once the crawl has some.
+
+## Printed facts (rule 14, `python-9` / `rust-9`)
+
+A 10-K, 10-Q or 20-F filed since inline XBRL is its own XBRL instance: each printed number is an
+`ix:nonFraction` naming its concept, context (period), unit, scale, sign and format. While extracting
+a primary document's text the parser reads the contexts and units in its `ix:header` (before rule 1
+drops it), then records every `ix:nonFraction` the text prints whose context has a period and no
+dimensions: its document offsets (the coordinates of sections' `char_start` and the reader's `?at=`),
+the section that holds it (or none), the concept, `contextref`, `unitref` and the unit's measure, the
+period, the scale, sign, decimals and format as written, and the printed characters. One
+`silver.printed_facts` row per document (jsonb, short keys; migration 166's header); none without
+inline XBRL; exhibits have none (a 40-F's tagged statements sit in its EX-99.x: not yet). Nothing
+else changes: a re-parse that yields the same sections keeps their rows and `parsed_at` and writes
+only this row. Migration 167 joins these to silver's facts (the gate). Measured on 173 stored
+documents (2026-11-28): 437 kept facts a 10-Q, 654 a 10-K, 679 a 20-F; ~2.6 GB for every stored
+iXBRL document ([DESIGN.md](DESIGN.md#printed-facts-and-contents-placed-items-parser-v9)).
+
+## A 10-Q's Part I items placed by its contents (rule 15, `python-9` / `rust-9`)
+
+JPMorgan's 10-Q lists "Item 1. Financial Statements" and "Item 2. MD&A" in its contents, each with its
+entries ("Consolidated statements of income (unaudited) ...", "Consolidated Financial Highlights"),
+and heads neither in the body, so rule 3's body started at Item 3 and the statements and MD&A were in
+no section (4 of 4 JPM citations dead-ended). BRT Apartments' 10-Q loses Item 1 another way: its
+contents end with Part II's items, so the body's "Item 1" counts as Part II's. Rule 15: when a 10-Q's
+body has no I-1 (or I-2) and its contents list the item, the first line between the contents and the
+body that is one of the item's entries (by rule 9's core and fold; or, with two words or more, the
+start of one) starts it. 7 of 174 sampled documents gain I-1 (and JPM's I-2); the other 167 parse
+byte for byte as before. Fixture: `jpm-10-Q.htm.gz` (whole pages of the stored 10-Q, its header's
+dimensioned contexts dropped).
 
 ## Tables in the text
 
@@ -252,6 +282,11 @@ nothing until the owner runs
 ```sql
 UPDATE ops.catchup SET paused = false WHERE kind = 'parser';   -- `true` pauses it again
 ```
+
+Version 9 (rules 14 and 15) is scoped (migration 166): `ops.parser_catchup` re-queues a document
+below 9 only when version 9 changes it (inline XBRL, a 20-F, or a 10-Q with a `missing_core_item`
+finding); 135,135 of 666,263 on hermes (2026-11-28), ~45 hours. Migration 166 ships the parser kind
+paused (the owner's OK of the measured budget first).
 
 From the next `section-index` run (hourly at :40) it re-queues 3,000 documents an hour, which
 `doc-crawler` publishes within about 30 minutes and `parser-backfill` parses: on 2026-11-16, 595,775

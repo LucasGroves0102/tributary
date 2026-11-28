@@ -6,15 +6,17 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::Error;
-use crate::html::{Row, Table, extract};
+use crate::html::{PrintedFact, Row, Table, extract, extract_all};
 use crate::pystr::{
     CharIndex, char_len, fold_letter, is_decimal, is_space, is_word, py_strip, upper,
 };
 
-pub const PARSER_VERSION: &str = "rust-8"; // 8: 20-F items with 3.D and sub-item headings
-// dropped (rule 12), 6-K / 40-F whole documents (rule 13); 7: tables beside the text (rule 11; the
-// text is 6's); 6: "Item 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title
-// headings (rule 9); 3: MD&A by reference, exhibits, SGML envelope
+pub const PARSER_VERSION: &str = "rust-9"; // 9: printed facts beside the text (rule 14; the
+// text is 8's), a 10-Q's Part I items 1 and 2 placed by its contents (rule 15); 8: 20-F items
+// with 3.D and sub-item headings dropped (rule 12), 6-K / 40-F whole documents (rule 13); 7:
+// tables beside the text (rule 11; the text is 6's); 6: "Item 7.01Regulation" is 7.01 (rule 2);
+// 5: clean titles (rule 10); 4: title headings (rule 9); 3: MD&A by reference, exhibits, SGML
+// envelope
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Section {
@@ -29,12 +31,31 @@ pub struct Section {
 }
 
 pub fn parse(raw: &[u8], form: &str) -> Result<Vec<Section>, Error> {
-    let (text, tables) = extract(raw)?;
-    let sections = find_sections(&text, form)?;
-    Ok(sections
+    Ok(parse_document(raw, form)?.0)
+}
+
+/// A primary document's sections (rules 1-13, 15, with rule 11's tables) and printed facts
+/// (rule 14).
+pub fn parse_document(raw: &[u8], form: &str) -> Result<(Vec<Section>, Vec<PrintedFact>), Error> {
+    let (text, tables, mut facts) = extract_all(raw)?;
+    let sections: Vec<Section> = find_sections(&text, form)?
         .into_iter()
         .map(|s| with_tables(s, &tables))
-        .collect())
+        .collect();
+    let bounds: Vec<(usize, usize)> = sections
+        .iter()
+        .map(|s| (s.char_start, s.char_start + char_len(&s.text)))
+        .collect();
+    for f in &mut facts {
+        // rule 14c: the first section whose text holds the fact's characters
+        let (a, b) = (f.char_start, f.char_end);
+        f.section = sections
+            .iter()
+            .zip(&bounds)
+            .find(|&(_, &(lo, hi))| lo <= a && b <= hi)
+            .map(|(s, _)| s.key.clone());
+    }
+    Ok((sections, facts))
 }
 
 /// Rule 8 (and rule 11's tables).
@@ -128,11 +149,141 @@ pub fn find_sections(text: &str, form: &str) -> Result<Vec<Section>, Error> {
             }
         }
     }
-    let body = body(headings, form);
+    let start = contents_end(&headings, form);
+    let contents: Vec<Heading> = headings[..start].to_vec();
+    let mut body = body_from(headings, form, start);
     if body.is_empty() {
         return Err(Error::NoHeadings);
     }
+    if form.starts_with("10-Q") {
+        body = contents_items(text, &contents, body); // rule 15
+    }
     Ok(sections(text, body, form))
+}
+
+/// Rule 15: Part I items 1 and 2 the body has no heading for, placed by their entries in the
+/// table of contents (`contents`: rule 2's headings before the body's start).
+fn contents_items(text: &str, contents: &[Heading], mut body: Vec<Heading>) -> Vec<Heading> {
+    if contents.is_empty() || !body.iter().any(|h| h.item.is_some()) {
+        return body;
+    }
+    let missing: Vec<&str> = ["1", "2"]
+        .into_iter()
+        .filter(|n| {
+            let key = format!("I-{n}");
+            !body.iter().any(|h| h.item.is_some() && h.key == key)
+        })
+        .collect();
+    if missing.is_empty() {
+        return body;
+    }
+    // each contents heading's Part, as rule 3 tracks it
+    let mut parts: Vec<Option<&str>> = Vec::with_capacity(contents.len());
+    let mut part: Option<&str> = None;
+    for h in contents {
+        if h.item.is_none() {
+            part = h.part.as_deref();
+        }
+        parts.push(part);
+    }
+    let Some(last) = contents.last() else {
+        return body;
+    };
+    let gap = if last.item.is_some() {
+        last.title_end
+    } else {
+        line_end(text, last.start)
+    };
+    let stop = body[0].start;
+    if gap >= stop {
+        return body;
+    }
+    let mut added: Vec<Heading> = Vec::new();
+    for n in missing {
+        let Some(i) = contents
+            .iter()
+            .zip(&parts)
+            .position(|(h, p)| h.item.as_deref() == Some(n) && matches!(p, None | Some("I")))
+        else {
+            continue;
+        };
+        let toc = &contents[i];
+        let next = contents.get(i + 1).map_or(gap, |h| h.start);
+        let entries = entries(text, toc.title_end, next);
+        let taken: Vec<usize> = added.iter().map(|h| h.start).collect();
+        if let Some(at) = entry_line(text, gap, stop, &entries, &taken) {
+            let mut h = toc.clone();
+            h.start = at;
+            h.cstart = char_len(&text[..at]);
+            h.part = Some("I".to_string());
+            h.key = format!("I-{n}");
+            h.span = 0;
+            added.push(h);
+        }
+    }
+    if added.is_empty() {
+        return body;
+    }
+    body.extend(added);
+    body.sort_by_key(|h| h.start);
+    body
+}
+
+/// Where the line holding byte `p` ends: its '\n', or the text's end.
+fn line_end(text: &str, p: usize) -> usize {
+    text[p..].find('\n').map_or(text.len(), |i| p + i)
+}
+
+/// Rule 15: (start, line) for each line that starts after `p` and before `stop`.
+fn lines_after(text: &str, p: usize, stop: usize) -> impl Iterator<Item = (usize, &str)> + '_ {
+    let mut q = p + 1;
+    std::iter::from_fn(move || {
+        if q >= stop {
+            return None;
+        }
+        let end = line_end(text, q);
+        let at = q;
+        q = end + 1;
+        Some((at, &text[at..end]))
+    })
+}
+
+/// Rule 15: a contents heading's entries, as rule 9 cores, folded.
+fn entries(text: &str, title_end: usize, stop: usize) -> Vec<String> {
+    lines_after(text, title_end, stop)
+        .filter(|(_, line)| !line.chars().all(|c| c.is_ascii_digit() || c == ' '))
+        .map(|(_, line)| title_core(line).chars().map(fold_title).collect::<String>())
+        .filter(|core| core != "page")
+        .collect()
+}
+
+/// Rule 15: where the first gap line that matches an entry starts.
+fn entry_line(
+    text: &str,
+    gap: usize,
+    stop: usize,
+    entries: &[String],
+    taken: &[usize],
+) -> Option<usize> {
+    if entries.is_empty() {
+        return None;
+    }
+    for (at, line) in lines_after(text, gap, stop) {
+        if char_len(line) > 120 || taken.contains(&at) {
+            continue;
+        }
+        let core: String = title_core(line).chars().map(fold_title).collect();
+        if core.is_empty() {
+            continue;
+        }
+        let words = core.split(is_space).filter(|w| !w.is_empty()).count();
+        let prefix = format!("{core} ");
+        if entries.contains(&core) || (words >= 2 && entries.iter().any(|e| e.starts_with(&prefix)))
+        {
+            return Some(at);
+        }
+    }
+    None
 }
 
 /// Rules 5-7 on the body's headings.
@@ -595,9 +746,15 @@ fn item_number(s: &str) -> Option<usize> {
     None
 }
 
-/// Headings after the table of contents, with page headers dropped and keys assigned.
-fn body(mut headings: Vec<Heading>, form: &str) -> Vec<Heading> {
-    // rule 3: find where the body starts
+/// Headings after the table of contents (rule 3), with page headers dropped and keys assigned
+/// (rule 4).
+fn body(headings: Vec<Heading>, form: &str) -> Vec<Heading> {
+    let start = contents_end(&headings, form);
+    body_from(headings, form, start)
+}
+
+/// Rule 3: the index of the heading the body starts at (0: no table of contents).
+fn contents_end(headings: &[Heading], form: &str) -> usize {
     let mut seen = std::collections::HashSet::new();
     let mut part: Option<String> = None;
     let mut start = 0;
@@ -622,8 +779,11 @@ fn body(mut headings: Vec<Heading>, form: &str) -> Vec<Heading> {
         }
         seen.insert(key);
     }
+    start
+}
 
-    // rule 4: walk the body
+/// Rule 4: walk the body from heading `start`.
+fn body_from(mut headings: Vec<Heading>, form: &str, start: usize) -> Vec<Heading> {
     let ten_q = form.starts_with("10-Q");
     let mut body: Vec<Heading> = Vec::new();
     let mut part: Option<String> = None;

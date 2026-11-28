@@ -1228,3 +1228,15 @@ the spec, `READER`) into `silver.release_figures`, and gold reads those.
   apart in SQL needs revenue evidence tags in silver (silver's own evidence, no cost of revenue and no
   operating profit, is 92% right: it would hide real gaps), i.e. re-projecting the ~3,100 CIKs that
   carry such tags. Left for the owner. Backout: `release_figures_165.sql`.
+
+### 166_printed_facts.sql
+
+- The proof layer at silver, part 1 (Marek's review, findings 1-3, 6, 24): figures and documents
+  were two pipelines never linked at the line. Parser v9's rule 14 records each undimensioned inline
+  XBRL fact a primary document prints (`silver.printed_facts`, one jsonb row per document and parser,
+  written with the sections; services/parser DESIGN.md "Printed facts and contents-placed items").
+- Scoped re-parse (165's way): `ops.parser_catchup` re-queues a document below 9 only when version 9
+  changes it (inline XBRL, a 20-F, a 10-Q with a `missing_core_item` finding); 135,135 of 666,263
+  on hermes. The migration pauses the parser kind: the owner unpauses it once the budget
+  (docs/test-people/reports/proof-layer/budget.md) is OK'd. ~2.6 GB; FK to bronze.filing_documents,
+  so it is in pg-backup's SLIM_EXCLUDE_DATA. No query_api grant.

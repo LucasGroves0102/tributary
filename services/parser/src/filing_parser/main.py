@@ -13,7 +13,7 @@ from confluent_kafka import Consumer, KafkaError, KafkaException
 from prometheus_client import Counter, Histogram
 
 from filing_parser.db import all_accessions, load_document, load_exhibits, write_sections
-from filing_parser.sections import exhibit_section, parse
+from filing_parser.sections import exhibit_section, parse_document
 from tributary_kafka import client_config
 from tributary_telemetry import CONSUMED, SKIPPED, configure_logging, serve_metrics
 
@@ -36,14 +36,14 @@ def parse_one(conn: psycopg.Connection, accession_no: str) -> None:
     form, content = load_document(conn, accession_no)
     t0 = time.perf_counter()
     try:
-        sections = parse(content, form)
+        sections, facts = parse_document(content, form)
         sections += [exhibit_section(t, d, raw)
                      for t, d, raw in load_exhibits(conn, accession_no)]
     except Exception:
         PARSE_FAILURES.labels(form).inc()
         raise
     seconds = time.perf_counter() - t0
-    write_sections(conn, accession_no, sections)
+    write_sections(conn, accession_no, sections, facts)
     PARSED.labels(form).inc()
     PARSE_SECONDS.labels(form).observe(seconds)
     log.info("%s %s: %d sections in %.0f ms (%d KB)",

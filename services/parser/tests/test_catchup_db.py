@@ -104,6 +104,27 @@ def test_each_document_is_requeued_once_per_version(conn):
     assert (nxt.done, nxt.behind) == (4, 0)
 
 
+def test_version_9_requeues_only_the_documents_it_changes(conn):
+    """Migration 166: below 9, a document is due only when version 9 changes it (inline XBRL,
+    a 20-F, a 10-Q missing Part I items); anything below 8 stays due; a later version scopes
+    nothing."""
+    for acc in ("ix", "plain", "twenty", "missing", "old"):
+        doc(conn, acc, "2024-05-01", version="rust-6" if acc == "old" else "rust-8")
+    conn.execute("UPDATE bronze.filing_documents SET form = '20-F' WHERE accession_no = 'twenty'")
+    conn.execute("INSERT INTO bronze.filing_xbrl (accession_no, cik, document_sha256,"
+                 " extractor_version, status) VALUES ('ix', %s, 'x', 1, 'ok'),"
+                 " ('plain', %s, 'x', 1, 'no_ixbrl')", (CO, CO))
+    conn.execute("INSERT INTO ops.section_findings (accession_no, check_name, severity, detail)"
+                 " VALUES ('missing', 'missing_core_item', 'warning', '{}')")
+    r = catchup.parser(conn, per_run=10, version=9)
+    assert (r.done, r.behind) == (4, 0)
+    assert {a for a, (_, waiting, _) in targets(conn).items() if waiting} == {
+        "ix", "twenty", "missing", "old"}
+    published(conn)
+    parsed(conn, "rust-9")
+    assert catchup.parser(conn, per_run=10, version=10).done == 5
+
+
 def test_requeue_waits_for_the_crawl_the_outbox_and_parser_backfill(conn):
     doc(conn, "a", "2020-05-01")
     doc(conn, "b", "2021-05-01")

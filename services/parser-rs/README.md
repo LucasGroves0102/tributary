@@ -112,6 +112,19 @@ document (or a 20-F without Item headings) one section. Written without a local 
 tests), and `fuzz.py`, which now also parses every document as a 20-F, 6-K and 40-F/A with 20-F
 tokens ("Item 3.D", "D. Risk Factors", "Item 5A", "Item 16F").
 
+Rules 14 and 15 (2026-11-28, `rust-9` / `python-9`, migration 166): the start tag keeps the
+attributes rule 14 reads (`IX_ATTRIBUTES`, first of each name, a valueless one as "") of
+`*:nonfraction`, `*:context` and `*:unit` elements (`NameInfo.ix`, from the name after its last
+`:`); `read_header` reads contexts and units on the tree before `drop_hidden`; the walk records each
+fact's byte range (`Frame::Fact`) and `printed_facts` lands them as cells are landed;
+`parse_document` assigns each fact its section. `contents_items` (rule 15) runs after `body_from` on
+10-Qs, over `contents_end`'s contents. The service writes `silver.printed_facts` with the sections;
+`parser-rs` prints `facts` beside `sections`, and `bench.py` / `fuzz.py` compare both (fuzz tokens now
+include headers, contexts, units, facts and rule 15's contents). Written without a local build
+(formatted with rustfmt 1.99.1 only): `tests/sections.rs` copies the Python tests; CI's cargo test,
+clippy, fmt, `test_rust_service.py` (both services' printed facts rows on the NVIDIA fixtures) and
+fuzz check it.
+
 Known gap: documents declaring a legacy encoding other than UTF-8/16, ISO-8859-x, windows-1252
 or ASCII are decoded with encoding_rs, whose Shift_JIS, GB2312 and Mac Roman tables differ from
 the libiconv lxml uses. Every stored document is ASCII.

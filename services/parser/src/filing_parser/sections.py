@@ -124,6 +124,47 @@ The algorithm is specified precisely so the Rust rewrite (week 4) can match it e
    "/A" ("6-K", "40-F", "20-F"), no part, title "Form 6-K" (the key after "Form "), text the whole
    text, offsets 0 to its length. Rules 2-10 don't apply; rule 11's tables do. A document with no
    text raises, as one without headings does.
+14. Printed facts (inline XBRL), beside the text: nothing above changes. A primary document's
+   (not an exhibit's) numeric facts where the text prints them. An element's name is rule 11's
+   (rule 1's reading, lower case); "*:x" is a name ending in ":x" ("ix:nonfraction").
+   a. On rule 1's tree before its drops (lxml.html.fromstring's element and its descendants, in
+      document order), a context is a "*:context" element with an "id" attribute, the first of each
+      id: its start, end and instant are the text_content(), stripped (str.strip), of its first
+      descendant named "*:startdate", "*:enddate" and "*:instant"; it is dimensioned when a
+      descendant is named "*:explicitmember" or "*:typedmember". A unit is a "*:unit" element with
+      an "id", the first of each id: its measures are the stripped text_content() of its
+      descendants named "*:measure", in order, each without what precedes its last ":"
+      ("iso4217:USD" is "USD"); the unit is "<first>/<second>" when a descendant is named "*:divide"
+      and it has exactly two measures, the measure when it has exactly one, else none.
+   b. After the drops, walking the tree as rule 11 does, each "*:nonfraction" element has a range
+      in the content and, as a cell's (rule 11b), characters in the text, without spaces at either
+      end; its text is them with "\\n" read as " ". It is a printed fact when that text isn't
+      empty, its "name" attribute isn't empty, and its "contextref" attribute names a context
+      that isn't dimensioned and has a non-empty end (then its period runs from its start, which
+      may be absent, to its end) or else a non-empty instant (no start, the instant its end).
+   c. Each, in document order: the key of the first section (in the sections' order) whose text
+      holds its characters (char_start <= its start and its end <= char_start + len(text)), or
+      none; its name (the concept), contextref, unitref and that unit's measure (none when absent
+      or unknown); the period's start and end; its scale, sign, decimals and format attributes as
+      written (none when absent); its text; and its [start, end) in the document's text.
+15. Part I items 1 and 2 of a 10-Q placed by the table of contents (forms starting "10-Q", rules
+   2-6's headings, not rule 9's): when rule 3 found a table of contents (the body starts at heading
+   index s > 0) and rule 4's body has an Item heading. The contents are rule 2's headings before s,
+   each Item heading with the Part tracked as in rule 3 (a Part heading sets it; none before the
+   first). The gap runs from the end of the contents' last heading's title line (an Item heading's
+   title_end, rule 10; a Part heading's own line) to the body's first heading. Lines are the text
+   split at "\\n"; a line "after p" starts after offset p. For item "1", then "2", when no body
+   Item heading has key "I-<n>": its contents heading is the first contents Item heading of that
+   item whose Part is "I" or none. Its entries are the lines after its title_end that start before
+   the next contents heading (or the gap's start, when it is the last), except a line of only
+   ASCII digits and spaces, and a line whose rule 9 core, folded, is "page". A gap line (one that
+   starts after the gap's start and before its end) of at most 120 characters matches when its
+   core, folded (rule 9), is not empty and equals an entry's, or has at least 2 words (split on
+   whitespace, str.split) and, followed by one space, starts an entry's. The first matching gap
+   line, unless the other item took it, starts a body heading for the item: key "I-<n>", Part "I",
+   its title (and the line its title ends) the contents heading's. Rules 5-7 then apply to the
+   body with these headings in text order (JPMorgan's 10-Q lists Item 1's statements and Item 2's
+   "Consolidated Financial Highlights" in its contents and heads neither with an Item line).
 """
 
 import re
@@ -132,11 +173,12 @@ from dataclasses import dataclass, field, replace
 
 from lxml import html
 
-# 8: 20-F items with 3.D and sub-item headings dropped (rule 12), 6-K / 40-F whole documents
-# (rule 13); 7: tables beside the text (rule 11; the text is 6's); 6: "Item 7.01Regulation" is 7.01
-# (rule 2); 5: clean titles (rule 10); 4: title headings
+# 9: printed facts beside the text (rule 14; the text is 8's), a 10-Q's Part I items 1 and 2 placed
+# by its contents (rule 15); 8: 20-F items with 3.D and sub-item headings dropped (rule 12), 6-K /
+# 40-F whole documents (rule 13); 7: tables beside the text (rule 11; the text is 6's); 6: "Item
+# 7.01Regulation" is 7.01 (rule 2); 5: clean titles (rule 10); 4: title headings
 # (rule 9); 3: MD&A by reference, exhibits, SGML
-PARSER_VERSION = "python-8"
+PARSER_VERSION = "python-9"
 
 _BLOCK = {"p", "div", "br", "tr", "li", "h1", "h2", "h3", "h4", "h5", "h6", "table", "section"}
 _CELL = {"td", "th"}
@@ -265,10 +307,36 @@ class Section:
     tables: list[Table] = field(default_factory=list)  # rule 11
 
 
-def _tree(raw: bytes):
+@dataclass(frozen=True)
+class PrintedFact:
+    """Rule 14: an inline XBRL numeric fact (ix:nonFraction) where the text prints it."""
+    section: str | None  # the key of the section whose text holds it
+    concept: str         # its name attribute: "us-gaap:Revenues"
+    context: str         # contextref
+    unit_ref: str | None  # unitref
+    unit: str | None     # the unit's measure: "USD", "USD/shares", "shares"
+    start: str | None    # the period's start (a duration), none for an instant
+    end: str             # the period's end, or the instant
+    scale: str | None    # attributes as written
+    sign: str | None
+    decimals: str | None
+    format: str | None
+    text: str            # its characters in the text, "\n" read as " "
+    char_start: int      # [char_start, char_end) in html_to_text(document)
+    char_end: int
+
+
+def _name(el) -> str:
+    return el.tag.rsplit("}", 1)[-1].lower()
+
+
+def _tree(raw: bytes, header: list | None = None):
     """Rule 1's tree: the document without its envelope and dropped elements, a "\\n" tail on
-    every block and a " " tail on every cell."""
+    every block and a " " tail on every cell. With `header`, rule 14a's contexts and units read
+    before the drops are appended to it."""
     doc = html.fromstring(_ENVELOPE.sub(b"", raw, count=1))
+    if header is not None:
+        header.extend(_header(doc))
     for el in doc.xpath(_DROP):
         el.drop_tree()
     for el in doc.iter():
@@ -293,24 +361,37 @@ def html_to_text(raw: bytes) -> str:
 
 def extract(raw: bytes) -> tuple[str, list[Table]]:
     """Rule 1's text and rule 11's tables, row and table offsets into that text."""
-    doc = _tree(raw)
+    text, tables, _ = _extract(raw)
+    return text, tables
+
+
+def _extract(raw: bytes) -> tuple[str, list[Table], list[PrintedFact]]:
+    """Rule 1's text, rule 11's tables and rule 14's printed facts (sections not yet assigned)."""
+    header: list = []
+    doc = _tree(raw, header)
+    contexts, units = header
     content = doc.text_content()
     text = _lines(content)
-    walked, tables = _walk(doc)
+    walked, tables, marks = _walk(doc)
     if walked != content:  # never seen; the text is text_content()'s whatever happens
-        return text, []
+        return text, [], []
     where = _Where(content, text)
+
+    def land(cs: int, ce: int) -> tuple[int, int]:
+        a, b = where.first(cs), where.end(ce)
+        while a < b and text[a] == " ":
+            a += 1
+        while b > a and text[b - 1] == " ":
+            b -= 1
+        return a, b
+
     out = []
     for rows in tables:
         kept = []
         for head, cells in rows:
             spans, row_cells = [], []
             for cs, ce, span, th in cells:
-                a, b = where.first(cs), where.end(ce)
-                while a < b and text[a] == " ":
-                    a += 1
-                while b > a and text[b - 1] == " ":
-                    b -= 1
+                a, b = land(cs, ce)
                 row_cells.append(Cell(text[a:b].replace("\n", " ") if a < b else "", span))
                 if a < b:
                     spans.append((a, b, th))
@@ -319,7 +400,75 @@ def extract(raw: bytes) -> tuple[str, list[Table]]:
                                 head or all(th for _, _, th in spans), row_cells))
         if kept:
             out.append(Table(min(r.start for r in kept), max(r.end for r in kept), kept))
-    return text, out
+    facts = []
+    for cs, ce, el in marks:  # rule 14b
+        name, ref = el.get("name"), el.get("contextref")
+        context = contexts.get(ref) if ref is not None else None
+        if not name or context is None or context[3]:
+            continue
+        start, end, instant, _ = context
+        if not end:
+            if not instant:
+                continue
+            start, end = None, instant
+        a, b = land(cs, ce)
+        if a >= b:
+            continue
+        unit_ref = el.get("unitref")
+        facts.append(PrintedFact(
+            None, name, ref, unit_ref, units.get(unit_ref) if unit_ref is not None else None,
+            start, end, el.get("scale"), el.get("sign"), el.get("decimals"), el.get("format"),
+            text[a:b].replace("\n", " "), a, b))
+    return text, out, facts
+
+
+def _header(doc) -> tuple[dict, dict]:
+    """Rule 14a: contexts (id -> (start, end, instant, dimensioned)) and units (id -> measure)."""
+    contexts: dict[str, tuple] = {}
+    units: dict[str, str | None] = {}
+    for el in doc.iter():
+        if not isinstance(el.tag, str):
+            continue
+        name = _name(el)
+        if name.endswith(":context"):
+            ref = el.get("id")
+            if ref is not None and ref not in contexts:
+                contexts[ref] = _context(el)
+        elif name.endswith(":unit"):
+            ref = el.get("id")
+            if ref is not None and ref not in units:
+                units[ref] = _unit(el)
+    return contexts, units
+
+
+def _context(el) -> tuple:
+    found: dict[str, str] = {}
+    dimensioned = False
+    for d in el.iterdescendants():
+        if not isinstance(d.tag, str):
+            continue
+        name = _name(d)
+        for part in ("startdate", "enddate", "instant"):
+            if name.endswith(":" + part) and part not in found:
+                found[part] = d.text_content().strip()
+        if name.endswith((":explicitmember", ":typedmember")):
+            dimensioned = True
+    return found.get("startdate"), found.get("enddate"), found.get("instant"), dimensioned
+
+
+def _unit(el) -> str | None:
+    measures, divide = [], False
+    for d in el.iterdescendants():
+        if not isinstance(d.tag, str):
+            continue
+        name = _name(d)
+        if name.endswith(":measure"):
+            measures.append(d.text_content().strip().rsplit(":", 1)[-1])
+        elif name.endswith(":divide"):
+            divide = True
+    if divide and len(measures) == 2:
+        return f"{measures[0]}/{measures[1]}"
+    return measures[0] if len(measures) == 1 else None
 
 
 def _colspan(el) -> int:
@@ -330,18 +479,23 @@ def _colspan(el) -> int:
 _COLSPAN = re.compile(r"[ \t\n\r\f]*([0-9]+)")
 
 
-def _walk(root) -> tuple[str, list]:
-    """text_content() rebuilt by walking the tree, and rule 11's tables in document order: each
-    its rows, (thead, [(start, end, colspan, is_th)]) with [start, end) ranges in that text."""
+def _walk(root) -> tuple[str, list, list]:
+    """text_content() rebuilt by walking the tree, rule 11's tables in document order: each
+    its rows, (thead, [(start, end, colspan, is_th)]) with [start, end) ranges in that text, and
+    rule 14b's "*:nonfraction" elements, [start, end, element], in document order."""
     parts: list[str] = []
     n = 0
     tables: list = []
+    facts: list[list] = []
     open_tables: list[list] = []  # per open <table>: [its rows, the open row, open <thead>s]
 
     def visit(el) -> None:
         nonlocal n
         tag = el.tag.rsplit("}", 1)[-1].lower()
         mark = top = saved = None
+        fact = [n, n, el] if tag.endswith(":nonfraction") else None
+        if fact is not None:
+            facts.append(fact)
         if tag == "table":
             top = [[], None, 0]
             tables.append(top[0])
@@ -368,6 +522,8 @@ def _walk(root) -> tuple[str, list]:
                 n += len(child.tail)
         if mark is not None:
             mark[1] = n
+        if fact is not None:
+            fact[1] = n
         if tag == "table":
             open_tables.pop()
         elif top is not None and tag == "thead":
@@ -377,7 +533,7 @@ def _walk(root) -> tuple[str, list]:
 
     visit(root)
     return "".join(parts), [[(head, [tuple(c) for c in cells]) for head, cells in rows]
-                            for rows in tables]
+                            for rows in tables], facts
 
 
 class _Where:
@@ -489,7 +645,86 @@ def find_sections(text: str, form: str) -> list[Section]:
             body = _body(merged, form)
             if any(h.item is not None for h in body):
                 return _sections(text, body, form)
-    return _sections(text, _body(headings, form), form)
+    start = _contents_end(headings, form)
+    body = _body(headings, form, start)
+    if form.startswith("10-Q"):
+        body = _contents_items(text, headings, start, body)  # rule 15
+    return _sections(text, body, form)
+
+
+def _contents_items(text: str, headings: list[_Heading], start: int,
+                    body: list[_Heading]) -> list[_Heading]:
+    """Rule 15: Part I items 1 and 2 the body has no heading for, placed by their entries in the
+    table of contents."""
+    if start == 0 or not any(h.item is not None for h in body):
+        return body
+    keys = {h.key for h in body if h.item is not None}
+    missing = [n for n in ("1", "2") if f"I-{n}" not in keys]
+    if not missing:
+        return body
+    contents = headings[:start]
+    parts, part = [], None  # each contents heading's Part, as rule 3 tracks it
+    for h in contents:
+        if h.item is None:
+            part = h.part
+        parts.append(part)
+    last = contents[-1]
+    gap = last.title_end if last.item is not None else _line_end(text, last.start)
+    if gap >= body[0].start:
+        return body
+    added: list[_Heading] = []
+    for n in missing:
+        i = next((i for i, h in enumerate(contents)
+                  if h.item == n and parts[i] in (None, "I")), None)
+        if i is None:
+            continue
+        toc = contents[i]
+        entries = _entries(text, toc.title_end, contents[i + 1].start if i + 1 < start else gap)
+        at = _entry_line(text, gap, body[0].start, entries, {h.start for h in added})
+        if at is not None:
+            added.append(replace(toc, start=at, part="I", key=f"I-{n}", span=0))
+    return sorted(body + added, key=lambda h: h.start) if added else body
+
+
+def _line_end(text: str, p: int) -> int:
+    nl = text.find("\n", p)
+    return len(text) if nl == -1 else nl
+
+
+def _lines_after(text: str, p: int, stop: int):
+    """Rule 15: (start, line) for each line that starts after p and before stop."""
+    q = p + 1
+    while q < stop:
+        end = _line_end(text, q)
+        yield q, text[q:end]
+        q = end + 1
+
+
+def _entries(text: str, title_end: int, stop: int) -> list[str]:
+    """Rule 15: a contents heading's entries, as rule 9 cores, folded."""
+    out = []
+    for _, line in _lines_after(text, title_end, stop):
+        core = _title_core(line).translate(_FOLD)
+        if all(c in "0123456789 " for c in line) or core == "page":
+            continue
+        out.append(core)
+    return out
+
+
+def _entry_line(text: str, gap: int, stop: int, entries: list[str],
+                taken: set[int]) -> int | None:
+    """Rule 15: where the first gap line that matches an entry starts."""
+    if not entries:
+        return None
+    exact = set(entries)
+    for at, line in _lines_after(text, gap, stop):
+        if len(line) > 120 or at in taken:
+            continue
+        core = _title_core(line).translate(_FOLD)
+        if core and (core in exact or len(core.split()) >= 2
+                     and any(e.startswith(core + " ") for e in entries)):
+            return at
+    return None
 
 
 def _sections(text: str, body: list[_Heading], form: str) -> list[Section]:
@@ -675,9 +910,8 @@ def _title_core(line: str) -> str:
     return line
 
 
-def _body(headings: list[_Heading], form: str) -> list[_Heading]:
-    """Headings after the table of contents, with page headers dropped and keys assigned."""
-    # rule 3: find where the body starts
+def _contents_end(headings: list[_Heading], form: str) -> int:
+    """Rule 3: the index of the heading the body starts at (0: no table of contents)."""
     seen, part, start = set(), None, 0
     for i, h in enumerate(headings):
         if h.item is None:
@@ -692,8 +926,14 @@ def _body(headings: list[_Heading], form: str) -> list[_Heading]:
                 start = i - 1
             break
         seen.add(key)
+    return start
 
-    # rule 4: walk the body
+
+def _body(headings: list[_Heading], form: str, start: int | None = None) -> list[_Heading]:
+    """Headings after the table of contents (rule 3), with page headers dropped and keys
+    assigned (rule 4)."""
+    if start is None:
+        start = _contents_end(headings, form)
     body: list[_Heading] = []
     part, current = None, None
     for h in headings[start:]:
@@ -718,8 +958,21 @@ def _body(headings: list[_Heading], form: str) -> list[_Heading]:
 
 
 def parse(raw: bytes, form: str) -> list[Section]:
-    text, tables = extract(raw)
-    return [_with_tables(s, tables) for s in find_sections(text, form)]
+    return parse_document(raw, form)[0]
+
+
+def parse_document(raw: bytes, form: str) -> tuple[list[Section], list[PrintedFact]]:
+    """A primary document's sections (rules 1-13, 15, with rule 11's tables) and printed facts
+    (rule 14)."""
+    text, tables, facts = _extract(raw)
+    sections = [_with_tables(s, tables) for s in find_sections(text, form)]
+    return sections, [replace(f, section=_section_of(sections, f)) for f in facts]
+
+
+def _section_of(sections: list[Section], fact: PrintedFact) -> str | None:
+    """Rule 14c: the first section whose text holds the fact's characters."""
+    return next((s.key for s in sections if s.char_start <= fact.char_start
+                 and fact.char_end <= s.char_start + len(s.text)), None)
 
 
 def _with_tables(section: Section, tables: list[Table]) -> Section:

@@ -2,7 +2,7 @@
 
 use std::io::Read;
 
-use filing_parser::{PARSER_VERSION, Section, Table};
+use filing_parser::{PARSER_VERSION, PrintedFact, Section, Table};
 
 use crate::BoxError;
 
@@ -19,10 +19,16 @@ pub trait Store {
     fn load_document(&mut self, accession_no: &str) -> Result<Option<(String, Vec<u8>)>, BoxError>;
     /// The document's stored exhibits, uncompressed, by exhibit type.
     fn load_exhibits(&mut self, accession_no: &str) -> Result<Vec<Exhibit>, BoxError>;
-    /// Replace the document's sections and their tables (rule 11), whichever parser wrote
-    /// them, atomically. When this parser's stored sections are exactly the new ones, their
-    /// rows stay (parsed_at too) and only parser_version and the tables change.
-    fn write_sections(&mut self, accession_no: &str, sections: &[Section]) -> Result<(), BoxError>;
+    /// Replace the document's sections, their tables (rule 11) and its printed facts (rule
+    /// 14), whichever parser wrote them, atomically. When this parser's stored sections are
+    /// exactly the new ones, their rows stay (parsed_at too) and only parser_version, the
+    /// tables and the printed facts change.
+    fn write_sections(
+        &mut self,
+        accession_no: &str,
+        sections: &[Section],
+        facts: &[PrintedFact],
+    ) -> Result<(), BoxError>;
     fn all_accessions(&mut self) -> Result<Vec<String>, BoxError>;
 }
 
@@ -64,6 +70,38 @@ fn table_rows(t: &Table) -> String {
     serde_json::Value::Array(rows).to_string()
 }
 
+/// silver.printed_facts.facts (migration 166; services/parser db.py `printed_rows`): one object
+/// per fact, short keys, absent ones left out.
+fn printed_rows(facts: &[PrintedFact]) -> String {
+    let rows: Vec<serde_json::Value> = facts
+        .iter()
+        .map(|f| {
+            let mut row = serde_json::Map::new();
+            let mut put = |key: &str, value: Option<&str>| {
+                if let Some(v) = value {
+                    row.insert(key.into(), v.into());
+                }
+            };
+            put("k", f.section.as_deref());
+            put("c", Some(f.concept.as_str()));
+            put("x", Some(f.context.as_str()));
+            put("u", f.unit_ref.as_deref());
+            put("m", f.unit.as_deref());
+            put("s", f.start.as_deref());
+            put("e", Some(f.end.as_str()));
+            put("sc", f.scale.as_deref());
+            put("sg", f.sign.as_deref());
+            put("d", f.decimals.as_deref());
+            put("f", f.format.as_deref());
+            put("v", Some(f.text.as_str()));
+            row.insert("a".into(), f.char_start.into());
+            row.insert("b".into(), f.char_end.into());
+            serde_json::Value::Object(row)
+        })
+        .collect();
+    serde_json::Value::Array(rows).to_string()
+}
+
 fn gunzip(raw: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut out = Vec::new();
     flate2::read::MultiGzDecoder::new(raw).read_to_end(&mut out)?;
@@ -99,7 +137,12 @@ impl Store for postgres::Client {
             .collect()
     }
 
-    fn write_sections(&mut self, accession_no: &str, sections: &[Section]) -> Result<(), BoxError> {
+    fn write_sections(
+        &mut self,
+        accession_no: &str,
+        sections: &[Section],
+        facts: &[PrintedFact],
+    ) -> Result<(), BoxError> {
         let mut new = Vec::with_capacity(sections.len());
         for s in sections {
             new.push(Stored {
@@ -199,6 +242,22 @@ impl Store for postgres::Client {
                     ],
                 )?;
             }
+        }
+        tx.execute(
+            "DELETE FROM silver.printed_facts WHERE accession_no = $1",
+            &[&accession_no],
+        )?;
+        if !facts.is_empty() {
+            tx.execute(
+                "INSERT INTO silver.printed_facts (accession_no, parser, parser_version, facts) \
+                 VALUES ($1, $2, $3, $4::text::jsonb)",
+                &[
+                    &accession_no,
+                    &PARSER,
+                    &PARSER_VERSION,
+                    &printed_rows(facts),
+                ],
+            )?;
         }
         tx.commit()?;
         Ok(())

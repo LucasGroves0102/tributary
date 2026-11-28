@@ -6,8 +6,10 @@ mod pystr;
 pub mod sections;
 mod tables;
 
-pub use html::{Cell, Row, Table, extract, html_to_text};
-pub use sections::{PARSER_VERSION, Section, exhibit_section, find_sections, parse};
+pub use html::{Cell, PrintedFact, Row, Table, extract, extract_all, html_to_text};
+pub use sections::{
+    PARSER_VERSION, Section, exhibit_section, find_sections, parse, parse_document,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {

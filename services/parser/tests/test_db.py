@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from prometheus_client import REGISTRY
 
-from filing_parser.db import load_document, table_rows, write_sections
+from filing_parser.db import load_document, printed_rows, table_rows, write_sections
 from filing_parser.main import parse_one
-from filing_parser.sections import PARSER_VERSION, parse
+from filing_parser.sections import PARSER_VERSION, parse, parse_document
 
 psycopg = pytest.importorskip("psycopg")
 DSN = os.environ.get("TEST_DATABASE_URL")
@@ -127,3 +127,49 @@ def test_a_reparse_with_other_text_replaces_the_rows_and_their_tables(conn):
     # deleting a section deletes its tables
     conn.execute("DELETE FROM silver.filing_sections WHERE section_key = '9.01'")
     assert _tables(conn) == []
+
+
+TEN_Q = gzip.decompress((Path(__file__).parent / "fixtures" / "nvda-10-Q.htm.gz").read_bytes())
+
+
+def _printed(conn):
+    return conn.execute("SELECT accession_no, parser, parser_version, facts"
+                        " FROM silver.printed_facts ORDER BY accession_no").fetchall()
+
+
+def test_printed_facts_are_written_with_the_sections_and_kept_on_an_unchanged_reparse(conn):
+    """Rule 14 (migration 166): one row per document; a re-parse that yields the same sections
+    keeps their rows and parsed_at and rewrites only this row; another parser's row goes."""
+    acc = "0001045810-26-000075"
+    conn.execute(
+        "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed, document_name,"
+        " url, content_gzip, content_sha256, size_bytes) VALUES (%s, '0001045810', '10-Q',"
+        " '2026-08-27', 'nvda-20260726.htm', 'https://example/q', %s, 'x', %s)",
+        (acc, gzip.compress(TEN_Q), len(TEN_Q)))
+    sections, facts = parse_document(TEN_Q, "10-Q")
+    write_sections(conn, acc, sections, facts)
+    (row,) = _printed(conn)
+    assert row[:3] == (acc, "python", PARSER_VERSION) and row[3] == printed_rows(facts)
+    revenue = next(f for f in row[3] if f["c"] == "us-gaap:Revenues")
+    assert revenue == {"k": "I-1", "c": "us-gaap:Revenues", "x": "c-3", "u": "usd", "m": "USD",
+                       "s": "2026-04-27", "e": "2026-07-26", "sc": "6", "d": "-6",
+                       "f": "ixt:num-dot-decimal", "v": "96,221", "a": revenue["a"],
+                       "b": revenue["b"]}
+    text = conn.execute("SELECT text, char_start FROM silver.filing_sections"
+                        " WHERE accession_no = %s AND section_key = 'I-1'", (acc,)).fetchone()
+    assert text[0][revenue["a"] - text[1]:revenue["b"] - text[1]] == "96,221"
+
+    conn.execute("UPDATE silver.filing_sections SET parsed_at = '2020-01-01',"
+                 " parser_version = 'python-8'")
+    conn.execute("UPDATE silver.printed_facts SET parser = 'rust', facts = '[]'")
+    write_sections(conn, acc, sections, facts)
+    assert set(conn.execute("SELECT parsed_at::date::text, parser_version FROM"
+                            " silver.filing_sections WHERE accession_no = %s",
+                            (acc,)).fetchall()) == {("2020-01-01", PARSER_VERSION)}
+    assert _printed(conn) == [row]
+    # an 8-K has none; deleting the document deletes its row
+    write_sections(conn, ACC, parse(HTML, "8-K"), [])
+    assert [r[0] for r in _printed(conn)] == [acc]
+    conn.execute("DELETE FROM silver.filing_sections WHERE accession_no = %s", (acc,))
+    conn.execute("DELETE FROM bronze.filing_documents WHERE accession_no = %s", (acc,))
+    assert _printed(conn) == []

@@ -3,7 +3,16 @@ from pathlib import Path
 
 import pytest
 
-from filing_parser.sections import _tree, _walk, exhibit_section, find_sections, html_to_text, parse
+from filing_parser.sections import (
+    _tree,
+    _walk,
+    exhibit_section,
+    extract,
+    find_sections,
+    html_to_text,
+    parse,
+    parse_document,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -530,3 +539,198 @@ def test_6k_and_40f_primary_documents_are_one_section_with_their_tables():
             ["Net revenue", "989.92"], ["Gross margin", "59.5%"]]
     with pytest.raises(ValueError):
         parse(b"<html><body><p> </p></body></html>", "6-K")
+
+
+# Rule 14: printed facts -------------------------------------------------------------------------
+
+IX_HEADER = (
+    '<div style="display:none"><ix:header><ix:resources>'
+    '<xbrli:context id="q"><xbrli:entity><xbrli:identifier>1</xbrli:identifier></xbrli:entity>'
+    "<xbrli:period><xbrli:startDate>2026-04-27</xbrli:startDate>"
+    "<xbrli:endDate>2026-07-26</xbrli:endDate></xbrli:period></xbrli:context>"
+    '<xbrli:context id="i"><xbrli:period><xbrli:instant> 2026-07-26 </xbrli:instant>'
+    "</xbrli:period></xbrli:context>"
+    '<xbrli:context id="d"><xbrli:entity><xbrli:segment><xbrldi:explicitMember dimension="a">'
+    "x:M</xbrldi:explicitMember></xbrli:segment></xbrli:entity><xbrli:period>"
+    "<xbrli:instant>2026-07-26</xbrli:instant></xbrli:period></xbrli:context>"
+    '<xbrli:context id="q"><xbrli:period><xbrli:instant>1999-01-01</xbrli:instant></xbrli:period>'
+    "</xbrli:context>"
+    '<xbrli:context id="f"><xbrli:period><xbrli:forever/></xbrli:period></xbrli:context>'
+    '<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>'
+    '<xbrli:unit id="eps"><xbrli:divide><xbrli:unitNumerator><xbrli:measure>iso4217:USD'
+    "</xbrli:measure></xbrli:unitNumerator><xbrli:unitDenominator><xbrli:measure>xbrli:shares"
+    "</xbrli:measure></xbrli:unitDenominator></xbrli:divide></xbrli:unit>"
+    "</ix:resources><ix:hidden>"
+    '<ix:nonFraction name="dei:Hidden" contextRef="i" unitRef="usd">5</ix:nonFraction>'
+    "</ix:hidden></ix:header></div>")
+
+
+def ix_document(body: str) -> bytes:
+    return f"<html><body>{IX_HEADER}{body}</body></html>".encode()
+
+
+IX_BODY = (
+    '<p>Shares outstanding: <ix:nonFraction name="dei:Shares" contextRef="i" unitRef="sh">24.1'
+    "</ix:nonFraction> billion</p>"
+    "<p>Item 1. Financial Statements</p>"
+    "<table><tr><td>Revenue</td><td>$</td><td>"
+    '<ix:nonFraction name="us-gaap:Revenues" contextRef="q" unitRef="usd" scale="6"'
+    ' decimals="-6" format="ixt:num-dot-decimal">96,221</ix:nonFraction></td></tr>'
+    '<tr><td>EPS</td><td><ix:nonFraction name="us-gaap:EarningsPerShareDiluted" contextRef="q"'
+    ' unitRef="eps" decimals="2">3.91</ix:nonFraction></td></tr>'
+    '<tr><td>Cash</td><td>(<ix:nonFraction name="us-gaap:Cash" contextRef="i" unitRef="usd"'
+    ' sign="-" scale Decimals="-3" decimals="-6">1,2 34</ix:nonFraction>)</td></tr>'
+    '<tr><td>Segment</td><td><ix:nonFraction name="us-gaap:Revenues" contextRef="d"'
+    ' unitRef="usd">7</ix:nonFraction></td></tr>'
+    '<tr><td>Unknown</td><td><ix:nonFraction name="us-gaap:Revenues" contextRef="zz"'
+    ' unitRef="usd">8</ix:nonFraction><ix:nonFraction name="us-gaap:Revenues" contextRef="f"'
+    ' unitRef="usd">9</ix:nonFraction><ix:nonFraction name="" contextRef="q">10</ix:nonFraction>'
+    "</td></tr>"
+    '<tr><td>Nil</td><td><ix:nonFraction name="us-gaap:Revenues" contextRef="q" unitRef="usd"'
+    ' xsi:nil="true"></ix:nonFraction></td></tr></table>'
+    "<p>Item 2. Management's Discussion</p><p>Revenue was $"
+    '<ix:nonFraction name="us-gaap:Revenues" contextRef="q" unitRef="usd" scale="9"'
+    ' decimals="-8">96.2</ix:nonFraction> billion.</p>')
+
+
+def test_printed_facts_with_their_contexts_units_and_sections():
+    raw = ix_document(IX_BODY)
+    sections, facts = parse_document(raw, "10-Q")
+    text = html_to_text(raw)
+    assert [s.key for s in sections] == ["I-1", "I-2"]
+    assert [(f.section, f.concept, f.context, f.unit_ref, f.unit, f.start, f.end, f.scale,
+             f.sign, f.decimals, f.format, f.text) for f in facts] == [
+        (None, "dei:Shares", "i", "sh", None, None, "2026-07-26", None, None, None, None,
+         "24.1"),
+        ("I-1", "us-gaap:Revenues", "q", "usd", "USD", "2026-04-27", "2026-07-26", "6", None,
+         "-6", "ixt:num-dot-decimal", "96,221"),
+        ("I-1", "us-gaap:EarningsPerShareDiluted", "q", "eps", "USD/shares", "2026-04-27",
+         "2026-07-26", None, None, "2", None, "3.91"),
+        ("I-1", "us-gaap:Cash", "i", "usd", "USD", None, "2026-07-26", "", "-", "-3", None,
+         "1,2 34"),
+        ("I-2", "us-gaap:Revenues", "q", "usd", "USD", "2026-04-27", "2026-07-26", "9", None,
+         "-8", None, "96.2"),
+    ]
+    for f in facts:  # the text, offsets and sections are rule 1's and rules 2-6's, unchanged
+        assert text[f.char_start:f.char_end] == f.text
+    assert parse(raw, "10-Q") == sections and extract(raw)[0] == text
+
+
+def test_printed_facts_only_from_the_primary_document_and_none_without_ixbrl():
+    raw = ix_document(IX_BODY)
+    assert exhibit_section("EX-99.1", None, raw).text == html_to_text(raw)  # no facts there
+    assert parse_document(fixture("8-K"), "8-K")[1] == []
+
+
+@pytest.mark.parametrize(("name", "form", "facts", "section"), [
+    ("nvda-10-Q", "10-Q", 513, "I-1"), ("nvda-10-K", "10-K", 671, "15"),
+    ("jpm-10-Q", "10-Q", 241, "I-1")])
+def test_printed_facts_on_real_filings(name, form, facts, section):
+    raw = gzip.decompress((FIXTURES / f"{name}.htm.gz").read_bytes())
+    sections, found = parse_document(raw, form)
+    text = html_to_text(raw)
+    by_key = {s.key: s for s in sections}
+    assert len(found) == facts
+    assert sum(f.section == section for f in found) > facts // 2
+    for f in found:
+        assert f.text == text[f.char_start:f.char_end].replace("\n", " ") and f.text.strip()
+        if f.section is not None:
+            s = by_key[f.section]
+            assert s.text[f.char_start - s.char_start:f.char_end - s.char_start] == f.text
+
+
+def test_printed_facts_the_reader_needs_on_nvidias_10q():
+    _, found = parse_document(fixture("10-Q"), "10-Q")
+    revenue = next(f for f in found if f.concept == "us-gaap:Revenues")
+    assert (revenue.section, revenue.text, revenue.start, revenue.end, revenue.unit,
+            revenue.scale) == ("I-1", "96,221", "2026-04-27", "2026-07-26", "USD", "6")
+
+
+# Rule 15: a 10-Q's Part I items 1 and 2 placed by its contents ---------------------------------
+
+CONTENTS_10Q = "\n".join([
+    "FORM 10-Q", "TABLE OF CONTENTS", "Part I - Financial information", "Page", "Item 1.",
+    "Financial Statements",
+    "Consolidated statements of income (unaudited) for the three months ended June 30", "92",
+    "Notes to Consolidated Financial Statements (unaudited)", "97", "Page", "Item 2.",
+    "Management's Discussion and Analysis of Financial Condition and Results of Operations.",
+    "Consolidated Financial Highlights", "3", "Introduction", "4", "Item 3.",
+    "Quantitative and Qualitative Disclosures About Market Risk.", "202",
+    "Part II - Other information", "Item 1. Legal Proceedings.", "202",
+    "Item 3. Defaults Upon Senior Securities.", "203", "2"])
+BODY = "Words of the body. " * 30
+
+
+def test_contents_place_items_1_and_2_jpmorgan_style():
+    text = "\n".join([
+        CONTENTS_10Q, "JPMorgan Chase & Co.", "Consolidated financial highlights (unaudited)", BODY,
+        "Introduction", BODY, "91", "Consolidated statements of income (unaudited)", BODY,
+        "NOTES TO CONSOLIDATED FINANCIAL STATEMENTS (unaudited)", BODY,
+        "Item 3. Quantitative and Qualitative Disclosures About Market Risk.", BODY,
+        "Part II - Other Information", "Item 1. Legal Proceedings.", BODY])
+    sections = find_sections(text, "10-Q")
+    assert [(s.key, s.part, s.item, s.title) for s in sections] == [
+        ("I-2", "I", "2",
+         "Management's Discussion and Analysis of Financial Condition and Results of Operations."),
+        ("I-1", "I", "1", "Financial Statements"),
+        ("I-3", "I", "3", "Quantitative and Qualitative Disclosures About Market Risk."),
+        ("II-1", "II", "1", "Legal Proceedings."),
+    ]
+    mdna, statements = sections[0], sections[1]
+    assert mdna.text.startswith("Consolidated financial highlights (unaudited)")
+    assert statements.text.startswith("Consolidated statements of income (unaudited)")
+    assert statements.text.endswith(BODY.strip()) and "NOTES TO" in statements.text
+    for s in sections:
+        assert text[s.char_start:s.char_end].strip() == s.text
+    # a 10-K's items are never placed so
+    assert not any(s.text.startswith(("Consolidated statements", "Consolidated financial"))
+                   for s in find_sections(text, "10-K"))
+
+
+def test_contents_place_item_1_the_body_keys_under_the_last_part():
+    """BRT Apartments' 10-Q: the contents end with Part II's items 2 and 6, so the body's "Item 1"
+    (no Part heading before it) is keyed II-1 by rule 3, the body starts at "Item 2" and Part I's
+    Item 1 was lost (12,191 10-Qs on hermes miss I-1 only)."""
+    text = "\n".join([
+        "Part I - Financial Information", "Item 1. Financial Statements",
+        "Consolidated Balance Sheets - June 30, 2026 (unaudited) and December 31, 2025", "3",
+        "Item 2. Management's Discussion and Analysis of Financial Condition and Results of"
+        " Operations", "20", "Part II - Other Information",
+        "Item 2. Unregistered Sales of Equity Securities and Use of Proceeds", "34",
+        "Item 6. Exhibits", "35", "Item 1. Financial Statements", "BRT APARTMENTS CORP.",
+        "CONSOLIDATED BALANCE SHEETS", "(Unaudited)", BODY,
+        "Item 2. Management's Discussion and Analysis of Financial Condition and Results of"
+        " Operations", BODY, "Part II - Other Information",
+        "Item 2. Unregistered Sales of Equity Securities and Use of Proceeds", BODY,
+        "Item 6. Exhibits", BODY])
+    sections = find_sections(text, "10-Q")
+    assert [s.key for s in sections] == ["I-1", "I-2", "II-2", "II-6"]
+    assert sections[0].text.startswith("CONSOLIDATED BALANCE SHEETS")
+    assert sections[0].title == "Financial Statements"
+
+
+def test_contents_entries_page_numbers_and_short_lines():
+    """Entries skip page numbers and "Page"; a gap line matches an entry whole, or starts one
+    with at least two words; a line taken by item 1 isn't item 2's."""
+    contents = "\n".join([
+        "Part I", "Item 1.", "Financial Statements", "Page", "12 ", "Operations", "Item 2.",
+        "Management's Discussion", "Operations", "Item 3. Market Risk", "4", "Item 4. Controls",
+        "5"])
+    text = "\n".join([contents, "Page", "12", "operations.", BODY,
+                      "Item 3. Market Risk", BODY, "Item 4. Controls", BODY])
+    sections = find_sections(text, "10-Q")
+    # "operations." matches both items' entry "Operations": item 1 takes it, item 2 finds nothing
+    assert [(s.key, s.char_start) for s in sections][:1] == [("I-1", text.index("operations."))]
+    assert [s.key for s in sections] == ["I-1", "I-3", "I-4"]
+    one_word = text.replace("operations.", "Statements")
+    assert [s.key for s in find_sections(one_word, "10-Q")] == ["I-3", "I-4"]
+
+
+def test_contents_items_on_jpmorgans_10q():
+    raw = gzip.decompress((FIXTURES / "jpm-10-Q.htm.gz").read_bytes())
+    sections = {s.key: s for s in parse(raw, "10-Q")}
+    assert list(sections) == ["I-2", "I-1", "I-3", "I-4", "II-1", "II-1A", "II-2", "II-3", "II-4",
+                              "II-5", "II-6"]
+    assert sections["I-2"].text.startswith("Consolidated financial highlights (unaudited)")
+    assert sections["I-1"].text.startswith("Consolidated statements of income (unaudited)")
+    assert "Total net revenue" in sections["I-1"].text

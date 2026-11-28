@@ -82,7 +82,8 @@ the parser image's `parser-peers` job, not in SQL.
 | `gold.latest_row`, `gold.latest_equity`, `gold.quarterly_recent` (each with `p_as_of`: the history's versions believed then) | `087_point_in_time_reads.sql` (before: `078_screener_figures.sql`) |
 | `gold.is_stale`, `gold.reading` (the readings' parts and rules), `gold.refresh_screen`, `gold.screen_backlog`, `gold.refresh_screen_backlog`, `gold.screen_company` | `078_screener_figures.sql` (`gold.reading`: `155_analyst_fixes_1.sql`, `gold.not_meaningful_for` read first) |
 | `gold.screen_reading` (the stored cost of revenue beside a gross-sales venue's revenue) | `083_gross_sales_revenue.sql` (before: `078_screener_figures.sql`) |
-| `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, `ops.parser_catchup` (documents of an older parser back through the crawl's outbox), view `ops.catchup_status` | `071_auto_catchup.sql` |
+| `ops.stamp_builds`, `ops.build_failed`, `ops.catchup_begin`, `ops.catchup_record`, view `ops.catchup_status` | `071_auto_catchup.sql` |
+| `ops.parser_catchup` (documents of an older parser back through the crawl's outbox; below version 9 only those version 9 changes) | `166_printed_facts.sql` (before: `071_auto_catchup.sql`) |
 
 ## Readings (read, not refreshed)
 

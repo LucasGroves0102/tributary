@@ -5,7 +5,7 @@ import gzip
 import psycopg
 from psycopg.types.json import Jsonb
 
-from filing_parser.sections import PARSER_VERSION, Section, Table
+from filing_parser.sections import PARSER_VERSION, PrintedFact, Section, Table
 
 PARSER = "python"
 
@@ -21,13 +21,15 @@ def load_document(conn: psycopg.Connection, accession_no: str) -> tuple[str, byt
     return row[0], gzip.decompress(row[1])
 
 
-def write_sections(conn: psycopg.Connection, accession_no: str, sections: list[Section]) -> None:
-    """Replace the document's sections and their tables (rule 11), whichever parser wrote them,
-    atomically: a document has one parser's sections, so gold never mixes parsers or keeps the
-    other parser's rows. When this parser's stored sections are exactly the new ones (keys,
-    parts, items, titles, text and offsets), their rows stay, parsed_at included, and only
-    parser_version and the tables change: the search index and What changed diffs key on
-    parsed_at, so a re-parse that changes no text re-indexes nothing (parser v7's tables)."""
+def write_sections(conn: psycopg.Connection, accession_no: str, sections: list[Section],
+                   facts: list[PrintedFact] | None = None) -> None:
+    """Replace the document's sections, their tables (rule 11) and its printed facts (rule 14),
+    whichever parser wrote them, atomically: a document has one parser's sections, so gold never
+    mixes parsers or keeps the other parser's rows. When this parser's stored sections are
+    exactly the new ones (keys, parts, items, titles, text and offsets), their rows stay,
+    parsed_at included, and only parser_version, the tables and the printed facts change: the
+    search index and What changed diffs key on parsed_at, so a re-parse that changes no text
+    re-indexes nothing (parser v7's tables, v9's printed facts)."""
     new = sorted(((s.key, PARSER, s.part, s.item, s.title, s.text, s.char_start, s.char_end)
                   for s in sections), key=lambda r: r[0])
     with conn.transaction(), conn.cursor() as cur:
@@ -60,6 +62,12 @@ def write_sections(conn: psycopg.Connection, accession_no: str, sections: list[S
             [(accession_no, s.key, PARSER, n, t.start, t.end, Jsonb(table_rows(t)))
              for s in sections for n, t in enumerate(s.tables)],
         )
+        cur.execute("DELETE FROM silver.printed_facts WHERE accession_no = %s", (accession_no,))
+        if facts:
+            cur.execute(
+                "INSERT INTO silver.printed_facts (accession_no, parser, parser_version, facts)"
+                " VALUES (%s, %s, %s, %s)",
+                (accession_no, PARSER, PARSER_VERSION, Jsonb(printed_rows(facts))))
 
 
 def table_rows(table: Table) -> list[dict]:
@@ -73,6 +81,18 @@ def table_rows(table: Table) -> list[dict]:
         if r.head:
             row["head"] = True
         out.append(row)
+    return out
+
+
+def printed_rows(facts: list[PrintedFact]) -> list[dict]:
+    """silver.printed_facts.facts (migration 166): one object per fact, short keys, absent ones
+    left out (parser-rs db.rs `printed_rows` writes the same)."""
+    out = []
+    for f in facts:
+        row = {"k": f.section, "c": f.concept, "x": f.context, "u": f.unit_ref, "m": f.unit,
+               "s": f.start, "e": f.end, "sc": f.scale, "sg": f.sign, "d": f.decimals,
+               "f": f.format, "v": f.text, "a": f.char_start, "b": f.char_end}
+        out.append({k: v for k, v in row.items() if v is not None})
     return out
 
 

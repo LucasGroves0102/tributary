@@ -5,7 +5,8 @@ Usage: python scripts/fuzz.py [--n 20000] [--seed 1] [--tokens 60] [--rust CMD]
 Use --tokens 2000 for documents larger than libxml2's 4000-byte read size.
 
 Each document is parsed as an exhibit (the whole html_to_text) and as a 10-K, 10-Q, 8-K, 20-F
-(rule 12) and 6-K and 40-F/A (rule 13); sections are compared with their rule 11 tables.
+(rule 12) and 6-K and 40-F/A (rule 13); sections are compared with their rule 11 tables, and a
+primary document's printed facts (rule 14).
 Failing inputs are written to fuzz-failures/ for replay.
 """
 
@@ -17,7 +18,7 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 
-from bench import HERE, python_parse, rust_lines
+from bench import HERE, python_parse, rust_lines, rust_result
 
 TAGS = ["html", "head", "body", "title", "p", "div", "span", "td", "th", "tr", "table", "b",
         "font", "a", "li", "ul", "h1", "h3", "script", "style", "textarea", "xmp", "iframe",
@@ -26,7 +27,12 @@ TAGS = ["html", "head", "body", "title", "p", "div", "span", "td", "th", "tr", "
         "col", "thead", "tbody", "pre", "address", "blockquote", "P", "DIV", "TD", "x}p", "i",
         "plaintext", "noembed", "Body", "HEAD", "Title", "frame", "embed", "ol", "dir",
         # rule 11: tables, rows, cells and head rows, more often
-        "table", "tr", "td", "td", "th", "thead", "TR", "x}td", "tfoot"]
+        "table", "tr", "td", "td", "th", "thead", "TR", "x}td", "tfoot",
+        # rule 14: inline XBRL facts, contexts and units
+        "ix:nonFraction", "ix:nonfraction", "IX:NONFRACTION", "ix2:nonFraction", "xbrli:context",
+        "xbrli:unit", "xbrli:measure", "xbrli:divide", "xbrli:startDate", "xbrli:endDate",
+        "xbrli:instant", "xbrldi:explicitMember", "xbrldi:typedMember", "nonfraction",
+        "x}ix:nonfraction", "ix:hidden"]
 ATTRS = ["", " style='display:none'", ' style="display: none"', " style=DISPLAY:NONE",
          " style", " class=x", " style='color:red' style='display:none'",
          ' http-equiv="Content-Type" content="text/html; charset=windows-1252"',
@@ -34,7 +40,15 @@ ATTRS = ["", " style='display:none'", ' style="display: none"', " style=DISPLAY:
          ' style="display&#58;none"', " STYLE='x;display:none;y'", " style=display:none/",
          # rule 11: colspans
          " colspan=2", " colspan='3'", " COLSPAN=0", " colspan=&#52;", " colspan=x",
-         " colspan=' 12px'", " colspan=99999999999999999999", " colspan", " colspan=2 colspan=5"]
+         " colspan=' 12px'", " colspan=99999999999999999999", " colspan", " colspan=2 colspan=5",
+         # rule 14: ids, names, references and the attributes kept as written
+         ' id="c1"', " id=c2", " ID='u1'", ' id="c1" id="c2"', " id", ' id=""',
+         ' name="us-gaap:Revenues" contextRef="c1" unitRef="u1"', " name=x:y contextref=c2",
+         ' name="" contextRef="c1"', ' NAME="a:B" CONTEXTREF="c1" unitref=u2', " name=a:B",
+         ' name="a:C" contextRef="c2" scale="6" sign="-" decimals="-6"'
+         ' format="ixt:num-dot-decimal"',
+         ' name="a:D" contextRef="c1" scale decimals=INF', ' contextRef="c1" contextref="c2"',
+         ' name="a:&amp;E" contextRef="c&#49;"', " style='display:none' name=a:F contextRef=c1"]
 TEXT = ["Item 7.", "Item 1A", "ITEM 2.02 Results", "PART II", "Part I", "Item 8. Financial",
         "Management’s discussion and analysis", "Management's Discussion and Analysis of x",
         "Report of Independent Registered Public Accounting Firm", "Item\n7", "Part\tIV.",
@@ -69,13 +83,45 @@ TEXT = ["Item 7.", "Item 1A", "ITEM 2.02 Results", "PART II", "Part I", "Item 8.
         "\nItem 3.D. Risk factors\n", "Item 5.A", "ITEM 4.B.", "Item 3.Dividends", "Item 4A",
         "Item 5A",
         "Item 16F", "\nItem 18. Financial Statements\n", "\n3.D\u2014Risk Factors (continued)\n",
-        "\nİtem 3.d - Rİsk factors\n", "\nD Risk Factors.\n", "Item 2.02.A", "\ndRisk Factors\n"]
+        "\nİtem 3.d - Rİsk factors\n", "\nD Risk Factors.\n", "Item 2.02.A", "\ndRisk Factors\n",
+        # rule 14: a header's contexts and units, and facts (whole, so many land in the text)
+        '<div style="display:none"><ix:header><xbrli:context id="c1"><xbrli:period>'
+        "<xbrli:startDate>2026-01-01</xbrli:startDate><xbrli:endDate> 2026-03-31 </xbrli:endDate>"
+        '</xbrli:period></xbrli:context><xbrli:context id="c2"><xbrli:period><xbrli:instant>'
+        '2026-03-31</xbrli:instant></xbrli:period></xbrli:context><xbrli:unit id="u1">'
+        '<xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit><xbrli:unit id="u2"><xbrli:divide>'
+        "<xbrli:measure>iso4217:EUR</xbrli:measure><xbrli:measure>xbrli:shares</xbrli:measure>"
+        "</xbrli:divide></xbrli:unit></ix:header></div>",
+        '<xbrli:context id="c3"><xbrli:segment><xbrldi:explicitMember>m</xbrldi:explicitMember>'
+        "</xbrli:segment><xbrli:instant>2026-03-31</xbrli:instant></xbrli:context>",
+        '<xbrli:context id="c1"><xbrli:instant></xbrli:instant><xbrli:enddate>x</xbrli:enddate>'
+        "</xbrli:context>", '<xbrli:unit id="u1"><xbrli:measure>a:b:c</xbrli:measure></xbrli:unit>',
+        '<ix:nonFraction name="us-gaap:Revenues" contextRef="c1" unitRef="u1" scale="6">1,234'
+        "</ix:nonFraction>", '<ix:nonFraction name="us-gaap:Cash" contextRef="c2" unitRef="u2"'
+        ' sign="-">5<ix:nonFraction name="a:N" contextRef="c2"> 6 </ix:nonFraction>'
+        "</ix:nonFraction>",
+        '<td><ix:nonFraction name="a:T" contextRef="c1">\xa0 7\n</ix:nonFraction></td>',
+        '<ix:nonFraction name="a:Z" contextRef="c3">8</ix:nonFraction>',
+        '<ix:nonFraction name="a:E" contextRef="c1"></ix:nonFraction>', "\n12\nPage\n",
+        # rule 15: a 10-Q's contents listing items 1 and 2 with entries, and a gap holding them
+        "\nPart I\nItem 1.\nFinancial Statements\nConsolidated balance sheets as of June 30\n3\n"
+        "Item 2.\nManagement's Discussion\nConsolidated Financial Highlights\n4\nItem 3. Risk\n"
+        "Part II\nItem 1. Legal\nItem 3. Defaults\n",
+        "\nCONSOLIDATED BALANCE SHEETS\n", "\nConsolidated financial highlights (unaudited)\n",
+        "\nItem 3. Quantitative\n", "\nPart II\nItem 1. Legal Proceedings\n", "\nOperations\n"]
 BYTES = [b"\xff", b"\x80", b"\xe2\x80", b"\xc3\xa9"]
 RARE = [b"\x0c", b"\x01", b"&#12;", b"&#xFFFE;", b"\xef\xbf\xbe"]  # lxml rejects them in tails
 PREFIXES = [b"", b"<?xml version='1.0' encoding='ASCII'?>", b"<html>", b"<!DOCTYPE html>",
             b"\xef\xbb\xbf<html>", b"  \n<HTML><HEAD><TITLE>t</TITLE></HEAD>",
             b"<DOCUMENT>\n<TYPE>EX-99.1\n<TEXT>\n", b"<!-- lead -->\n<html><body>",
-            b"<?xml version='1.0'?><html><body><div>"]
+            b"<?xml version='1.0'?><html><body><div>",
+            # rule 14: a header first, so the facts that follow have contexts and units
+            b'<html><body><div style="display:none"><ix:header><xbrli:context id="c1"><x:period>'
+            b"<xbrli:startDate>2026-01-01</xbrli:startDate><xbrli:endDate>2026-03-31</xbrli:endDate>"
+            b'</x:period></xbrli:context><xbrli:context id="c2"><xbrli:instant>2026-03-31'
+            b'</xbrli:instant></xbrli:context><xbrli:unit id="u1"><xbrli:measure>iso4217:USD'
+            b"</xbrli:measure></xbrli:unit></ix:header></div>"]
+PREFIXES += PREFIXES[-1:] * 3  # often
 
 
 def document(rng: random.Random, tokens: int) -> bytes:
@@ -125,8 +171,9 @@ def main() -> None:
         for e, r in zip(entries, rust_lines(shlex.split(args.rust), manifest, False), strict=True):
             raw = Path(e["path"]).read_bytes()
             py = python_parse(e, raw)
-            rs = r.get("sections", f"error: {r.get('error')}")
-            outcomes[py if isinstance(py, str) else "sections" if py else "no sections"] += 1
+            rs = rust_result(r)
+            outcomes[py if isinstance(py, str) else "sections" if py["sections"]
+                     else "no sections"] += 1
             if isinstance(py, str) and isinstance(rs, str) or py == rs:
                 continue
             bad += 1

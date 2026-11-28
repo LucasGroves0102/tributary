@@ -1,5 +1,5 @@
-"""Compare the Python and Rust parsers on a corpus (scripts/corpus.py): identical sections,
-then MB/s, median and p95 parse time of each.
+"""Compare the Python and Rust parsers on a corpus (scripts/corpus.py): identical sections
+and printed facts (rule 14), then MB/s, median and p95 parse time of each.
 
 Usage: python scripts/bench.py CORPUS_DIR [--rust CMD] [--repeat 3]
 
@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
 
-from filing_parser.sections import exhibit_section, parse
+from filing_parser.sections import exhibit_section, parse_document
 
 HERE = Path(__file__).resolve().parent.parent
 
@@ -29,15 +29,24 @@ def entries(corpus: Path) -> list[dict]:
         return [json.loads(line) for line in f]
 
 
-def python_parse(e: dict, raw: bytes) -> list[dict] | str:
+def python_parse(e: dict, raw: bytes) -> dict | str:
+    """{"sections": [...], "facts": [...] (a primary document's; None for an exhibit)}."""
     try:
         if "exhibit_type" in e:
-            sections = [exhibit_section(e["exhibit_type"], e.get("description"), raw)]
+            sections, facts = [exhibit_section(e["exhibit_type"], e.get("description"), raw)], None
         else:
-            sections = parse(raw, e["form"])
+            sections, facts = parse_document(raw, e["form"])
     except Exception as exc:  # noqa: BLE001 - compared with the Rust error
         return f"error: {type(exc).__name__}"
-    return [asdict(s) for s in sections]
+    return {"sections": [asdict(s) for s in sections],
+            "facts": None if facts is None else [asdict(f) for f in facts]}
+
+
+def rust_result(r: dict) -> dict | str:
+    """A parser-rs output line in python_parse's shape."""
+    if "sections" not in r:
+        return f"error: {r.get('error')}"
+    return {"sections": r["sections"], "facts": r.get("facts")}
 
 
 def rust_lines(cmd: list[str], manifest: Path, bench: bool) -> Iterator[dict]:
@@ -57,7 +66,7 @@ def compare(corpus: Path, cmd: list[str]) -> int:
     for e, r in zip(es, rust_lines(cmd, corpus / "manifest.jsonl", False), strict=True):
         assert r["id"] == e["id"]
         py = python_parse(e, gzip.decompress(Path(e["path"]).read_bytes()))
-        rs = r.get("sections", f"error: {r.get('error')}")
+        rs = rust_result(r)
         if isinstance(py, str) and isinstance(rs, str):
             continue  # both failed
         if py != rs:
@@ -67,10 +76,17 @@ def compare(corpus: Path, cmd: list[str]) -> int:
     return diffs
 
 
-def describe(py: list[dict] | str, rs: list[dict] | str) -> str:
-    if isinstance(py, str) or isinstance(rs, str):
-        outcome = [r if isinstance(r, str) else "ok" for r in (py, rs)]
+def describe(py_out: dict | str, rs_out: dict | str) -> str:
+    if isinstance(py_out, str) or isinstance(rs_out, str):
+        outcome = [r if isinstance(r, str) else "ok" for r in (py_out, rs_out)]
         return f"python {outcome[0]}, rust {outcome[1]}"
+    if py_out["facts"] != rs_out["facts"]:
+        pf, rf = py_out["facts"] or [], rs_out["facts"] or []
+        first = next((i for i, (a, b) in enumerate(zip(pf, rf, strict=False)) if a != b),
+                     min(len(pf), len(rf)))
+        return (f"printed facts: python {len(pf)}, rust {len(rf)}; first difference at {first}: "
+                f"{pf[first:first + 1]} vs {rf[first:first + 1]}")
+    py, rs = py_out["sections"], rs_out["sections"]
     if len(py) != len(rs):
         return f"python keys {[s['key'] for s in py]}, rust keys {[s['key'] for s in rs]}"
     for a, b in zip(py, rs, strict=True):

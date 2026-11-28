@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use filing_parser::{Error, Section, exhibit_section, parse};
+use filing_parser::{Error, PrintedFact, Section, exhibit_section, parse_document};
 use serde_json::Value;
 
 use crate::BoxError;
@@ -59,7 +59,7 @@ pub fn parse_one(
         )));
     };
     let t0 = Instant::now();
-    let sections = match sections(store, accession_no, &form, &content) {
+    let (sections, facts) = match sections(store, accession_no, &form, &content) {
         Ok(s) => s,
         Err(e) => {
             metrics
@@ -70,7 +70,7 @@ pub fn parse_one(
         }
     };
     let seconds = t0.elapsed().as_secs_f64();
-    store.write_sections(accession_no, &sections)?;
+    store.write_sections(accession_no, &sections, &facts)?;
     metrics.parsed.with_label_values(&[form.as_str()]).inc();
     metrics
         .parse_seconds
@@ -99,8 +99,8 @@ fn sections(
     accession_no: &str,
     form: &str,
     content: &[u8],
-) -> Result<Vec<Section>, Failure> {
-    let mut sections = parse(content, form)?;
+) -> Result<(Vec<Section>, Vec<PrintedFact>), Failure> {
+    let (mut sections, facts) = parse_document(content, form)?;
     for e in store.load_exhibits(accession_no)? {
         sections.push(exhibit_section(
             &e.exhibit_type,
@@ -108,7 +108,7 @@ fn sections(
             &e.content,
         )?);
     }
-    Ok(sections)
+    Ok((sections, facts))
 }
 
 /// The accession number in a documents.fetched event.
@@ -153,6 +153,7 @@ pub mod tests {
         pub documents: HashMap<String, (String, Vec<u8>)>,
         pub exhibits: HashMap<String, Vec<FakeExhibit>>,
         pub sections: HashMap<String, Vec<Section>>,
+        pub facts: HashMap<String, Vec<PrintedFact>>,
         pub writes: usize,
     }
 
@@ -186,8 +187,14 @@ pub mod tests {
                 .collect())
         }
 
-        fn write_sections(&mut self, acc: &str, sections: &[Section]) -> Result<(), BoxError> {
+        fn write_sections(
+            &mut self,
+            acc: &str,
+            sections: &[Section],
+            facts: &[PrintedFact],
+        ) -> Result<(), BoxError> {
             self.sections.insert(acc.to_string(), sections.to_vec());
+            self.facts.insert(acc.to_string(), facts.to_vec());
             self.writes += 1;
             Ok(())
         }
@@ -227,6 +234,7 @@ pub mod tests {
         }
         let keys: Vec<&str> = store.sections["a"].iter().map(|s| s.key.as_str()).collect();
         assert_eq!(keys, ["8.01", "9.01", "EX-99.1"]);
+        assert!(store.facts["a"].is_empty()); // an 8-K without inline XBRL facts
         assert_eq!(store.sections["a"][2].title, "PRESS RELEASE");
         assert_eq!(count(&metrics, "parsed", "8-K"), 2);
         assert_eq!(count(&metrics, "seconds", "8-K"), 2);
