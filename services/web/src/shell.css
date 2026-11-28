@@ -668,3 +668,19 @@ main.content[tabindex="-1"]:focus {
 .credit a {
   white-space: nowrap;
 }
+
+/* the freshness point says what it counts where the bar has room; a tablet's bar keeps the short word, so
+   nothing is pushed past the window's edge */
+.fresh-short {
+  display: none;
+}
+
+@media (max-width: 1199px) {
+  .fresh-long {
+    display: none;
+  }
+
+  .fresh-short {
+    display: inline;
+  }
+}

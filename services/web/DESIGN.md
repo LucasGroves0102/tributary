@@ -152,6 +152,35 @@ were searched, names sections ("Risk Factors") instead of their keys, offers Ope
 accession number, and never doubles a phrase's quotes; Peers' shared terms appear once each, three at most;
 Business paragraphs rejoin a sentence a line break cut.
 
+### The design-QA pass (Marek's review, 2026-11-27, batch A)
+
+Fixes by finding number (his `docs/test-people/reports/marek/review.md`); batch B (citations to the line,
+the reader's filing tables, JPMorgan-style 10-Qs) is the parser's. The rules they leave:
+
+- **Rows of stats** (Data status, Home's strip, the front door's proof): each cell's label, figure and note on
+  rows shared across the row (CSS subgrid), so a wrapped label never drops its figure (25); each cell sits
+  under the strip's clip by its rule and inset, so the first cell of a wrapped row starts on the edge (28).
+- **Edges**: everything in `main` starts at the content edge: quiet buttons on a phone's page bar hang their
+  padding out (43), a watched row's notch sits 8px out in the scroller's own inset (30), Peers' line, Data
+  notes and the Revenue breakdowns have no side inset (29). A card list's items read from their top (26).
+- **Controls**: 32px beside a 32px field (Home's Export CSV, What changed's Filter, Compare's Chart these: 31);
+  a date range's two ends stay on one line (39); a label stays with its select (54); Mark done is one outline
+  (53); a confirm's destructive answer is the ink filled (64); Earnings' release actions are a secondary and a
+  quiet button (51); Customize Home's arrows sit by their label (59). An annual report's badge is outlined on
+  the well, never filled ink (58).
+- **Words**: placeholders take curly quotes and a search snippet's " ... " is "…" (49); a filing's contents keep
+  their item numbers apart from the titles (21); a statement's column names its filing day as words beside
+  the code (57); Peers quotes the Business section's distinctive words (22); a bank's quarter chart is "Net
+  revenue by quarter" (63); exports carry the day in their name (60); a typed As of day that can't be shown
+  says why (40).
+- **Behaviour**: `/v1/allowance` is asked once per token per few seconds (`askAllowance`; a page load asked
+  twice and drew a 429: 67); Back and Forward return to where a page was left (`scrollMemory.ts`, the place
+  kept on the history entry: 68); code a person types or copies is in the system monospace (`--code`; figures
+  and codes stay Archivo: 32).
+- **Front door**: the specimen (§6) fills the first screen's right half, drawn with blank values (no figure it
+  doesn't read live); `index.html` carries a description, Open Graph and Twitter tags and `public/og.png`
+  (1200x630, made from the same drawing) for a shared link (69).
+
 ### The restraint pass (Riley's audit, test 10, findings 37-107)
 
 History: the build spec now gives the seal red to the tick and the logo only, and a change its green or rust. Red is only the seal, the margin rubrics, red-letter days and the "may have changed" `*`: the Home badge,

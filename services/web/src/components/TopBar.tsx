@@ -147,7 +147,7 @@ function Freshness({ listed, lastIngested, valuesAsOf, me }: { listed: string | 
       <summary className="tb">
         <span className={listed && open ? "live" : "live quiet"} aria-hidden="true" />
         {/* what was listed, said (Marek 48: a bare "Listed 1 h ago" read as nothing) */}
-        {listed ? <>Newest filing listed <span className="fresh-ago">{ago(listed)}</span></> : "Data freshness"}
+        {listed ? <><span className="fresh-long">Newest filing listed</span><span className="fresh-short">Listed</span> <span className="fresh-ago">{ago(listed)}</span></> : "Data freshness"}
       </summary>
       <div className="pop fresh-pop">
         <p>

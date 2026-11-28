@@ -53,6 +53,7 @@ import {
   type ChartState,
   type Display,
   type Layer,
+  type Template,
 } from "../chart/model";
 import { pngBlob, slug, svgText } from "../chart/export";
 import { UNNAMED, useDirectory } from "../companies/directory";
@@ -331,6 +332,15 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
     tickers: [...known.values()].flatMap((c) => (c.ticker ? [{ ticker: c.ticker, name: c.name }] : [])),
   }), [metrics, known]);
   const fallback = seed?.ids ?? [];
+  /** A template over the chart's companies (or the watchlist's): replacing layers says so with Restore. */
+  const startFrom = (t: Template) => {
+    if (chart.layers.length || chart.title) onReplace?.(`Replaced your layers with the ${t.label} template.`);
+    else {
+      const used = fallback.slice(0, t.per === "one" ? 1 : 4).map((id) => short(id));
+      if (used.length) toast({ text: `${t.label} for ${used.length > 1 ? `${used.slice(0, -1).join(", ")} and ${used.at(-1)}` : used[0]}: change a layer's company to chart another.`, topic: "template" });
+    }
+    setChart((s) => applyTemplate(s, t, fallback));
+  };
   const firstCompany = chart.layers.find((l) => l.companyId)?.companyId ?? fallback[0];
   // named for what draws, once that's known: a layer with nothing to show isn't in the title
   const drawn = drawnIds(series);
@@ -531,14 +541,7 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                 items={TEMPLATES.map((t) => ({
                   label: t.label,
                   title: t.hint + (t.per === "one" ? " (the chart's first company)" : "") + (chart.layers.length ? ". Replaces the layers; you can restore them" : ""),
-                  onSelect: () => {
-                    if (chart.layers.length || chart.title) onReplace?.(`Replaced your layers with the ${t.label} template.`);
-                    else {
-                      const used = fallback.slice(0, t.per === "one" ? 1 : 4).map((id) => short(id));
-                      if (used.length) toast({ text: `${t.label} for ${used.length > 1 ? `${used.slice(0, -1).join(", ")} and ${used.at(-1)}` : used[0]}: change a layer's company to chart another.`, topic: "template" });
-                    }
-                    setChart((s) => applyTemplate(s, t, fallback));
-                  },
+                  onSelect: () => startFrom(t),
                 }))} />
             </div>
           </div>
@@ -644,8 +647,21 @@ export function ChartBuilder({ token, chart, setChart, saveBar, readable = ANYTH
                   : emptyNote
                 : chart.layers.length
                   ? "Every layer is hidden. Show one, or add a metric or formula layer."
-                  : "Chart a company: pick one above, or start from a template."}
+                  : "Chart a company: pick one above, or start from one of these."}
             </p>
+          )}
+          {/* a blank chart shows what it can be (Marek 34: one grey sentence on an empty sheet) */}
+          {!chart.layers.length && fallback.length > 0 && (
+            <ul className="chart-starts" aria-label="Start from a template">
+              {TEMPLATES.map((t) => (
+                <li key={t.label}>
+                  <button type="button" className="chart-start" onClick={() => startFrom(t)}>
+                    <b>{t.label}</b>
+                    <span>{t.hint}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
           {latest && <div className="foot">Point at a value, or tap it, for its period and filing; click it to open the filing in the reader.</div>}
         </section>
