@@ -171,6 +171,44 @@ def test_derived_financials_hidden_without_a_grant(client):
         cur.execute("RESET ROLE")
 
 
+def test_printed_lines_respect_rls(client, token):
+    """168: a figure's printed line (silver.fact_gates, the filings tier) only for a company the
+    caller reads filings of; opt-in, so a citation without `lines` is as before."""
+    conn = client.app_conn
+    for cid in (A, B):
+        acc = f"{cid}-26-000001"
+        conn.execute(
+            "INSERT INTO bronze.filing_documents (accession_no, cik, form, filed,"
+            " document_name, url, content_gzip, content_sha256, size_bytes)"
+            " VALUES (%s, %s, '10-Q', '2026-08-01', 'q.htm', 'u', '\\x00', 'x', 1)", (acc, cid))
+        conn.execute(
+            "INSERT INTO silver.fact_gates (accession_no, cik, parser, parser_version, printed_at,"
+            " gate_version, gated_at, facts, agrees, disagrees, not_located, not_applicable,"
+            " lines) VALUES (%s, %s, 'rust', 'rust-9', now(), 167, now(), 1, 1, 0, 0, 0, %s)",
+            (acc, cid, json.dumps([{"c": cid, "t": "Revenues", "u": "USD",
+                                    "e": "2026-06-30", "st": "a", "k": "I-1", "a": 10,
+                                    "b": 16}])))
+    [row] = financials(client, token, "t-pro", A, "lines=true")
+    assert row["citation"]["line"] == {"status": "agrees", "section_key": "I-1",
+                                       "char_start": 10, "char_end": 16}
+    assert "line" not in financials(client, token, "t-pro", A)[0]["citation"]
+    assert "line" not in financials(client, token, "t-free", A, "lines=true")[0]["citation"]
+    with conn.cursor() as cur:
+        cur.execute("SET LOCAL ROLE query_api")
+        cur.execute("SELECT set_config('app.user_id', 't-pro', true)")
+        cur.execute("SELECT cik FROM silver.fact_gates WHERE cik IN (%s, %s)", (A, B))
+        assert cur.fetchall() == [(A,)]
+        cur.execute("SELECT count(*) FROM gold.printed_lines(%s, %s, %s, %s, %s)",
+                    ([f"{B}-26-000001"], ["Revenues"], ["USD"], [None], [date(2026, 6, 30)]))
+        assert cur.fetchone() == (0,)
+        cur.execute("SELECT set_config('app.user_id', 't-free', true)")  # no filings tier
+        cur.execute("SELECT count(*) FROM silver.fact_gates")
+        assert cur.fetchone() == (0,)
+        cur.execute("SELECT count(*) FROM silver.fact_disagreements")
+        assert cur.fetchone() == (0,)
+        cur.execute("RESET ROLE")
+
+
 def test_tier_enforced_by_database(client, token):
     assert sections(client, token, "t-free", A) == []  # free plan: no filings rows
 

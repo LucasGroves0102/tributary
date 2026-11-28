@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { blockAt, blockUnits, dateHeads, readerBlocks, splitCells, type Block } from "./blocks";
+import { blockAt, blockUnits, dateHeads, framedFigure, readerBlocks, spacedBullet, splitCells, type Block } from "./blocks";
 
 // NVIDIA's FY2026 10-K, Item 15, as stored (production, parser rust-4): the end of the income
 // statement through the start of the equity statement
@@ -102,8 +102,9 @@ describe("#179: page debris", () => {
     expect(text).not.toMatch(/\n1[24]\n|demand\. 12/);
     expect(blocks.filter((b) => b.kind === "p").map((b) => (b as { text: string }).text.split("\n")[0]!.slice(0, 30))).toEqual([
       "Risks Related to Demand, Suppl",
-      "•Long manufacturing lead times",
-      "•Dependency on third-party sup",
+      // a bullet run into its word reads with a space (Marek 21)
+      "• Long manufacturing lead time",
+      "• Dependency on third-party su",
       "The growing importance of AI c",
     ]);
     expect((blocks.at(-1) as { text: string }).text).toBe(
@@ -115,5 +116,42 @@ describe("#179: page debris", () => {
     expect(readerBlocks("Employees at year end\n36\nMore text.").map((b) => b.kind)).toEqual(["p", "p"]);
     expect((readerBlocks("Employees at year end\n36\nMore text.")[0] as { text: string }).text).toBe("Employees at year end\n36");
     expect((readerBlocks("Our results improved.\n36")[0] as { text: string }).text).toBe("Our results improved.");
+  });
+});
+
+describe("168: the printed figure a card opens", () => {
+  const blocks = readerBlocks(ITEM15);
+  it("is framed in the cell that prints it, the right one when a row prints it twice", () => {
+    const at = ITEM15.indexOf("206,803");
+    const f = framedFigure(ITEM15, blocks, at, at + "206,803".length)!;
+    const units = blockUnits(blocks[f.block]!);
+    expect(units[f.unit]).toBe("$206,803");
+    expect(units[f.unit]!.slice(f.offset, f.offset + f.length)).toBe("206,803");
+    // a figure printed twice in one block: the second occurrence frames the second cell
+    const text = "Revenue\nRevenue 1,000 1,000 2,000\nCost 400 400 800\nProfit 600 600 1,200";
+    const bs = readerBlocks(text);
+    const second = text.indexOf("1,000", text.indexOf("1,000") + 1);
+    const g = framedFigure(text, bs, second, second + 5)!;
+    expect(blockUnits(bs[g.block]!).slice(0, g.unit + 1).filter((u) => u.includes("1,000")).length).toBe(2);
+  });
+  it("in a paragraph, and none outside the text or past its block", () => {
+    const text = "Revenue for the quarter was $96.2 billion, up 56% from a year ago.";
+    const bs = readerBlocks(text);
+    const at = text.indexOf("96.2");
+    expect(framedFigure(text, bs, at, at + 4)).toEqual({ block: 0, unit: 0, offset: at, length: 4 });
+    expect(framedFigure(text, bs, at, text.length + 5)).toBeNull();
+    expect(framedFigure(text, bs, at, at)).toBeNull();
+  });
+});
+
+describe("Marek 21: a release's bullets", () => {
+  it("read with a space after a bullet run into its word; the offsets stay the stored text's", () => {
+    expect(spacedBullet("•Revenue of $115.8 billion")).toBe("• Revenue of $115.8 billion");
+    expect(spacedBullet("• Revenue")).toBe("• Revenue");
+    expect(spacedBullet("Revenue •grew")).toBe("Revenue •grew");
+    const text = "Highlights\n•Revenue of $115.8 billion, up 13%\n•Gross margin of 71.2%";
+    const ps = readerBlocks(text);
+    expect(ps.map((p) => p.kind === "p" && p.text)).toEqual(["Highlights", "• Revenue of $115.8 billion, up 13%", "• Gross margin of 71.2%"]);
+    expect(text.slice(ps[1]!.start, ps[1]!.end)).toBe("•Revenue of $115.8 billion, up 13%");
   });
 });

@@ -4,13 +4,15 @@ note when it was cut to size, and, for filing text, a notice that the text is da
     {"about": "...",            # only for tools that return filing text or the user's own writing
      "data": {...},             # the Query API's answer (trimmed to the size cap)
      "citations": [{"accession_no", "form", "filed", "section_key", "period", "company_id",
-                    "url"}, ...],
+                    "url", "line"}, ...],
      "truncated": [{"at": "rows", "kept": 40, "of": 160}, ...]}   # only when cut
 
 Citations are every filing the (trimmed) answer cites, found where the Query API puts them: an
 object with an `accession_no` and a `form` or `filed` (a row's `citation`, a section's, a
 passage's, a screener source); a figure read from a 6-K results release's table (its citation's
-`release`) is cited at that release's section. `period` is the cited object's own
+`release`) is cited at that release's section; a figure with its printed line (its citation's
+`line`, migration 168) at that line: the section, and `line` with the printed figure's document
+offsets and whether it agrees. `period` is the cited object's own
 `period_of_report` or `period_end`, else that of the object around it (a /financials row's period
 for its citation);
 `company_id` likewise. One entry per (filing, section, period, company), at most MAX_CITATIONS.
@@ -76,10 +78,17 @@ def citations_of(data: Any) -> tuple[list[dict], int]:
             if section is None and isinstance(release, dict) \
                     and isinstance(release.get("section"), str):
                 section = release["section"]
+            line = node.get("line")  # where the filing prints the figure (168)
+            printed = None
+            if isinstance(line, dict) and isinstance(line.get("section_key"), str):
+                section = section or line["section_key"]
+                printed = {k: line.get(k) for k in ("char_start", "char_end", "status")}
             entry = {"accession_no": acc, "form": node.get("form"), "filed": node.get("filed"),
                      "section_key": section, "period": period, "company_id": company,
-                     "url": node.get("document_url") or node.get("filing_url")}
-            key = (acc, section, period, company)
+                     "url": node.get("document_url") or node.get("filing_url"),
+                     "line": printed}
+            key = (acc, section, period, company,
+                   printed["char_start"] if printed else None)
             prev = found.get(key)
             found[key] = entry if prev is None else {
                 k: prev.get(k) if prev.get(k) is not None else v for k, v in entry.items()}

@@ -13,6 +13,11 @@ restated years). An older database without them reads every check by its severit
 `gaps` (076): the coverage sweep's open gaps per kind and reason over the listed companies it
 measured (`ops.public_coverage_gaps`): counts only, never a company.
 
+`trust` (168): trust as a number, the latest `ops.public_trust()` run: of the company pages'
+quarterly figures filed since inline XBRL and reported, the share whose source fact links to the
+line its filing prints, and of those the share that agree; the figures on a fact the filing
+prints otherwise; and the gate's own fact counts. None before the first run. Counts only.
+
 `shape` copies named fields only, so a function that started returning more columns still
 couldn't put them on a public route. Results are cached for CACHE_SECONDS per process."""
 
@@ -90,6 +95,23 @@ def _gaps(rows: list[dict]) -> dict:
     }
 
 
+def _pct(part: Any, whole: Any) -> float | None:
+    return round(100 * part / whole, 1) if part is not None and whole else None
+
+
+def _trust(row: dict | None) -> dict | None:
+    if not row:
+        return None
+    return {
+        "refreshed_at": row.get("run_at"),
+        **_pick(row, "figures", "since_ixbrl", "reported", "linked", "agreeing", "disagreeing",
+                "filings_gated", "facts_gated", "facts_agree", "facts_disagree",
+                "facts_not_located", "facts_not_applicable"),
+        "linked_pct": _pct(row.get("linked"), row.get("reported")),
+        "agreeing_pct": _pct(row.get("agreeing"), row.get("linked")),
+    }
+
+
 def shape(raw: dict, recorded: dict) -> dict:
     ingest, completeness = raw.get("ingest") or {}, raw.get("completeness") or {}
     filings, via_feed = ingest.get("filings") or 0, ingest.get("via_feed") or 0
@@ -116,6 +138,7 @@ def shape(raw: dict, recorded: dict) -> dict:
         "quality": _quality(raw.get("quality") or []),
         "parser": _parser(raw.get("parser") or []),
         "gaps": _gaps(raw.get("gaps") or []),
+        "trust": _trust(raw.get("trust")),
         "recorded": recorded,
     }
 

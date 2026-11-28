@@ -353,5 +353,10 @@ cases, and on the fixtures each row's text equals its cells and the walk equals 
 `parsed_at`; `test_index_db.py` migration 068 (the furniture rule against the web's cases, a phrase
 across NVIDIA's page break, `--passages` leaving diffs alone); `test_rust_tls.py` checks that the Rust
 parser connects or fails for every `sslmode` exactly where libpq does, against a TLS-only server
-(CI). `test_invariants.py` checks every fixture's keys and core items (072's rules);
+(CI). `test_gate_db.py` runs the gate (migration 167) on NVIDIA's 10-Q: statuses, lines, both
+values of a disagreement, the backlog and the `gate` kind, the `printed_mismatch` finding, gold's
+lines and the trust count (168); `test_gate_fixtures_db.py` is the proof layer's CI check: every
+fixture filing with inline XBRL, parsed and gated with the silver facts hermes holds for it
+(`fixtures/gate/silver-facts.json.gz`), fails when a figure stops linking to its printed line.
+`test_invariants.py` checks every fixture's keys and core items (072's rules);
 `test_section_checks_db.py` runs `ops.check_sections`, section-index's call and the catch-up.

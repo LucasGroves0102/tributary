@@ -774,6 +774,8 @@ export const financialsView = (
     ...(callouts ? { callouts: "true" } : {}),
     ...(asOf ? { as_of: asOf } : {}),
     ...(originals ? { originals: "true" } : {}),
+    // 168: each reported figure's printed line, for its card's "Open at this line"
+    lines: "true",
     quarters: older ? OLDER_QUARTERS : quarters,
     metrics,
     view,

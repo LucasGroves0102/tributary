@@ -259,6 +259,8 @@ def build_server(api: QueryApi, *, cap: int = RESULT_CHARS) -> MCPServer:
           "metrics (margins, free cash flow, net debt, growth) list their `inputs`. A foreign "
           "filer's quarter read from its 6-K results release has `citation.release` (section, "
           "table, row, column, from 0) instead of an XBRL tag: cite it as that press release. "
+          "A reported figure's `citation.line` is where its filing prints it (section, character "
+          "offsets, and `status`: agrees, or disagrees when the printed number differs). "
           "`not_meaningful` on a "
           "row gives why a ratio is n/m (e.g. negative equity); `not_meaningful_periods` lists "
           "periods with no ratio for that reason. `currency` is present when amounts aren't USD; "
@@ -280,11 +282,12 @@ def build_server(api: QueryApi, *, cap: int = RESULT_CHARS) -> MCPServer:
         if period != "annual":
             data = await get(ctx, path, {"metrics": metrics, "quarters": periods,
                                          "view": period, "basis": basis, "readings": True,
-                                         "as_of": as_of})
+                                         "lines": True, "as_of": as_of})
             return result(data, cap=cap)
         years = min(periods, 10)
         data = await get(ctx, path, {"metrics": metrics, "quarters": years * 4, "view": "ttm",
-                                     "basis": basis, "readings": True, "as_of": as_of})
+                                     "basis": basis, "readings": True, "lines": True,
+                                     "as_of": as_of})
         label = "calendar_period" if basis == "calendar" else "fiscal_period"
         data["view"] = "annual"
         data["rows"] = [r for r in data.get("rows") or []

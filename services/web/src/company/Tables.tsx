@@ -47,7 +47,7 @@ import { onGridKey } from "../components/ledgerGrid";
 import { useSourceCard, type SourceInfo } from "../components/SourceCard";
 import { ErrorPanel, Skeleton } from "../components/States";
 import { TableScroll } from "../components/TableScroll";
-import { releaseCard } from "./sources";
+import { lineIn, PRINTED_OTHERWISE, releaseCard } from "./sources";
 import { useLoad, type Load } from "./useLoad";
 import { ResultsPending } from "./ResultsPending";
 
@@ -80,13 +80,16 @@ const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 /** Where a value can be read (#113): the value opens its filing in Tributary's reader, at the
  * financial statements when the form says where they are; "↗" beside it (shown on hover or
  * focus) is the filing on EDGAR. Only ids of the right shape make a reader link. */
-export function cellLinks(cell: TableCell, companyId: string): { reader: string | null; edgar: string | null } {
+export function cellLinks(cell: TableCell, companyId: string): { reader: string | null; edgar: string | null; line: boolean } {
   const s = cell.source;
-  // a figure read from a results release (165) opens the release, not the statements
+  // the line that prints the figure (168); a figure read from a results release (165) opens the
+  // release; else the statements
+  const printed = s && !s.release && !cell.derived && !cell.adjusted ? lineIn(s.line) : null;
   const reader = s && CIK.test(companyId) && ACCESSION.test(s.accessionNo)
-    ? href({ view: "filing", companyId, accessionNo: s.accessionNo, section: s.release?.section ?? statementSection(s.form) })
+    ? href({ view: "filing", companyId, accessionNo: s.accessionNo,
+      ...(printed ?? { section: s.release?.section ?? statementSection(s.form) }) })
     : null;
-  return { reader, edgar: cell.url?.startsWith("https://www.sec.gov/") ? cell.url : null };
+  return { reader, edgar: cell.url?.startsWith("https://www.sec.gov/") ? cell.url : null, line: !!printed };
 }
 
 /** A table figure's mark (§5.1): ✓ when its filing prints it as shown; d when derived (a fiscal Q4, a
@@ -94,13 +97,15 @@ export function cellLinks(cell: TableCell, companyId: string): { reader: string 
  * results release's table (165: its card says "from the press release"). From the API's facts only. */
 export function cellMark(cell: TableCell): "ok" | "d" | null {
   if (cell.derived || cell.adjusted || !!cell.source?.tag?.startsWith("derived:")) return "d";
+  // 168: the filing prints another number at the figure's line
+  if (cell.source?.line?.status === "disagrees") return null;
   return cell.source?.release ? null : "ok";
 }
 
 /** What a table figure's card says: the figure as Tributary holds it, its mark, its filing and where in
  * it; a callout's sentence or a restatement as its note; the filing in the reader and on EDGAR. */
 function cellCard(cell: TableCell, row: string, column: { label: string; sub: string }, companyId: string, note?: string, currency = "USD"): SourceInfo {
-  const { reader, edgar } = cellLinks(cell, companyId);
+  const { reader, edgar, line } = cellLinks(cell, companyId);
   const mark = cellMark(cell);
   const n = Number(cell.raw);
   const exact = cell.raw !== "" && Number.isFinite(n) && /^-?([$€£¥₹₩]|CN¥|[A-Z]{3} )[\d,.]+[TBMK]?$/.test(cell.text.replace(/^\(|\)$/g, ""));
@@ -118,8 +123,8 @@ function cellCard(cell: TableCell, row: string, column: { label: string; sub: st
     ...(mark === "d" ? { how: cell.adjusted ? "Derived: the filing's own figure, split-adjusted to today's share basis. Shown in italic."
       : "Derived: worked out from the filings, not printed in one as shown (a fiscal Q4 is the 10-K's year less its three 10-Qs). Shown in italic." } : {}),
     where: cell.source ? [`${cell.source.form}${cell.source.filed ? ` filed ${day(cell.source.filed, true)}` : ""}`, statementPlace(cell.source.form)] : [],
-    note: [note, cell.restated].filter(Boolean).join(" ") || undefined,
-    reader: reader ? { href: reader, label: `Open the ${cell.source?.form ?? "filing"} at its statements` } : null,
+    note: [note, cell.restated, cell.source?.line?.status === "disagrees" ? PRINTED_OTHERWISE : null].filter(Boolean).join(" ") || undefined,
+    reader: reader ? { href: reader, label: `Open the ${cell.source?.form ?? "filing"} ${line ? "at this line" : "at its statements"}` } : null,
     edgar,
   };
 }

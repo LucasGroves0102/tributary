@@ -1052,6 +1052,17 @@ in Source Serif 17/28 on a 660px measure. What changed shows the filing's ranked
 in the page's place and the outline counts each section's changes; switching modes cross-fades the page
 like a tab (`motion.ts` `kindOf`). Under 900px of page the outline folds behind "Contents".
 
+A figure's printed line (migration 168, the proof layer): a source card or statement cell whose figure
+the Query API ties to its printed line (`citation.line`, `/financials?lines=true`) says "Open the 10-Q at
+this line" and opens `?at=<start>&to=<end>&fig=agrees`. The reader frames that printed number in seal and
+ticks it (system.md §5.2, §7.5's framed line; the travelling frame of §7.4 is not built), with one line
+above the section saying what the frame is; `fig=disagrees` frames it in ink, untickable, and says the data
+and the page disagree (that figure's card and cell carry no tick either). Where the number shows is
+`reader/blocks.ts` rule 8: the block holding its start, and the unit that prints it the k-th time, k the
+times the block prints it before (a row printing one number twice frames the right cell). A release's
+bullet run into its word reads with a space (rule 7; Marek 21), offsets unchanged. An assistant source on a
+10-K or 10-Q cited for its figures links to the reader's statements beside EDGAR (`FilingLinks`, Marek 24).
+
 Filing reader (`components/explore/FilingReader.tsx`, pure parts in `reader/text.ts`): the section
 is read in full (`max_chars`, the API's cap is 1,000,000: the old 50,000 hid later matches and
 cited passages; an API still at 50,000 answers 422, and the page asks again at 50,000, see

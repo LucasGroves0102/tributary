@@ -53,7 +53,7 @@ written for a model.
 | `whoami` | `GET /v1/me` (the key's prefix is dropped) | any |
 | `find_companies` | `GET /v1/companies/search` | identity: any |
 | `get_company_profile` | `GET /v1/screener?company_id=` (identity, sector, fiscal year end, key figures with `readings`) + `GET /v1/companies/{id}/expected-filings` | values: financials |
-| `get_financials` | `GET /v1/companies/{id}/financials?readings=true`; `period=annual`: the TTM rows ending each fiscal (or calendar) Q4 + `GET .../annual-per-share` | financials |
+| `get_financials` | `GET /v1/companies/{id}/financials?readings=true&lines=true`; `period=annual`: the TTM rows ending each fiscal (or calendar) Q4 + `GET .../annual-per-share` | financials |
 | `get_segments` | `GET /v1/companies/{id}/segments` | financials |
 | `get_text_kpis` | `GET /v1/companies/{id}/text-kpis` | filings |
 | `get_data_notes` | `GET /v1/companies/{id}/data-notes` | financials |
@@ -115,8 +115,10 @@ The same object is the result's `structuredContent` and its one text block (JSON
 lists every filing the answer cites (accession number, form, filed date, section, period, company,
 EDGAR link), found where the Query API puts them, at most 100 (`results.py`'s docstring has the
 rule); a figure read from a foreign filer's 6-K results release (its citation's `release`, Query
-API migration 165) is cited at the release's section. `about` appears on tools that return filing
-text or the user's own writing.
+API migration 165) is cited at the release's section; a figure with its printed line (its
+citation's `line`, Query API migration 168) is cited at that line's section, with `line`: the
+printed figure's document offsets and whether the printed number agrees. `about` appears on tools
+that return filing text or the user's own writing.
 
 ## Safety
 

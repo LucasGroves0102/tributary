@@ -25,7 +25,9 @@ no gold rows (a CIK mapped after its facts were loaded). `--zip PATH` loads a lo
 `--dir` sets the download directory. `--rounds N --pause-seconds S` (`$BULK_ROUNDS`,
 `$BULK_PAUSE_SECONDS`) runs up to N batches from one download with a pause between them,
 stopping once the file is fully loaded. Last (an unchanged zip too) it refreshes the
-[extremes report](#extremes-report) and the [coverage report](#coverage-report).
+[extremes report](#extremes-report), the [coverage report](#coverage-report) and the trust numbers
+(`trust.py`, migration 168: `ops.refresh_trust`, the status page's figures linked to their printed
+line and agreeing; `python -m facts_fetcher.trust` refreshes now).
 
 Bronze keeps, per distinct payload, only the facts of tags in `silver.metric_tags`
 (`payload`, what SQL reads) plus the full payload gzip-compressed (`raw_gzip`) for the latest

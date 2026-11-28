@@ -60,6 +60,12 @@ class FakeStore:
     def segment_metric_names(self):
         return ["operating_income", "revenue"]
 
+    def printed_lines(self, user_id, keys):
+        self.calls.append(("printed_lines", user_id))
+        self.line_keys = keys
+        return {0: {"status": "agrees", "section_key": "I-1", "char_start": 5455,
+                    "char_end": 5461}}
+
     def feed_status(self):
         return {"last_accepted_at": "2026-10-28T21:12:49Z",
                 "last_ingested_at": "2026-10-28T21:13:20Z"}
@@ -95,6 +101,12 @@ class FakeStore:
                       "company_id": NVDA},
                      {"kind": "no_figures", "reason": "out_of_scope", "companies": 361,
                       "listed": 6068, "refreshed_at": "2026-11-17T10:05:00Z"}],
+            "trust": {"run_at": "2026-11-28T09:00:00Z", "figures": 6760000,
+                      "since_ixbrl": 2400000, "reported": 2000000, "linked": 1500000,
+                      "agreeing": 1499000, "disagreeing": 120, "filings_gated": 120000,
+                      "facts_gated": 10900000, "facts_agree": 9800000, "facts_disagree": 1200,
+                      "facts_not_located": 900000, "facts_not_applicable": 50000,
+                      "company_id": NVDA},
         }
 
     def segments(self, user_id, company_id, axis, metric, periods, view, basis):
@@ -227,6 +239,22 @@ def test_financials_views_and_bases(client, token):
     assert client.store.financials_args == (["revenue", "gross_margin"], 8, "ttm", "calendar")
     row = r.json()["rows"][0]
     assert (row["fiscal_period"], row["calendar_period"]) == ("FY2027 Q2", "CY2026 Q2")
+
+
+def test_financials_lines_are_opt_in_and_only_for_a_reported_figure(client, token):
+    """168: `lines=true` adds the printed line to a reported figure's citation; without it the
+    citation is byte for byte as before (the agent never sends it)."""
+    plain = client.get(f"/v1/companies/{NVDA}/financials", headers=token("alice")).json()
+    assert "line" not in plain["rows"][0]["citation"]
+    assert not any(c[0] == "printed_lines" for c in client.store.calls)
+    r = client.get(f"/v1/companies/{NVDA}/financials?lines=true", headers=token("alice"))
+    assert r.status_code == 200
+    citation = r.json()["rows"][0]["citation"]
+    assert citation["line"] == {"status": "agrees", "section_key": "I-1", "char_start": 5455,
+                                "char_end": 5461}
+    assert {k: v for k, v in citation.items() if k != "line"} == plain["rows"][0]["citation"]
+    assert client.store.line_keys == [("0001045810-26-000075", "Revenues", "USD", date(2026, 4, 27),
+                                date(2026, 7, 26))]
 
 
 def test_financials_default_to_fiscal_quarters_of_every_metric(client, token):
@@ -474,7 +502,7 @@ def test_status_data_is_public_and_aggregate_only(client):
     assert r.status_code == 200
     body = r.json()
     assert set(body) == {"as_of", "max_age_seconds", "freshness", "ingest", "completeness",
-                         "coverage", "quality", "parser", "gaps", "recorded"}
+                         "coverage", "quality", "parser", "gaps", "trust", "recorded"}
     assert body["ingest"] == {"window_days": 7, "window_start": "2026-10-26T15:00:00Z",
                               "filings": 40000, "via_feed": 39000, "live_pct": 97.5,
                               "p50_seconds": 41.2, "p95_seconds": 170.0}
@@ -496,6 +524,13 @@ def test_status_data_is_public_and_aggregate_only(client):
         "listed": 6068, "refreshed_at": "2026-11-17T10:05:00Z",
         "kinds": [{"kind": "history_short", "reason": "fixable", "companies": 81},
                   {"kind": "no_figures", "reason": "out_of_scope", "companies": 361}]}
+    # 168: trust as a number, the shares worked out from the counts
+    assert body["trust"] == {
+        "refreshed_at": "2026-11-28T09:00:00Z", "figures": 6760000, "since_ixbrl": 2400000,
+        "reported": 2000000, "linked": 1500000, "agreeing": 1499000, "disagreeing": 120,
+        "filings_gated": 120000, "facts_gated": 10900000, "facts_agree": 9800000,
+        "facts_disagree": 1200, "facts_not_located": 900000, "facts_not_applicable": 50000,
+        "linked_pct": 75.0, "agreeing_pct": 99.9}
     # nothing the store returned beyond the named fields reaches the public route
     text = r.text
     assert NVDA not in text and "0001045810-26-000075" not in text and "NVDA" not in text

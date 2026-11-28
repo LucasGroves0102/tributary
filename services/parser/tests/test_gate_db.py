@@ -179,3 +179,39 @@ def test_a_disagreement_is_a_printed_mismatch_finding_without_values(conn):
     tiers = conn.execute("SELECT findings, tier FROM ops.quality_tiers"
                          " WHERE check_name = 'printed_mismatch'").fetchall()
     assert tiers == [(1, "warning")]
+
+
+def test_gold_figures_inherit_their_lines_and_trust_is_counted(conn):
+    """168: a reported gold figure's line is its source fact's (gold.printed_lines, read time);
+    ops.refresh_trust counts the figures linked, agreeing and on a disagreeing fact."""
+    printed(conn)
+    conn.execute("SELECT silver.gate_facts(%s)", ([ACC],))
+    conn.execute("DELETE FROM gold.quarterly_financials WHERE company_id = %s", (CIK,))
+    for metric, tag, value, source in (
+            ("revenue", "us-gaap:Revenues", 96221000000, "reported"),
+            ("net_income", "us-gaap:NetIncomeLoss", 59689000000, "reported"),
+            ("eps_diluted", "us-gaap:EarningsPerShareDiluted", 2.46, "derived")):
+        conn.execute(
+            "INSERT INTO gold.quarterly_financials (company_id, metric, period_start, period_end,"
+            " value, unit, value_source, source_tag, accession_no, form, filed,"
+            " source_accessions, ingested_at) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,"
+            " '10-Q', '2026-08-27', ARRAY[%s], now())",
+            (CIK, metric, Q[0], Q[1], value, "USD/shares" if metric == "eps_diluted" else "USD",
+             source, tag, ACC, ACC))
+    lines = conn.execute(
+        "SELECT n, status, section_key, char_start, char_end FROM gold.printed_lines(%s, %s, %s,"
+        " %s::date[], %s::date[]) ORDER BY n",
+        ([ACC, ACC, ACC], ["Revenues", "NetIncomeLoss", "Revenues"], ["USD", "USD", "USD"],
+         [Q[0], Q[0], "2024-04-29"], [Q[1], Q[1], "2024-07-28"])).fetchall()
+    assert [(n, status, key) for n, status, key, _, _ in lines] == [
+        (1, "a", "I-1"), (2, "d", "I-1"), (3, "n", None)]
+    text, start = conn.execute("SELECT text, char_start FROM silver.filing_sections"
+                               " WHERE accession_no = %s AND section_key = 'I-1'",
+                               (ACC,)).fetchone()
+    assert text[lines[0][3] - start:lines[0][4] - start] == "96,221"
+    at = conn.execute("SELECT ops.refresh_trust()").fetchone()[0]
+    run = conn.execute("SELECT figures, since_ixbrl, reported, linked, agreeing, disagreeing,"
+                       " filings_gated, facts_gated, facts_disagree FROM ops.trust_runs"
+                       " WHERE run_at = %s", (at,)).fetchone()
+    assert run == (3, 3, 2, 2, 1, 1, 1, 7, 1)
+    assert conn.execute("SELECT linked, agreeing FROM ops.public_trust()").fetchone() == (2, 1)

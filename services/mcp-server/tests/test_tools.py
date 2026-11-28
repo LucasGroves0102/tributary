@@ -151,7 +151,8 @@ def test_financials_cite_each_row_with_its_period(h):
                                              "periods": 8, "period": "ttm",
                                              "basis": "calendar"}))
     assert h.fake.seen[-1].params == {"metrics": ["revenue"], "quarters": ["8"], "view": ["ttm"],
-                                    "basis": ["calendar"], "readings": ["true"]}
+                                    "basis": ["calendar"], "readings": ["true"],
+                                    "lines": ["true"]}
     assert out["citations"] == [{
         "accession_no": ACC, "form": "10-Q", "filed": "2026-08-27", "period": "2026-07-27",
         "company_id": NVDA, "url": CITE["filing_url"]}]
@@ -297,3 +298,17 @@ def test_list_metrics_reads_both_public_vocabularies(h):
     out = h.data(h.call("list_metrics"))
     assert out["data"]["metrics"] == ["revenue"]
     assert out["data"]["screener"]["columns"] == [{"key": "revenue_ttm"}]
+
+
+def test_financials_pass_each_figures_printed_line_through(h):
+    """168: a reported figure's `citation.line` stays in the row and is cited at its line."""
+    answer = financials()
+    line = {"status": "agrees", "section_key": "I-1", "char_start": 5455, "char_end": 5461}
+    answer["rows"][0]["citation"] = {**answer["rows"][0]["citation"], "line": line}
+    h.fake.answer(f"/v1/companies/{NVDA}/financials", answer)
+    out = h.data(h.call("get_financials", {"company_id": NVDA, "metrics": ["revenue"]}))
+    assert h.fake.seen[-1].params["lines"] == ["true"]
+    assert out["data"]["rows"][0]["citation"]["line"] == line
+    assert out["citations"][0]["section_key"] == "I-1"
+    assert out["citations"][0]["line"] == {"char_start": 5455, "char_end": 5461,
+                                           "status": "agrees"}

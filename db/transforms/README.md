@@ -117,3 +117,4 @@ See [`../migrations/`](../migrations).
 | `gold.annual_per_share(company, years, day)` (the 10-K figures filed by the day) | `087_point_in_time_reads.sql` (before: `056_ifrs_currencies.sql`) |
 | `gold.per_share_originals(company, day)` (each period's per-share figures as first filed; SECURITY DEFINER, the read rule) | `140_per_share_originals.sql` |
 | `silver.printed_value(text, format, scale, sign)`, `silver.printed_round(value, decimals)` (an inline XBRL fact's printed number), `silver.gate_version()`, `silver.gate_facts(accessions)` (every silver fact of a filing against where it is printed: `silver.fact_gates`, `silver.fact_disagreements`), `ops.gate_backlog(version)` | `167_fact_gate.sql` |
+| `gold.printed_lines(accessions, tags, units, starts, ends)` (a figure's printed line through its source fact, read time), `ops.refresh_trust()`, `ops.public_trust()` (trust as a number) | `168_printed_lines.sql` |

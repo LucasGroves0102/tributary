@@ -647,6 +647,15 @@ export interface SearchResult {
   access: Tier[];
 }
 
+/** Where a reported figure's filing prints it (`lines=true`, migrations 166-168): the section and the
+ * printed figure's document offsets, and whether the printed number agrees with the figure. */
+export interface PrintedLine {
+  status: "agrees" | "disagrees" | "not_located" | "not_applicable";
+  section_key?: string;
+  char_start?: number;
+  char_end?: number;
+}
+
 export interface FinancialRow {
   metric: string;
   period_start: string | null;
@@ -669,6 +678,8 @@ export interface FinancialRow {
     filing_url: string | null;
     /** 165: read from a 6-K results release's table, not XBRL (gold's `release:` tag) */
     release?: ReleaseCell;
+    /** 168, asked for with `lines`: where the filing prints it */
+    line?: PrintedLine;
   };
   freshness: { filed: string; ingested_at: string };
   /** asked for with `originals` (query_api/point_in_time.py): a figure a later filing changed, its
@@ -1623,6 +1634,26 @@ export interface DataStatus {
     refreshed_at: string | null;
     kinds: { kind: string; reason: CoverageReason; companies: number }[];
   };
+  /** trust as a number (168): of the company pages' quarterly figures filed since inline XBRL and
+   * reported, how many link to the line their filing prints and how many of those agree; counts
+   * only, never a company; null before the first nightly run, absent from an older API */
+  trust?: {
+    refreshed_at: string | null;
+    figures: number;
+    since_ixbrl: number;
+    reported: number;
+    linked: number;
+    agreeing: number;
+    disagreeing: number;
+    filings_gated: number;
+    facts_gated: number;
+    facts_agree: number;
+    facts_disagree: number;
+    facts_not_located: number;
+    facts_not_applicable: number;
+    linked_pct: number | null;
+    agreeing_pct: number | null;
+  } | null;
   /** the parser-output checks (072): documents, never a company; absent from an older API */
   parser?: {
     documents_checked: number;

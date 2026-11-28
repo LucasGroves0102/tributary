@@ -26,6 +26,9 @@ it("round-trips every route", () => {
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "EX-99.1" },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "II-1A", at: 1234, q: "export \"controls\" & more?" },
     { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null, q: "chips" },
+    // 168: a figure's printed line, framed (and whether it agrees)
+    { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "I-1", at: 5455, to: 5461, figure: "agrees" },
+    { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "I-1", at: 5455, to: 5461 },
     { view: "notfound", path: "notebook" },
   ];
   for (const r of routes) expect(parse(href(r))).toEqual(r);
@@ -43,6 +46,12 @@ it("falls back to Home for anything malformed", () => {
   expect(parse("#/company/NVDA")).toEqual({ view: "ticker", ticker: "NVDA" });
   expect(parse("#/company/%3Cscript%3E")).toEqual({ view: "home" });
   expect(parse("#/filing/0001045810/not-an-accession")).toEqual({ view: "home" });
+  // a figure's end only with its start, after it; `fig` only with both
+  const reader = "#/filing/0001045810/0001045810-26-000075/I-1";
+  const base = { view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: "I-1" };
+  expect(parse(`${reader}?to=5461&fig=agrees`)).toEqual(base);
+  expect(parse(`${reader}?at=5461&to=5455`)).toEqual({ ...base, at: 5461 });
+  expect(parse(`${reader}?at=5455&to=5461&fig=maybe`)).toEqual({ ...base, at: 5455, to: 5461 });
   expect(parse("#/filing/0001045810/0001045810-26-000075/..%2Fadmin?at=-1&q=")).toEqual({
     view: "filing", companyId: "0001045810", accessionNo: "0001045810-26-000075", section: null,
   });

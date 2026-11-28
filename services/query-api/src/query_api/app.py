@@ -494,6 +494,13 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                         "first value, its filing and day, and the change's kind "
                         "(point_in_time.py), and `history`: whether the company's history is "
                         "kept yet (without it no row can have one)")] = False,
+        lines: Annotated[bool, Query(
+            description="add `line` to a reported figure's citation: where its filing prints "
+                        "it (the section and the printed figure's character offsets in the "
+                        "document's text, as /sections' citations count them) and whether "
+                        "the printed number agrees with the figure (`agrees`, `disagrees`, "
+                        "`not_located`, `not_applicable`); a filing without inline XBRL has "
+                        "none. Needs the filings tier")] = False,
     ) -> dict | Response:
         """A company's figures by quarter or TTM, fiscal or calendar, each with its citation
         (filing, form, XBRL tag) and freshness; `format=csv` for one row per value. `as_of`: as
@@ -550,6 +557,17 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
         if originals and fmt == "json" and rows:
             found = point_in_time.originals(company_id, view, rows, store.originals(
                 user_id, company_id, view, sorted({r["metric"] for r in rows}), known_on))
+        printed: dict[int, dict] = {}
+        if lines and fmt == "json" and rows:
+            # 168: a reported figure is its source fact: (filing, tag, unit, period) -> its line
+            keyed = [(i, (r["accession_no"], r["source_tag"].split(":", 1)[1], r["unit"],
+                          r["period_start"], r["period_end"]))
+                     for i, r in enumerate(rows)
+                     if r["value_source"] == "reported" and r.get("accession_no")
+                     and ":" in (r.get("source_tag") or "")
+                     and not r["source_tag"].startswith(("derived:", "release:"))]
+            by_key = store.printed_lines(user_id, [k for _, k in keyed])
+            printed = {i: by_key[n] for n, (i, _) in enumerate(keyed) if n in by_key}
         if fmt == "csv":
             return csv_response(f"{company_id}-financials-{view}-{basis}.csv", FINANCIALS_CSV, ([
                 r["metric"], view, r["period_start"], r["period_end"],
@@ -574,9 +592,10 @@ def create_app(authorizer: Authorizer, store: Store, jwt_secret: str,
                              "filed": r["filed"], "xbrl_tag": r["source_tag"],
                              "source_accessions": r["source_accessions"],
                              "filing_url": filing_url(r.get("filer_cik"), r["accession_no"]),
-                             **release_citation(r["source_tag"])},  # 165
+                             **release_citation(r["source_tag"]),  # 165
+                             **({"line": printed[i]} if i in printed else {})},  # 168
                 "freshness": {"filed": r["filed"], "ingested_at": r["ingested_at"]},
-            } for r in rows
+            } for i, r in enumerate(rows)
         ]}
 
     @app.get("/v1/companies/{company_id}/per-share", response_model=dict)

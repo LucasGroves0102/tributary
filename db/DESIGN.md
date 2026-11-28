@@ -1259,3 +1259,16 @@ the spec, `READER`) into `silver.release_figures`, and gold reads those.
   `printed_mismatch` (warning, detail without values). Check version 167: every company re-checked.
 - Filings tier (067's policy form), granted to query_api (readers' lines, 168). Backout guards for
   `ops.check_financials` and `ops.company_backlog` updated with this migration's md5(prosrc).
+
+### 168_printed_lines.sql
+
+- Gold inherits the line without changing what it picks (no rules_version bump): a reported gold
+  figure is its source fact (filing, tag, unit, period), so `gold.printed_lines` reads the gate's
+  result for it at request time (each asked filing's lines unnested once, under silver.fact_gates'
+  RLS). Read time rather than a stored column: nothing to rebuild when the gate re-runs, and the
+  Query API asks only for the figures a page shows. Derived quarters (FY less nine months), TTM sums
+  and computed ratios have no single printed number: they keep their `d`/Σ marks and inputs.
+- Trust as a number: `ops.refresh_trust` (nightly, the financials-bulk job) counts the company pages'
+  quarterly figures, those filed since inline XBRL and reported, those linked to a printed line, those
+  agreeing, and the figures on a fact the filing prints otherwise (the owner's input for "gold
+  prefers gated facts", its own scoped budget). `ops.public_trust` returns the latest counts only.

@@ -1,24 +1,44 @@
 /** What a figure's source card says (components/SourceCard), built from what the API returns with the
  * figure: its filing (form, filed, accession, EDGAR address), whether it is reported or derived
  * (`value_source`), and for a key stat how it is worked out (data.ts howFiled / statFiled). Words only;
- * nothing is computed here. A card names where the figure sits and opens the filing there: the filing's
- * own printed line needs a cell-to-line lookup (spec §8, product work). */
+ * nothing is computed here. A card names where the figure sits and opens the filing there: at the line
+ * that prints it when the API gives one (`citation.line`, migration 168), else at the statements. */
 
 import type { SourceInfo } from "../components/SourceCard";
 import type { MarkKind } from "../components/Mark";
 import { day, exactAmount } from "../format";
 import { href } from "../route";
-import type { FinancialRow, ReleaseCell, ValueSource } from "../types";
+import type { FinancialRow, PrintedLine, ReleaseCell, ValueSource } from "../types";
 import { RELEASE_WORDS, releaseOf, releasePlace } from "./components";
 import { statementPlace, statementSection, statFiled, statMark, type KeyStat } from "./data";
 
 const CIK = /^\d{10}$/;
 const ACCESSION = /^\d{10}-\d{2}-\d{6}$/;
 
-/** The filing in the reader, at its financial statements; a figure read from a results release (165),
- * at the release itself. */
-export function readerAt(companyId: string, src: { accession_no: string; form: string }, release?: ReleaseCell | null): { href: string; label: string } | null {
+/** What a card says of a figure whose filing prints another number at its line (168). */
+export const PRINTED_OTHERWISE = "The filing prints another number at this figure's line (its inline XBRL ties the two): " +
+  "the data and the page disagree, so it carries no tick. Open the line to read it.";
+
+/** A printed line the reader can open: a section and the figure's offsets (168). */
+export function lineIn(line: PrintedLine | null | undefined):
+  { section: string; at: number; to: number; figure?: "agrees" | "disagrees" } | null {
+  if (!line?.section_key || line.char_start === undefined || line.char_end === undefined) return null;
+  if (line.char_end <= line.char_start) return null;
+  const figure = line.status === "agrees" || line.status === "disagrees" ? line.status : undefined;
+  return { section: line.section_key, at: line.char_start, to: line.char_end, ...(figure ? { figure } : {}) };
+}
+
+/** The filing in the reader: at the line that prints the figure (168), else at its financial
+ * statements; a figure read from a results release (165), at the release itself. */
+export function readerAt(companyId: string, src: { accession_no: string; form: string; line?: PrintedLine }, release?: ReleaseCell | null): { href: string; label: string } | null {
   if (!CIK.test(companyId) || !ACCESSION.test(src.accession_no)) return null;
+  const printed = release ? null : lineIn(src.line);
+  if (printed) {
+    return {
+      href: href({ view: "filing", companyId, accessionNo: src.accession_no, ...printed }),
+      label: `Open the ${src.form} at this line`,
+    };
+  }
   if (release) {
     return {
       href: href({ view: "filing", companyId, accessionNo: src.accession_no, section: release.section }),
@@ -52,6 +72,8 @@ const edgarOf = (url: string | null | undefined) => (url?.startsWith("https://ww
  * read from a results release's table (165: its card words it). */
 export function rowMark(r: Pick<FinancialRow, "value_source" | "citation">): MarkKind | null {
   if (releaseOf(r)) return null;
+  // 168: the filing prints another number at the figure's line: no tick, the card says so
+  if (r.citation.line?.status === "disagrees") return null;
   return r.value_source === "derived" ? "d" : "ok";
 }
 
@@ -83,6 +105,7 @@ export function rowCard(r: FinancialRow, label: string, companyId: string, span 
     value,
     mark,
     ...(mark === "d" ? { how: derivedHow(r) } : {}),
+    ...(r.citation.line?.status === "disagrees" ? { note: PRINTED_OTHERWISE } : {}),
     where: [`${r.citation.form} filed ${day(r.citation.filed, true)}`, statementPlace(r.citation.form)],
     reader: readerAt(companyId, r.citation),
     edgar: edgarOf(r.citation.filing_url),

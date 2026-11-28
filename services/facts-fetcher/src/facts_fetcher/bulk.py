@@ -25,7 +25,7 @@ from pathlib import Path
 import httpx
 import psycopg
 
-from facts_fetcher import coverage, extremes
+from facts_fetcher import coverage, extremes, trust
 from facts_fetcher.db import (
     company_ids,
     latest_hashes,
@@ -274,6 +274,7 @@ def main(argv: Iterable[str] | None = None) -> None:
                 # the other nightly jobs and the catch-up changed gold
                 extremes.refresh_quietly(conn)
                 coverage.refresh_quietly(conn)
+                trust.refresh_quietly(conn)  # 168
                 return
             log.info("downloaded %d bytes (Last-Modified %s) in %.0fs", got.size_bytes,
                      got.last_modified, time.monotonic() - started)
@@ -286,6 +287,7 @@ def main(argv: Iterable[str] | None = None) -> None:
                 got.path.unlink()
         extremes.refresh_quietly(conn)
         coverage.refresh_quietly(conn)
+        trust.refresh_quietly(conn)  # 168
     log.info("%s: %d entries, %d changed, %d new facts, %d gold rows refreshed in %.0fs",
              "complete" if stats.completed else "limit reached, run again to continue",
              stats.entries, stats.changed, stats.facts, stats.gold_rows,

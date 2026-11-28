@@ -11,7 +11,7 @@ import { num } from "../home/data";
 import { EIGHT_K_ITEMS } from "../reader/sections";
 import { memberTree, treeOrder } from "../chart/segments";
 import { RELEASE_TAG, releaseOf, releaseText } from "./components";
-import type { Callout, FinancialRow, NotMeaningfulPeriod, Recap, RecapValue, ReleaseCell, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
+import type { Callout, FinancialRow, NotMeaningfulPeriod, PrintedLine, Recap, RecapValue, ReleaseCell, ScreenerRow, SegmentRow, ValueReading, ValueSource } from "../types";
 
 export type Fmt = "usd" | "pct" | "growth" | "x" | "eps" | "shares";
 
@@ -630,7 +630,7 @@ export interface TableCell {
   url: string | null;
   /** the filing the value comes from, opened in the reader (the value's own link); its filing date and XBRL
    * tag (a `derived:` tag reads as derived) */
-  source?: { accessionNo: string; form: string; filed?: string; tag?: string | null; release?: ReleaseCell };
+  source?: { accessionNo: string; form: string; filed?: string; tag?: string | null; release?: ReleaseCell; line?: PrintedLine };
   /** per-share: the figure isn't the filing's own (split-adjusted from `as_filed`), so it is derived */
   adjusted?: boolean;
 }
@@ -908,7 +908,9 @@ export function metricTable(
               url: r.citation.filing_url,
               source: { accessionNo: r.citation.accession_no, form: r.citation.form, filed: r.citation.filed, tag: r.citation.xbrl_tag,
                 // 165: read from a 6-K results release's table (its card says so, no tick)
-                ...(releaseOf(r) ? { release: releaseOf(r)! } : {}) },
+                ...(releaseOf(r) ? { release: releaseOf(r)! } : {}),
+                // 168: where the filing prints it
+                ...(r.citation.line ? { line: r.citation.line } : {}) },
               ...(r.as_filed != null && Number(r.as_filed) !== Number(r.value) ? { adjusted: true } : {}),
               ...(opensIntoParts(r) ? { opens: true } : {}),
               ...(r.inputs && !("quarters" in r.inputs) ? { inputs: numericInputs(r.inputs) } : {}),

@@ -2923,6 +2923,29 @@ mark {
   line-height: 1.4;
 }
 
+/* 168: the printed figure a card opened, framed in seal and ticked when it agrees (system.md §5.2,
+   §7.5: the reader shows its framed line); another number printed there is framed in ink */
+.section-text .figure-frame {
+  box-shadow: 0 0 0 2px var(--seal);
+  border-radius: 2px;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+.section-text .figure-frame.differs {
+  box-shadow: 0 0 0 2px var(--ink-2);
+  background: var(--warn-soft);
+}
+
+.section-text .figure-frame .mk {
+  margin-left: 3px;
+}
+
+.section-text .figure-note {
+  color: var(--ink-2);
+  margin: 0 0 var(--sp-3);
+}
+
 .section-text .filing-table.hit {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);

@@ -286,6 +286,16 @@ yet) (opt-in: the agent's JSON is unchanged). Readings are against the day (stal
 and the confidence mark stay today's. Spec: `point_in_time.py`'s docstring; rules:
 [DESIGN.md](DESIGN.md#point-in-time).
 
+`/financials?lines=true` (migrations 166-168, the proof layer) adds `citation.line` to each reported
+figure whose filing prints it in inline XBRL: `status` (`agrees`: the printed number equals the
+figure to the printed precision; `disagrees`; `not_located`; `not_applicable`) and, when a section
+holds it, `section_key`, `char_start` and `char_end` (document offsets, as `/sections` citations
+count them: the reader opens `#/filing/<id>/<accession>/<section>?at=<char_start>&to=<char_end>`).
+Read under RLS from `silver.fact_gates` (the filings tier) by `gold.printed_lines`; a derived,
+TTM, computed or release figure has none; opt-in (the agent's JSON is unchanged; the web and the
+MCP server ask for it). Gold's figures and picks are unchanged: a figure inherits its line through
+its source fact.
+
 ## Watchlist and calendar
 
 `GET /v1/watchlist` reads the caller's rows in the app database's `watchlists`
@@ -388,7 +398,10 @@ Details: [DESIGN.md](DESIGN.md#customizable-views).
 returns only aggregate counts and timestamps (freshness, ingest latency, completeness, coverage,
 data quality by tier with findings per 1,000 figures, the parser-output checks, the coverage
 sweep's gaps per kind and reason (`gaps`, 076), the public catalog's size (`coverage.catalog_companies`,
-141: the sidebar's count, so every page says one number), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
+141: the sidebar's count, so every page says one number), trust as a number (`trust`, 168: of the
+quarterly figures filed since inline XBRL and reported, those linked to their printed line and those
+of them that agree, the figures on a disagreeing fact, the gate's fact counts; null before the first
+nightly count), the last recorded suite runs), never a company, ticker, accession number, value or text. Each part comes from a SECURITY DEFINER function of migration 028, and `status.shape` copies
 named fields only. Cached 60 s per process. Fields and an example: [DESIGN.md](DESIGN.md#status-page).
 
 ## Demo sandboxes

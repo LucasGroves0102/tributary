@@ -57,6 +57,11 @@ export type Route =
       section: string | null;
       /** a passage to scroll to: a document character offset (a citation's char_start) */
       at?: number;
+      /** with `at`: the printed figure's end (a figure's line, migration 168): it is framed */
+      to?: number;
+      /** the framed figure agrees with the figure that opened it (✓), or the filing prints another
+       * number there */
+      figure?: "agrees" | "disagrees";
       /** words to highlight (a search) */
       q?: string;
       /** What changed: the filing's changes against its comparable filing, in the reader (`?view=changes`) */
@@ -206,6 +211,8 @@ export function parse(hash: string): Route {
   if (view === "filing" && CIK.test(a ?? "") && ACCESSION.test(b ?? "")) {
     const params = new URLSearchParams(query);
     const at = params.get("at");
+    const to = params.get("to");
+    const fig = params.get("fig");
     const q = params.get("q")?.slice(0, MAX_Q);
     return {
       view: "filing",
@@ -213,6 +220,8 @@ export function parse(hash: string): Route {
       accessionNo: b!,
       section: c && SECTION.test(c) ? c : null,
       ...(at && /^\d{1,9}$/.test(at) ? { at: Number(at) } : {}),
+      ...(at && /^\d{1,9}$/.test(at) && to && /^\d{1,9}$/.test(to) && Number(to) > Number(at)
+        ? { to: Number(to), ...(fig === "agrees" || fig === "disagrees" ? { figure: fig } : {}) } : {}),
       ...(q ? { q } : {}),
       ...(params.get("view") === "changes" ? { mode: "changes" as const } : {}),
     };
@@ -270,6 +279,10 @@ export function href(route: Route): string {
     case "filing": {
       const params = new URLSearchParams();
       if (route.at !== undefined) params.set("at", String(route.at));
+      if (route.at !== undefined && route.to !== undefined) {
+        params.set("to", String(route.to));
+        if (route.figure) params.set("fig", route.figure);
+      }
       if (route.q) params.set("q", route.q);
       if (route.mode === "changes") params.set("view", "changes");
       return `#/filing/${route.companyId}/${route.accessionNo}` +

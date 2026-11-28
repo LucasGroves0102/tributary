@@ -145,6 +145,33 @@ describe("a figure read from a 6-K results release's table (165)", () => {
   });
 });
 
+describe("168: a figure's printed line", () => {
+  const line = { status: "agrees" as const, section_key: "I-1", char_start: 5455, char_end: 5461 };
+  const row = fin("revenue", "2026-07-26", "96221000000", "FY2027 Q2");
+  const lined = { ...row, citation: { ...row.citation, line } };
+
+  it("its card opens the reader at the line, framed and ticked; without one, at the statements", () => {
+    expect(rowCard(lined, "Revenue", NVDA).reader).toEqual({
+      href: `#/filing/${NVDA}/${ACC}/I-1?at=5455&to=5461&fig=agrees`, label: "Open the 10-Q at this line" });
+    expect(rowCard(row, "Revenue", NVDA).reader?.label).toBe("Open the 10-Q at its statements");
+    // a line the gate found but no section holds: the statements, as before
+    const outside = { ...row, citation: { ...row.citation, line: { status: "agrees" as const } } };
+    expect(rowCard(outside, "Revenue", NVDA).reader?.label).toBe("Open the 10-Q at its statements");
+  });
+
+  it("a statement cell links to it; a figure its filing prints otherwise carries no tick and says so", () => {
+    const c = metricTable([lined], [["revenue", "Revenue", "usd"]], "q").rows[0]!.cells[0]!;
+    expect(cellLinks(c, NVDA)).toMatchObject({ reader: `#/filing/${NVDA}/${ACC}/I-1?at=5455&to=5461&fig=agrees`, line: true });
+    expect(cellMark(c)).toBe("ok");
+    const differs = { ...row, citation: { ...row.citation, line: { ...line, status: "disagrees" as const } } };
+    expect(rowMark(differs)).toBeNull();
+    expect(rowCard(differs, "Revenue", NVDA).note).toMatch(/prints another number/);
+    const d = metricTable([differs], [["revenue", "Revenue", "usd"]], "q").rows[0]!.cells[0]!;
+    expect(cellMark(d)).toBeNull();
+    expect(cellLinks(d, NVDA).reader).toContain("fig=disagrees");
+  });
+});
+
 describe("a restated figure (point in time, query_api/point_in_time.py)", () => {
   it("is marked, its hover giving the first figure, its filing, the day and what changed it", () => {
     const now = { ...fin("net_income", "2025-01-31", "-88252000", "FY2025 Q4"),

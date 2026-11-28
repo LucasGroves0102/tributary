@@ -155,6 +155,7 @@ function Body({ data, now, signedIn, readable }: { data: DataStatus; now: number
         </section>
       </div>
       {data.gaps && data.gaps.kinds.length > 0 && <Gaps gaps={data.gaps} when={when} />}
+      {data.trust && data.trust.filings_gated > 0 && <Trust trust={data.trust} when={when} />}
       <Quality data={data} when={when} signedIn={signedIn} />
       <Recorded data={data} />
     </>
@@ -375,6 +376,41 @@ function Quality({ data, when, signedIn }: { data: DataStatus; when: (iso: strin
 
 /** The coverage sweep (076): every listed company measured each night for each kind of gap, counted
  * by whose gap it is. Counts only, never a company. */
+/** Trust as a number (168): how many figures shown link to the line their filing prints, and agree. */
+function Trust({ trust: t, when }: { trust: NonNullable<DataStatus["trust"]>; when: (iso: string | null) => string }) {
+  const pct = (x: number | null) => (x === null ? "n/a" : `${x.toFixed(1)}%`);
+  return (
+    <section className="card">
+      <div className="card-h">
+        <h2>Figures tied to their printed line</h2>
+        <span className="sub">{t.refreshed_at ? `last counted ${when(t.refreshed_at)}` : ""}</span>
+      </div>
+      <div className="kv">
+        <div>
+          <div className="k">Reported quarterly figures linked to the line their filing prints</div>
+          <div className="v">{pct(t.linked_pct)}</div>
+          <div className="p">{count(t.linked)} of {count(t.reported)} filed since inline XBRL (2019)</div>
+        </div>
+        <div>
+          <div className="k">Of those, the printed number agrees</div>
+          <div className="v">{pct(t.agreeing_pct)}</div>
+          <div className="p">{count(t.disagreeing)} figures sit on a fact their filing prints otherwise</div>
+        </div>
+        <div>
+          <div className="k">Filings gated, their facts checked against the page</div>
+          <div className="v">{count(t.filings_gated)}</div>
+          <div className="p">{count(t.facts_agree)} agree, {count(t.facts_disagree)} differ, {count(t.facts_not_located)} not printed</div>
+        </div>
+      </div>
+      <p className="foot">
+        Each figure's filing is its own inline XBRL: the number printed on the page names its concept, period and
+        unit. A linked figure opens the reader at that number, framed. Derived quarters and older filings have no
+        single printed line.
+      </p>
+    </section>
+  );
+}
+
 function Gaps({ gaps, when }: { gaps: NonNullable<DataStatus["gaps"]>; when: (iso: string | null) => string }) {
   const by = (kind: string, reason: CoverageReason) =>
     gaps.kinds.find((k) => k.kind === kind && k.reason === reason)?.companies ?? 0;

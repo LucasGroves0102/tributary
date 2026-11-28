@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 
 import {
   filingIndex,
@@ -11,6 +11,7 @@ import { Changes, edgarLink } from "../../company/Filings";
 import { Choices } from "../Choices";
 import { addDays } from "../../home/data";
 import { FormMark } from "../FormMark";
+import { Mark } from "../Mark";
 import { useLoad, type Load } from "../../company/useLoad";
 import { ErrorPanel, Skeleton } from "../States";
 import { day, periodPhrase } from "../../format";
@@ -25,7 +26,7 @@ import {
   steppedForm,
   type Run,
 } from "../../reader/text";
-import { blockAt, blockMatches, firstBlockMatch, readerBlocks, type Block } from "../../reader/blocks";
+import { blockAt, blockMatches, firstBlockMatch, framedFigure, readerBlocks, type Block } from "../../reader/blocks";
 import { sectionTitle, statementsElsewhere } from "../../reader/sections";
 import { go, href } from "../../route";
 import { asPhrase, isPhrase } from "../../search/state";
@@ -50,6 +51,9 @@ interface Props {
   onFiling?: (label: string) => void;
   /** a document character offset to scroll to (a citation's char_start) */
   at?: number;
+  /** with `at`: the end of a printed figure a card opened (168): framed, and ticked when it agrees */
+  to?: number;
+  figure?: "agrees" | "disagrees";
   /** words to highlight, and to search the filing for */
   q?: string;
   /** the company's name, when known */
@@ -76,7 +80,7 @@ const NEXT_8K_WITHIN_DAYS = 400;
  * about 2,000 characters that hold all the words, from the API), the section heading shows the
  * same passages and *highlights* (each word marked in the text, counted here, what next and
  * previous step through). */
-export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q, name, onAsk, onRead, onFiling, mode }: Props) {
+export function FilingReader({ token, companyId, accessionNo, sectionKey, at, to, figure, q, name, onAsk, onRead, onFiling, mode }: Props) {
   const filing = useLoad(`${companyId}|${accessionNo}`, () => parsedFiling(token, companyId, accessionNo));
   const f = filing?.state === "ok" ? filing.data : null;
   const active = f ? (f.sections.find((s) => s.section_key === sectionKey) ?? f.sections[0] ?? null) : null;
@@ -363,7 +367,7 @@ export function FilingReader({ token, companyId, accessionNo, sectionKey, at, q,
             <SideBySide diff={diff} companyId={companyId} basis={changes?.state === "ok" ? changes.data.basis : basis}
               form={f?.form ?? null} onBasis={f?.form.startsWith("10-Q") ? setReaderBasis : undefined} />
           ) : (
-            active && <SectionBody load={text} terms={terms} at={at} current={match} onOpen={setMatch} />
+            active && <SectionBody load={text} terms={terms} at={at} to={to} figure={figure} current={match} onOpen={setMatch} />
           )}
           {active && (
             <div className="row section-nav">
@@ -422,10 +426,12 @@ function MatchNav({ matches, current, passages, searched, query, onStep, elsewhe
   );
 }
 
-function SectionBody({ load, terms, at, current, onOpen }: {
+function SectionBody({ load, terms, at, to, figure, current, onOpen }: {
   load: Load<Awaited<ReturnType<typeof fetchSection>>> | null;
   terms: string[];
   at?: number;
+  to?: number;
+  figure?: "agrees" | "disagrees";
   /** the current highlight; -1: not chosen yet, onOpen sets where the section opens */
   current: number;
   onOpen: (highlight: number) => void;
@@ -437,6 +443,11 @@ function SectionBody({ load, terms, at, current, onOpen }: {
   const start = section?.citation.char_start;
   const target = at !== undefined && start !== undefined ? blockAt(blocks, at - start) : -1;
   const beyond = section && at !== undefined && start !== undefined && at - start >= section.text.length;
+  // 168: the printed figure a card opened, framed where its block shows it (reader/blocks.ts rule 8)
+  const framed = useMemo(
+    () => (section && at !== undefined && to !== undefined && start !== undefined
+      ? framedFigure(section.text, blocks, at - start, to - start) : null),
+    [section, blocks, at, to, start]);
   const hasTerms = terms.length > 0;
   // opening a section with a search: the first highlight, or the first at the cited passage
   useEffect(() => {
@@ -444,9 +455,10 @@ function SectionBody({ load, terms, at, current, onOpen }: {
   }, [section, hasTerms, current, blocks, terms, target, onOpen]);
   useEffect(() => {
     if (!section) return;
-    const el = ref.current?.querySelector(current >= 0 ? "mark.cur" : ".hit") ?? ref.current?.querySelector(".hit");
+    const el = (framed && current < 0 ? ref.current?.querySelector(".figure-frame") : null)
+      ?? ref.current?.querySelector(current >= 0 ? "mark.cur" : ".hit") ?? ref.current?.querySelector(".hit");
     el?.scrollIntoView?.({ block: "center" });
-  }, [section, target, current]);
+  }, [section, target, current, framed]);
   let marks = 0;
   // highlights numbered in blockUnits' order, so next/previous and the count agree
   const marked = (s: string) =>
@@ -455,6 +467,21 @@ function SectionBody({ load, terms, at, current, onOpen }: {
       const n = marks++;
       return <mark key={j} className={n === current ? "cur" : undefined}>{r.mark}</mark>;
     });
+  // each block's units in blockUnits' order: the framed figure's unit splits around it
+  let unit = 0;
+  const piece = (s: string, block: number) => {
+    const u = unit++;
+    if (!framed || framed.block !== block || framed.unit !== u) return marked(s);
+    const end = framed.offset + framed.length;
+    return [
+      <Fragment key="before">{marked(s.slice(0, framed.offset))}</Fragment>,
+      <span key="figure" className={figure === "disagrees" ? "figure-frame differs" : figure === "agrees" ? "figure-frame agrees" : "figure-frame"}>
+        {s.slice(framed.offset, end)}
+        {figure === "agrees" && <Mark kind="ok" />}
+      </span>,
+      <Fragment key="after">{marked(s.slice(end))}</Fragment>,
+    ];
+  };
 
   if (!load || load.state === "loading") return <Skeleton lines={6} label="Loading the section" />;
   if (load.state === "denied") return <p className="empty locked">This section isn't included in your access.</p>;
@@ -463,8 +490,16 @@ function SectionBody({ load, terms, at, current, onOpen }: {
   }
   return (
     <div ref={ref}>
+      {framed && figure && (
+        <p className={`figure-note small${figure === "disagrees" ? " differs" : ""}`}>
+          {figure === "agrees"
+            ? "Framed: the figure you opened, where this filing prints it. Its inline XBRL ties the two, and they agree."
+            : "Framed: where this filing prints the figure you opened. The number printed here differs from it: the data and the page disagree."}
+        </p>
+      )}
       {blocks.map((b, i) => {
-        if (b.kind === "p") return <p key={b.start} className={i === target ? "hit" : undefined}>{marked(b.text)}</p>;
+        unit = 0;
+        if (b.kind === "p") return <p key={b.start} className={i === target ? "hit" : undefined}>{piece(b.text, i)}</p>;
         // a table's first rows with no figures ("(In millions, except per share data)", "(Unaudited)", "Three Months
         // Ended") are its heading, not data: they read in the head, under the dates, in the order they're counted
         // (Riley, test 10, finding 84; the parser keeps them as rows)
@@ -479,13 +514,13 @@ function SectionBody({ load, terms, at, current, onOpen }: {
                   <thead>
                     {b.heads && (
                       <tr>
-                        <th className="first">{marked(b.heads.label)}</th>
-                        {b.heads.cells.map((c, k) => <th key={k} className="n">{marked(c)}</th>)}
+                        <th className="first">{piece(b.heads.label, i)}</th>
+                        {b.heads.cells.map((c, k) => <th key={k} className="n">{piece(c, i)}</th>)}
                       </tr>
                     )}
                     {notes.map((r) => (
                       <tr key={r.start} className="head-note">
-                        <th colSpan={b.columns + 1} scope="colgroup">{marked(r.label)}</th>
+                        <th colSpan={b.columns + 1} scope="colgroup">{piece(r.label, i)}</th>
                       </tr>
                     ))}
                   </thead>
@@ -494,12 +529,12 @@ function SectionBody({ load, terms, at, current, onOpen }: {
                   {body.map((r) =>
                     r.cells.length ? (
                       <tr key={r.start}>
-                        <td className="first">{marked(r.label)}</td>
-                        {r.cells.map((c, k) => <td key={k} className="n">{marked(c)}</td>)}
+                        <td className="first">{piece(r.label, i)}</td>
+                        {r.cells.map((c, k) => <td key={k} className="n">{piece(c, i)}</td>)}
                       </tr>
                     ) : (
                       <tr key={r.start} className="label-row">
-                        <td colSpan={b.columns + 1}>{marked(r.label)}</td>
+                        <td colSpan={b.columns + 1}>{piece(r.label, i)}</td>
                       </tr>
                     ),
                   )}

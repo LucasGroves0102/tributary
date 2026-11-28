@@ -31,6 +31,10 @@
  *     dates is the table's column heads; any other heading or short line is a row with a label only.
  *  7. Everything else is paragraphs, as before tables (`text.ts` `paragraphs`): a new one at a blank
  *     line or a line starting with a capital or a bullet; any other line joins the paragraph before.
+ *     A line's leading bullet run into its word ("•Revenue", the HTML's bullet in its own span) reads
+ *     with a space after it; the stored text keeps its offsets (Marek, finding 21).
+ *  8. A printed figure (`framedFigure`, migration 168's lines): the block holding its start, and in it
+ *     the unit (`blockUnits`) that prints it the k-th time, k the times the block prints it before.
  */
 
 import { furnitureLines } from "./furniture";
@@ -113,6 +117,10 @@ type Item =
 
 const isShort = (s: string) => s.length <= 120 && !/[.]$/.test(s) && !s.startsWith("•");
 
+/** Rule 7: a bullet run into its first word reads with a space. */
+const BULLET = /^([•●▪◦‣∙])(?=[^\s•●▪◦‣∙])/;
+export const spacedBullet = (line: string) => line.replace(BULLET, "$1 ");
+
 export function readerBlocks(text: string): Block[] {
   const ls = lines(text);
   // rule 1 (neighbours skip blank lines)
@@ -175,7 +183,7 @@ export function readerBlocks(text: string): Block[] {
   let para: Line[] = [];
   const flush = () => {
     if (!para.length) return;
-    out.push({ kind: "p", start: para[0]!.start, end: para.at(-1)!.end, text: para.map((l) => l.text).join("\n") });
+    out.push({ kind: "p", start: para[0]!.start, end: para.at(-1)!.end, text: para.map((l) => spacedBullet(l.text)).join("\n") });
     para = [];
   };
   for (let i = 0; i < items.length; ) {
@@ -232,6 +240,28 @@ function table(group: Item[]): Block {
 export function blockUnits(b: Block): string[] {
   if (b.kind === "p") return [b.text];
   return [...(b.heads ? [b.heads.label, ...b.heads.cells] : []), ...b.rows.flatMap((r) => [r.label, ...r.cells])];
+}
+
+/** Rule 8: where a printed figure ([at, to), section-relative offsets) shows: its block, the unit in
+ * it (`blockUnits`' order) and the offset and length in that unit; null when the reader doesn't show
+ * it (the offsets lie outside the text, or its block leaves it out). */
+export function framedFigure(text: string, blocks: Block[], at: number, to: number):
+  { block: number; unit: number; offset: number; length: number } | null {
+  if (at < 0 || to > text.length || to <= at) return null;
+  const figure = text.slice(at, to).replace(/\n/g, " ");
+  const index = blocks.findIndex((b) => at >= b.start && at < b.end);
+  if (index < 0) return null;
+  const block = blocks[index]!;
+  let before = 0;
+  for (let i = text.indexOf(figure, block.start); i >= 0 && i < at; i = text.indexOf(figure, i + figure.length)) before++;
+  const units = blockUnits(block);
+  for (let u = 0; u < units.length; u++) {
+    for (let i = units[u]!.indexOf(figure); i >= 0; i = units[u]!.indexOf(figure, i + figure.length)) {
+      if (before === 0) return { block: index, unit: u, offset: i, length: figure.length };
+      before--;
+    }
+  }
+  return null;
 }
 
 /** The block holding a section-relative offset, or the nearest after it; -1 past the end. */

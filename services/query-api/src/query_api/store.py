@@ -632,6 +632,35 @@ class Store:
                       "as_of": as_of, "quarters": quarters})
             return cur.fetchall()
 
+    LINE_STATUS = {"a": "agrees", "d": "disagrees", "n": "not_located", "x": "not_applicable"}
+
+    def printed_lines(self, user_id: str,
+                      keys: list[tuple[str, str, str, date | None, date]]) -> dict[int, dict]:
+        """Where each fact is printed (migrations 166-168, gold.printed_lines under RLS: the
+        filings tier): key = (accession, tag's local name, unit, period start, period end) ->
+        {status, section_key, char_start, char_end} by the key's index; a key the gate has no
+        result for (no inline XBRL, not gated yet, no filings tier) is left out. An older
+        database without the gate answers none."""
+        if not keys:
+            return {}
+        with self._session(user_id) as cur:
+            cur.execute("SELECT to_regprocedure('gold.printed_lines(text[], text[], text[],"
+                        " date[], date[])') IS NOT NULL AS ok")
+            row = cur.fetchone()
+            if not row or not row["ok"]:
+                return {}
+            cur.execute("SELECT * FROM gold.printed_lines(%s, %s, %s, %s::date[], %s::date[])",
+                        ([k[0] for k in keys], [k[1] for k in keys], [k[2] for k in keys],
+                         [k[3] for k in keys], [k[4] for k in keys]))
+            out = {}
+            for r in cur.fetchall():
+                line = {"status": self.LINE_STATUS.get(r["status"], r["status"])}
+                if r["section_key"] is not None:
+                    line |= {"section_key": r["section_key"], "char_start": r["char_start"],
+                             "char_end": r["char_end"]}
+                out[r["n"] - 1] = line
+            return out
+
     def originals(self, user_id: str, company_id: str, span: str, metrics: list[str],
                   as_of: date | None = None) -> list[dict]:
         """Each changed figure's first version (migration 086's history, under RLS): for every
@@ -970,6 +999,13 @@ class Store:
             if row and row["ok"]:
                 cur.execute("SELECT * FROM ops.public_coverage_gaps()")
                 out["gaps"] = cur.fetchall()
+            # 168: trust as a number (an older database, or no run yet: none)
+            cur.execute("SELECT to_regprocedure('ops.public_trust()') IS NOT NULL AS ok")
+            row = cur.fetchone()
+            out["trust"] = None
+            if row and row["ok"]:
+                cur.execute("SELECT * FROM ops.public_trust()")
+                out["trust"] = cur.fetchone()
             return out
 
     def segment_metric_names(self) -> list[str]:
