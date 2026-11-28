@@ -162,6 +162,13 @@
   background: var(--paper);
 }
 
+/* the frozen name column keeps 12px from its rule, so a long name never runs into it (Marek 42: "Costco
+   Wholesale COST" touched the rule on Home at 768 and Compare at 1280) */
+.tw-port.scrolls .t:not(.led) th.first,
+.tw-port.scrolls .t:not(.led) td.first {
+  padding-right: 12px;
+}
+
 .t:not(.led) th.first {
   color: var(--ink);
   font-weight: 600;
@@ -315,6 +322,13 @@
 }
 
 .blank-v.w-40 { width: 40px; }
+
+/* a two-line row's second line in a loading shape (LedgerShape `lines`) */
+.ledger-shape .blank-v.blank-2 {
+  display: block;
+  width: 64px;
+  margin-top: 8px;
+}
 .blank-v.w-56 { width: 56px; }
 .blank-v.w-104 { width: 104px; }
 .blank-v.w-120 { width: 120px; }

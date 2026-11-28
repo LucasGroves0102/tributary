@@ -230,6 +230,14 @@ content; transform and opacity only, nothing over 280ms, exits faster than entra
 - **Loading**: the company page shows its own shape while its figures load (the header with the name the
   directory knows, the tabs, the Overview's section titles and row labels, a statement's row labels), each
   blank value a `well` block; after 1s the blanks pulse slowly; values fade in over 120ms in place (`.landed`).
+  Nothing that has arrived moves when something else does (Marek 12, CLS 0.176 on a company page and 0.171
+  on Home, now 0.021 and 0.011): the 8-Ks behind the results notice are asked beside the figures when the
+  plan reads the company's filings (App's `readsFilingsHint`), and the page shows once the notice is known
+  (or after 1.5s); Home's watchlist shape has as many two-line rows as the list had last time (a per-browser
+  number, `tributary.watchlist.size`); "Signing in…" is a div (a paragraph's margin moved the page 14px).
+  A tab opened for the first time keeps the old tab on screen until its own content is in, at most a second
+  (`HeldPanels`: the new panel mounts hidden at the click), so a tab change never flashes its loading shape
+  (Marek 35).
 - **Reduced motion** (`html[data-motion="reduced"]`, from `prefers-reduced-motion`): nothing travels or
   overlaps; the old view goes at once and the new fades in 120ms; indicators jump; popovers and panels fade;
   no press scale or pulse.

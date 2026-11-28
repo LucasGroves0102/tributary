@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import { Choices } from "../components/Choices";
 import { FigureText } from "../components/FigureText";
@@ -12,6 +12,7 @@ import { FRESHNESS_EXPLAINED } from "../home/useFeedStatus";
 import { EXPECTED_DAYS, RECENT_DAYS, type Workspace } from "../home/useWorkspace";
 import { edgarOpen } from "../components/Sidebar";
 import { go, href } from "../route";
+import { load, save } from "../storage";
 import { defaultHome, type HomeCard, type HomeCardId } from "../views/model";
 import { TableScroll } from "../components/TableScroll";
 
@@ -67,7 +68,7 @@ export function Home({ workspace, lastIngested, listed = null, onAdd, onExport, 
       case "status":
         return watchlist.state === "ok" ? (
           <StatusStrip rows={rows} fresh={workspace.filings === null ? null : workspace.fresh} scope={workspace.freshScope} since={sinceLabel(since, firstVisit)} lastIngested={lastIngested} listed={listed} />
-        ) : null;
+        ) : watchlist.state === "loading" ? <StatusShape /> : null;
       case "recent":
         return recent ? (
           <section className="card">
@@ -284,6 +285,26 @@ function StatusStrip({
   );
 }
 
+/** How many rows the watchlist had (a per-browser convenience: its loading shape's height). */
+const SIZE_KEY = "tributary.watchlist.size";
+
+/** The status strip's shape while the watchlist loads: its labels, the values blank, so the page under it
+ * doesn't drop when it comes (Marek 12: Home's lead and side moved 166px, CLS 0.171). */
+function StatusShape() {
+  const labels = ["Watchlist", "New filings", "Next expected", "Median revenue growth", "Newest filing listed"];
+  return (
+    <div className="status-strip shape" aria-busy="true">
+      {labels.map((k) => (
+        <div key={k}>
+          <div className="k">{k}</div>
+          <div className="v"><span className="blank-v w-64" /></div>
+          <div className="p"><span className="blank-v w-160" /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => void }) {
   const { watchlist, rows } = workspace;
   const [removing, setRemoving] = useState<string | null>(null);
@@ -299,6 +320,12 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
       {unit && <> <span className="unit">{unit}</span></>}
     </button>
   );
+  // the shape while it loads has as many rows as the list had last time, so the page under it stays put
+  // when it comes (Marek 12: the watchlist grew 166px and pushed the filings down)
+  const [shapeRows] = useState(() => Math.min(20, Math.max(1, Number(load(SIZE_KEY)) || 6)));
+  useEffect(() => {
+    if (watchlist.state === "ok") save(SIZE_KEY, String(Math.max(1, rows.length)));
+  }, [watchlist.state, rows.length]);
   const ariaSort = (key: string) => (sort?.key === key ? (sort.desc ? "descending" as const : "ascending" as const) : undefined);
   // a removal is a toast with Undo (components/Toasts), like every other confirmation
   const removedToast = (id: string, name: string) => toast({
@@ -307,7 +334,7 @@ function WatchTable({ workspace, onAdd }: { workspace: Workspace; onAdd: () => v
   });
 
   if (watchlist.state === "loading") {
-    return <LedgerShape label="Loading your watchlist" first="Company" rows={4}
+    return <LedgerShape label="Loading your watchlist" first="Company" rows={shapeRows} lines={2}
       columns={["Last filing", ...workspace.columns.map((c) => c.label), "Next filing"]} />;
   }
   if (watchlist.state === "unavailable") {

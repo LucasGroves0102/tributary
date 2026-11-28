@@ -844,7 +844,8 @@ export function App(props: Props = {}) {
             ) : route.view === "api" ? (
               <ApiDocs />
             ) : !token ? (
-              <p className="page muted">Signing in…</p>
+              // a div: a paragraph's margin moved the page 14px when it came (Marek 12)
+              <div className="page muted">Signing in…</div>
             ) : route.view === "home" ? (
               <Home
                 workspace={workspace}
@@ -948,6 +949,7 @@ export function App(props: Props = {}) {
                 }}
                 onAsk={askAbout}
                 saved={saved.list.state === "ok" ? saved : null}
+                readsFilingsHint={filingsFor.has(route.companyId)}
               />
             ) : route.view === "filing" ? (
               <FilingReader

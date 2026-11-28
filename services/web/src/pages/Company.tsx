@@ -53,6 +53,9 @@ interface Props {
   onAsk: (question: string) => void;
   /** saved work, for "New thesis" / "New model" about this company (null: unavailable) */
   saved?: Saved | null;
+  /** the user's plan reads this company's filings (`/v1/me`): its 8-Ks are asked at once, beside the figures,
+   * so the results notice is known before the page shows and never pushes it down (Marek 12) */
+  readsFilingsHint?: boolean;
 }
 
 /** The company page (.interface-design/system.md §4 Company header, §6): who the company is (public
@@ -62,7 +65,7 @@ interface Props {
  * a tab change the header stays put and only the 2px indicator slides. While the figures load, the
  * header shows the name it already knows and the panel its own shape with the values blank. Identity,
  * the filing index and expected dates are public; values need financials, text needs filings. */
-export function Company({ token, companyId, tab, statements, changes, asOf, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved }: Props) {
+export function Company({ token, companyId, tab, statements, changes, asOf, watched, onWatch, onChart, onChartMany, onOpenChart, onAsk, saved, readsFilingsHint = false }: Props) {
   const meta = useLoad(`${companyId}|${asOf ?? ""}`, () =>
     // a bank's key stats need its own columns (F4); an older API refuses them (422): the standard set
     screener(token, { company_id: [companyId], columns: HEADER_COLUMNS_WITH_BANK, sort: "name", limit: 1, ...(asOf ? { as_of: asOf } : {}) }).catch((e) => {
@@ -81,7 +84,17 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   // the 8-Ks since the last report, asked once for the page: the header's results notice, the Overview's
   // flags and its list (a 20-F/40-F filer files none)
   const readsFilings = !!row?.access.includes("filings") && !foreignReport(row);
-  const events = useLoad(readsFilings ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  // asked beside the figures when the plan says it will be read; else once the row says so
+  const events = useLoad(readsFilings || (readsFilingsHint && !row) ? `${companyId}|events` : null, () => companyEvents(token, companyId));
+  // the page shows once the notice is known (a results day's notice arriving after the page pushed the tabs
+  // and the hero down 31px: CLS 0.176, Marek 12), waiting at most a moment for it
+  const [waited, setWaited] = useState(false);
+  const eventsPending = readsFilings && (!events || events.state === "loading");
+  useEffect(() => {
+    if (!eventsPending || meta?.state !== "ok") return;
+    const id = window.setTimeout(() => setWaited(true), 1500);
+    return () => window.clearTimeout(id);
+  }, [eventsPending, meta?.state]);
   // New thesis / New model from the More menu: its form opens under the actions
   const [newKind, setNewKind] = useState<WrittenKind | null>(null);
   const opening = useRef(false);
@@ -93,7 +106,7 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
   const directory = useDirectory(token);
   const known = directory.name(companyId);
 
-  if (!meta || meta.state === "loading") {
+  if (!meta || meta.state === "loading" || (meta.state === "ok" && eventsPending && !waited)) {
     return (
       <div className="page company-page">
         <header className="co-head vt-head" data-loading="">
@@ -268,32 +281,68 @@ export function Company({ token, companyId, tab, statements, changes, asOf, watc
         <CompanyTabs companyId={companyId} tab={tab} tabs={tabs} asOf={asOf} statements={statements} />
       </header>
 
-      <div className="co-panel vt-content">
-        {asOf && !AS_OF_TABS.includes(tab) && tab !== "overview" && (
-          <p className="asof-today tab-today" role="note">
-            This tab shows today's {TODAY_WORDS[tab] ?? "data"}, not as it stood on {day(asOf, true)}: only the Overview's year and key figures,
-            Statements and Ratios follow the day. <a href={href({ view: "company", companyId, tab })}>Back to today</a>
-          </p>
-        )}
-        {tab === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={r} access={r.access} asOf={asOf} events={events} resultsInHeader={!asOf && !!results} />}
-        {tab === "earnings" && (
-          <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")}
-            canReadFinancials={r.access.includes("financials")} />
-        )}
-        {tab === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} view={statements} asOf={asOf}
-          canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} resultsInHeader={!asOf && !!results} />}
-        {tab === "revenue" && (
-          <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
-        )}
-        {tab === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
-        {tab === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} asOf={asOf} />}
-        {tab === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} initialDiff={changes}
-          foreign={foreignReport(r)} />}
-        {tab === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")} />}
-        {tab === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
-        {tab === "price" && <Price token={token} companyId={companyId} name={h.name} />}
-      </div>
+      <HeldPanels tab={tab} render={(t) => (
+        <>
+          {asOf && !AS_OF_TABS.includes(t) && t !== "overview" && (
+            <p className="asof-today tab-today" role="note">
+              This tab shows today's {TODAY_WORDS[t] ?? "data"}, not as it stood on {day(asOf, true)}: only the Overview's year and key figures,
+              Statements and Ratios follow the day. <a href={href({ view: "company", companyId, tab: t })}>Back to today</a>
+            </p>
+          )}
+          {t === "overview" && <Overview token={token} companyId={companyId} name={h.name} row={r} access={r.access} asOf={asOf} events={events} resultsInHeader={!asOf && !!results} />}
+          {t === "earnings" && (
+            <EarningsView token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")}
+              canReadFinancials={r.access.includes("financials")} />
+          )}
+          {t === "statements" && <Statements token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} view={statements} asOf={asOf}
+            canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} resultsInHeader={!asOf && !!results} />}
+          {t === "revenue" && (
+            <Revenue token={token} companyId={companyId} name={h.name} ticker={ticker} saved={saved ?? null} onOpenChart={onOpenChart} />
+          )}
+          {t === "segments" && <Segments token={token} companyId={companyId} name={h.name} />}
+          {t === "ratios" && <Ratios token={token} companyId={companyId} name={h.name} ticker={ticker} notApplicable={r.not_applicable} asOf={asOf} />}
+          {t === "filings" && <Filings key={changes ?? ""} token={token} companyId={companyId} name={h.name} canRead={r.access.includes("filings")} fiscalYearEnd={r.fiscal_year_end} initialDiff={changes}
+            foreign={foreignReport(r)} />}
+          {t === "notes" && <DataNotes token={token} companyId={companyId} name={h.name} canReadFilings={r.access.includes("filings")} />}
+          {t === "peers" && <Peers token={token} companyId={companyId} name={h.name} onChart={onChartMany} />}
+          {t === "price" && <Price token={token} companyId={companyId} name={h.name} />}
+        </>
+      )} />
     </div>
+  );
+}
+
+/** The tab's panel. A tab opened for the first time keeps the old one on screen until its own content is
+ * in (nothing `aria-busy` left in it) or a second has passed, so a tab change cuts from content to content,
+ * never through a 200ms flash of its loading shape (Marek 35, spec §7.6); the new one mounts at once,
+ * hidden, so its requests start at the click. */
+function HeldPanels({ tab, render }: { tab: CompanyTab; render: (t: CompanyTab) => ReactNode }) {
+  const [shown, setShown] = useState(tab);
+  const pending = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (shown === tab) return;
+    const el = pending.current;
+    const done = () => setShown(tab);
+    const ready = () => !el?.querySelector('[aria-busy="true"]');
+    if (!el || typeof MutationObserver === "undefined" || ready()) return done();
+    const seen = new MutationObserver(() => {
+      if (ready()) done();
+    });
+    seen.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-busy"] });
+    const id = window.setTimeout(done, 1000);
+    return () => {
+      seen.disconnect();
+      window.clearTimeout(id);
+    };
+  }, [tab, shown]);
+  return (
+    <>
+      {(shown === tab ? [tab] : [shown, tab]).map((t) => (
+        <div key={t} ref={t === shown ? undefined : pending} className={t === shown ? "co-panel vt-content" : "co-panel"} hidden={t !== shown}>
+          {render(t)}
+        </div>
+      ))}
+    </>
   );
 }
 
