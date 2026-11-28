@@ -3598,8 +3598,9 @@ button.link.num {
 
 /* Data notes (tearsheet tab, Home) */
 
+/* on the content edge, as the heading over it (Marek 29: the body sat 12px in) */
 .notes-group {
-  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  padding: var(--sp-5) 0 var(--sp-4);
   border-bottom: 1px solid var(--line);
 }
 
@@ -6309,7 +6310,7 @@ table.t.release-grid {
 /* Peers: what the company's own 10-K Business section is most distinctive for */
 .peers-basis {
   margin: 0;
-  padding: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-3) 0 0;
 }
 
 .t.peers td.why {

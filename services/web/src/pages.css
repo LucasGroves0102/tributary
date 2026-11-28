@@ -2912,3 +2912,37 @@ html[data-motion="reduced"] .release-table-box summary::before {
     display: none;
   }
 }
+
+/* a note's filing links start on its text's edge: the quiet buttons' own inset hangs out (Marek 29: +10px) */
+.notes .note .note-f > .btn.ghost:first-child {
+  margin-left: -10px;
+}
+
+/* a phone's page bar (Marek 43): the title its own line, the quiet actions under it from the content edge
+   (their text, not their padding, on the edge), so a wrapped row never starts 12px in */
+@container main (max-width: 600px) {
+  .page-bar > h1 {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+
+  .page-bar > .btn.ghost {
+    padding-left: 0;
+    padding-right: 16px;
+  }
+}
+
+/* the previous and next sections at the foot of a section: on one baseline, each its half (Marek 70) */
+.section-text .section-nav {
+  align-items: baseline;
+  gap: 24px;
+}
+
+.section-text .section-nav > span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.section-text .section-nav > span:last-child {
+  text-align: right;
+}

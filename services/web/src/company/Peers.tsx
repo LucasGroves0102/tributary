@@ -113,8 +113,9 @@ export function Peers({
             <>
               {business && data?.business && (
                 <p className="peers-basis small">
-                  <span className="faint">{possessive(name)} {reportForm(data.business.section_key)} Business section{data.business.section_key === "4" ? " (Item 4)" : ""} (filed {day(data.business.filed, true)}) is most distinctive for </span>
-                  {data.business.terms.slice(0, 6).join(", ")}
+                  <span className="faint">{possessive(name)} {reportForm(data.business.section_key)} Business section{data.business.section_key === "4" ? " (Item 4)" : ""} (filed {day(data.business.filed, true)}) is most distinctive for the words </span>
+                  {/* the filing's own words as the comparison reads them, quoted (Marek 22: "usg, blackwell, gpus" read as prose) */}
+                  {data.business.terms.slice(0, 6).map((t) => `“${t}”`).join(", ")}
                   <span className="faint">. Peers are the companies whose annual reports read most alike, or that either names as a competitor; a customer, supplier, partner or owner either one names is left out.</span>
                 </p>
               )}

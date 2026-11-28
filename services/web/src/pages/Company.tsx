@@ -538,6 +538,12 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
     const d = asOfDay(typed);
     return !!d && d < today;
   })();
+  // a typed day that can't be shown says why (Marek 40: 2031-02-30 left Show off with no word)
+  const problem = valid || typed.length < 10 ? null
+    : !/^\d{4}-\d{2}-\d{2}$/.test(typed) ? "Type it as YYYY-MM-DD"
+      : typed < EARLIEST_AS_OF ? `From ${day(EARLIEST_AS_OF, true)}`
+        : !asOfDay(typed) ? "Not a day on the calendar"
+          : "A day before today";
   return (
     <div className={asOf ? "co-asof on" : "co-asof"}>
       <span className="co-asof-k" aria-hidden="true">As of</span>
@@ -557,6 +563,7 @@ function AsOfControl({ companyId, tab, asOf, statements }: { companyId: string; 
             pattern="\d{4}-\d{2}-\d{2}" value={typed} onChange={(e) => setTyped(e.target.value)}
             title="A past day: the figures as they stood at its end, from the filings filed by then" autoFocus={!asOf} />
           <button type="submit" className="btn" disabled={!valid || typed === asOf}>Show</button>
+          {problem && <span className="err small asof-problem" role="alert">{problem}</span>}
         </form>
       )}
     </div>

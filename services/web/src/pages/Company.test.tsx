@@ -562,6 +562,25 @@ it("as of a past day: the key figures and the statements read it, a note says so
   expect([...container.querySelectorAll(".co-tabs a")].map((a) => a.getAttribute("href"))).toContain(`#/company/${NVDA}/ratios?asof=2025-06-30`);
 });
 
+it("As of says why a typed day can't be shown (Marek 40)", async () => {
+  await render("statements", NVDA, null, undefined, "2025-06-30");
+  const input = $(".co-asof-field input") as HTMLInputElement;
+  const type = async (v: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, v);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  await type("2031-02-30");
+  expect($(".asof-problem")?.textContent).toBe("Not a day on the calendar");
+  await type("2031-02-28");
+  expect($(".asof-problem")?.textContent).toBe("A day before today");
+  await type("2025-06-3");
+  expect($(".asof-problem")).toBeNull();
+  await type("2025-06-30");
+  expect($(".asof-problem")).toBeNull();
+});
+
 it("as of a past day: no today-based 'not in these figures yet' notice, the share basis is that day's, and restated marks say why none show", async () => {
   // a 10-Q filed long after the day: today's index, not missing from the day's figures (Riley, test 10, finding 3)
   newerIndex = [indexRow("0001045810-26-000090", "10-Q", "2026-11-19", 1, { period_of_report: "2026-10-25" })];
@@ -1014,7 +1033,8 @@ it("F4 peers: by what they do, each with why, a named competitor linked to its s
   });
   await render("peers");
   expect(container.querySelector(".card-h .sub")?.textContent).toContain("by what they do");
-  expect($(".peers-basis")?.textContent).toContain("accelerated computing, gpus");
+  // the words quoted, as the filing's (Marek 22)
+  expect($(".peers-basis")?.textContent).toContain("the words “accelerated computing”, “gpus”");
   const apple = [...container.querySelectorAll("tbody tr:not(.agg)")][1]!;
   const why = apple.querySelector("td.why")!;
   // short pencil tags (spec §6), every reason whole on the hover

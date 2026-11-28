@@ -135,7 +135,7 @@ function Quarter({ token, companyId, name, q, canReadFinancials }: {
                   </a>
                 )}
                 {(rel.document_url ?? rel.filing_url) && (
-                  <a className="edgar-link" href={(rel.document_url ?? rel.filing_url)!} target="_blank" rel="noopener noreferrer"
+                  <a className="btn sm ghost" href={(rel.document_url ?? rel.filing_url)!} target="_blank" rel="noopener noreferrer"
                     title={`The ${rel.form} on EDGAR, sec.gov (${rel.accession_no})`}>EDGAR ↗</a>
                 )}
               </div>

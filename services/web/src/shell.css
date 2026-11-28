@@ -480,6 +480,12 @@ html[data-motion="reduced"] .ai-drawer {
   animation: fade-in 120ms linear;
 }
 
+/* Ctrl J is instant whatever the motion setting (Marek 36: under reduced motion the keyboard's open faded
+   120ms while the normal path's was instant) */
+html[data-motion="reduced"] .ai-drawer.instant {
+  animation: none;
+}
+
 html[data-motion="reduced"] .ai-drawer.closing {
   animation: fade-out 120ms linear forwards;
 }
